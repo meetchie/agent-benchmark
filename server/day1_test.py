@@ -11,11 +11,21 @@ import sys
 import json
 import uuid
 import asyncio
+import traceback
+import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from dotenv import load_dotenv
 from browser_use import Agent
 from browser_use.llm.models import get_llm_by_name
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import telemetric_logger from root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -38,6 +48,10 @@ else:
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BROWSERBASE_API_KEY = os.getenv('BROWSERBASE_API_KEY')
 BROWSERBASE_PROJECT_ID = os.getenv('BROWSERBASE_PROJECT_ID')
+
+# Screenshot configuration - disable by default for Rindler (uses accessibility tree instead)
+# Set ENABLE_SCREENSHOTS=true in .env to enable screenshots if needed
+ENABLE_SCREENSHOTS = os.getenv('ENABLE_SCREENSHOTS', 'false').lower() in ('true', '1', 'yes')
 
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY not found in .env file")
@@ -84,67 +98,80 @@ def convert_event_to_dict(event: TelemetryEvent) -> Dict[str, Any]:
 current_step_index = 0
 
 
-def on_step_start(*args, **kwargs):
+async def on_step_start(agent):
     """
-    Callback function called when a step starts.
-    Handles different possible callback signatures from browser-use Agent.
+    Hook function called at the beginning of each agent step.
+    Reference: https://docs.browser-use.com/customize/hooks
     """
     global current_step_index
     
-    # Extract step_index from args or kwargs
-    step_index = kwargs.get('step_index', current_step_index)
-    if args and isinstance(args[0], int):
-        step_index = args[0]
+    # Get step index from agent history
+    try:
+        actions = agent.history.model_actions() if hasattr(agent.history, 'model_actions') else []
+        step_index = len(actions)
+    except:
+        step_index = current_step_index
     
-    # Extract action_type from kwargs
-    action_type = kwargs.get('action_type') or kwargs.get('action') or None
-    
-    # Extract action_data from kwargs if available
-    action_data = {k: v for k, v in kwargs.items() 
-                   if k not in ['step_index', 'action_type', 'action']}
+    # Extract action information from latest action
+    action_type = None
+    action_data = None
+    try:
+        if hasattr(agent.history, 'model_actions') and agent.history.model_actions():
+            latest_action = agent.history.model_actions()[-1]
+            if isinstance(latest_action, dict):
+                action_type = list(latest_action.keys())[0] if latest_action else None
+                action_data = latest_action
+    except:
+        pass
     
     event = telemetry.log_step_start(
         step_index=step_index,
         action_type=action_type,
-        action_data=action_data if action_data else None
+        action_data=action_data
     )
     
-    # Store the event
     telemetry_events.append(convert_event_to_dict(event))
-    
     current_step_index = step_index
     print(f"[Step {step_index} START] Action: {action_type or 'N/A'}")
 
 
-def on_step_end(*args, **kwargs):
+async def on_step_end(agent):
     """
-    Callback function called when a step ends.
-    Handles different possible callback signatures from browser-use Agent.
+    Hook function called at the end of each agent step.
+    Reference: https://docs.browser-use.com/customize/hooks
+    
+    Note: Token tracking is not currently implemented as browser-use doesn't expose
+    token usage in a straightforward way. Token costs are tracked by OpenAI directly.
     """
     global current_step_index
     
-    # Extract step_index from args or kwargs
-    step_index = kwargs.get('step_index', current_step_index)
-    if args and isinstance(args[0], int):
-        step_index = args[0]
+    # Get step index from agent history
+    try:
+        actions = agent.history.model_actions() if hasattr(agent.history, 'model_actions') else []
+        step_index = len(actions) - 1
+    except:
+        step_index = current_step_index
     
-    # Extract token information from kwargs
-    tokens_input = kwargs.get('tokens_input') or kwargs.get('input_tokens')
-    tokens_output = kwargs.get('tokens_output') or kwargs.get('output_tokens')
+    # Extract observation from extracted content
+    observation = None
+    try:
+        if hasattr(agent.history, 'extracted_content'):
+            extracted = agent.history.extracted_content()
+            if extracted:
+                observation = {'extracted_content': extracted[-1] if isinstance(extracted, list) else extracted}
+    except:
+        pass
     
-    # Extract observation from kwargs
-    observation = kwargs.get('observation') or kwargs.get('obs')
-    
+    # Token tracking not available - browser-use doesn't expose this easily
+    # Costs are tracked by OpenAI directly via API usage dashboard
     event = telemetry.log_step_end(
         step_index=step_index,
-        tokens_input=tokens_input,
-        tokens_output=tokens_output,
+        tokens_input=None,  # Not available from browser-use
+        tokens_output=None,  # Not available from browser-use
         observation=observation
     )
     
-    # Store the event
     telemetry_events.append(convert_event_to_dict(event))
-    
     cost_str = f", Cost: ${event.cost_usd:.6f}" if event.cost_usd else ""
     duration_str = f"{event.duration_ms:.2f}ms" if event.duration_ms else "N/A"
     print(f"[Step {step_index} END] Duration: {duration_str}{cost_str}")
@@ -164,30 +191,55 @@ async def main():
     if BROWSERBASE_PROJECT_ID and BROWSERBASE_PROJECT_ID != '...':
         os.environ['BROWSERBASE_PROJECT_ID'] = BROWSERBASE_PROJECT_ID
     
+    logger.info(f"Screenshots: {'ENABLED' if ENABLE_SCREENSHOTS else 'DISABLED'} (Rindler uses accessibility tree)")
+    
     # Set up browser-use Agent with gpt-4o
     llm = get_llm_by_name("openai_gpt-4o")
     
+    # Configure agent
+    # Note: on_step_start/on_step_end hooks are passed to agent.run(), not Agent()
     agent_kwargs = {
         'task': "Visit https://google.com and search for 'Rindler AI'",
         'llm': llm,
         'browserbase_api_key': BROWSERBASE_API_KEY,
-        'on_step_start': on_step_start,
-        'on_step_end': on_step_end,
     }
+    
     # Add project_id if available
     if BROWSERBASE_PROJECT_ID and BROWSERBASE_PROJECT_ID != '...':
         agent_kwargs['browserbase_project_id'] = BROWSERBASE_PROJECT_ID
     
+    # Configure Browserbase browserSettings to disable screenshots
+    # Reference: https://docs.browserbase.com/fundamentals/create-browser-session
+    if not ENABLE_SCREENSHOTS:
+        agent_kwargs['browserbase_browser_settings'] = {
+            'recording': False,
+            'logging': False,
+        }
+    
     agent = Agent(**agent_kwargs)
     
-    # Run the agent
+    # Run the agent with hooks
+    # Reference: https://docs.browser-use.com/customize/hooks
+    timeout_seconds = 300.0
+    start_time = datetime.now()
+    
     try:
-        result = await agent.run()
+        result = await asyncio.wait_for(
+            agent.run(on_step_start=on_step_start, on_step_end=on_step_end),
+            timeout=timeout_seconds
+        )
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Agent completed successfully in {elapsed:.2f} seconds")
         print("-" * 50)
         print("Agent completed successfully!")
-        print(f"Result: {result}")
+    except asyncio.TimeoutError:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.error(f"Agent run timed out after {elapsed:.2f} seconds")
+        raise
     except Exception as e:
-        print(f"Error running agent: {e}")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.error(f"Error after {elapsed:.2f} seconds: {e}")
+        logger.error(traceback.format_exc())
         raise
     
     # Print final JSON log output
