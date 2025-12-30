@@ -4,6 +4,10 @@ Day 1 Test Script
 This script demonstrates the integration of TelemetricWrapper with browser-use Agent.
 It loads API keys from .env, initializes telemetry for LANE_A, and runs an agent
 that visits Google and searches for 'Rindler AI'.
+
+Token tracking: browser-use wraps LLM methods internally and bypasses LangChain callbacks.
+We use browser-use's built-in TokenCost service via history.usage for totals, then
+distribute tokens proportionally across steps after the run completes.
 """
 
 import os
@@ -14,7 +18,7 @@ import asyncio
 import traceback
 import logging
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 from browser_use import Agent
 from browser_use.llm.models import get_llm_by_name
@@ -94,8 +98,9 @@ def convert_event_to_dict(event: TelemetryEvent) -> Dict[str, Any]:
     }
 
 
-# Track current step index
+# Track current step using a simple counter (browser-use history timing is unreliable)
 current_step_index = 0
+current_action_type = None
 
 
 async def on_step_start(agent):
@@ -103,16 +108,12 @@ async def on_step_start(agent):
     Hook function called at the beginning of each agent step.
     Reference: https://docs.browser-use.com/customize/hooks
     """
-    global current_step_index
+    global current_step_index, current_action_type
     
-    # Get step index from agent history
-    try:
-        actions = agent.history.model_actions() if hasattr(agent.history, 'model_actions') else []
-        step_index = len(actions)
-    except:
-        step_index = current_step_index
+    # Increment step counter
+    current_step_index += 1
     
-    # Extract action information from latest action
+    # Extract action information from latest action in history
     action_type = None
     action_data = None
     try:
@@ -124,15 +125,16 @@ async def on_step_start(agent):
     except:
         pass
     
+    current_action_type = action_type
+    
     event = telemetry.log_step_start(
-        step_index=step_index,
+        step_index=current_step_index,
         action_type=action_type,
         action_data=action_data
     )
     
     telemetry_events.append(convert_event_to_dict(event))
-    current_step_index = step_index
-    print(f"[Step {step_index} START] Action: {action_type or 'N/A'}")
+    print(f"[Step {current_step_index}] START - Action: {action_type or 'N/A'}")
 
 
 async def on_step_end(agent):
@@ -140,17 +142,11 @@ async def on_step_end(agent):
     Hook function called at the end of each agent step.
     Reference: https://docs.browser-use.com/customize/hooks
     
-    Note: Token tracking is not currently implemented as browser-use doesn't expose
-    token usage in a straightforward way. Token costs are tracked by OpenAI directly.
+    Note: Per-step token tracking is not possible with browser-use as it wraps
+    the LLM internally and bypasses LangChain callbacks. Tokens will be distributed
+    proportionally after the run completes using history.usage totals.
     """
-    global current_step_index
-    
-    # Get step index from agent history
-    try:
-        actions = agent.history.model_actions() if hasattr(agent.history, 'model_actions') else []
-        step_index = len(actions) - 1
-    except:
-        step_index = current_step_index
+    global current_step_index, current_action_type
     
     # Extract observation from extracted content
     observation = None
@@ -162,19 +158,24 @@ async def on_step_end(agent):
     except:
         pass
     
-    # Token tracking not available - browser-use doesn't expose this easily
-    # Costs are tracked by OpenAI directly via API usage dashboard
+    # Log step end using the SAME step_index from step_start
     event = telemetry.log_step_end(
-        step_index=step_index,
-        tokens_input=None,  # Not available from browser-use
-        tokens_output=None,  # Not available from browser-use
+        step_index=current_step_index,
+        tokens_input=None,  # Will be distributed after run
+        tokens_output=None,  # Will be distributed after run
         observation=observation
     )
     
-    telemetry_events.append(convert_event_to_dict(event))
-    cost_str = f", Cost: ${event.cost_usd:.6f}" if event.cost_usd else ""
+    # Preserve action_type from step_start in the dict
+    event_dict = convert_event_to_dict(event)
+    if event_dict['action_type'] is None and current_action_type:
+        event_dict['action_type'] = current_action_type
+    
+    telemetry_events.append(event_dict)
+    
+    # Build output string
     duration_str = f"{event.duration_ms:.2f}ms" if event.duration_ms else "N/A"
-    print(f"[Step {step_index} END] Duration: {duration_str}{cost_str}")
+    print(f"[Step {current_step_index}] END   - Duration: {duration_str}")
 
 
 async def main():
@@ -193,8 +194,9 @@ async def main():
     
     logger.info(f"Screenshots: {'ENABLED' if ENABLE_SCREENSHOTS else 'DISABLED'} (Rindler uses accessibility tree)")
     
-    # Set up browser-use Agent with gpt-4o
+    # Set up LLM using browser-use's helper
     llm = get_llm_by_name("openai_gpt-4o")
+    logger.info(f"LLM created (type: {type(llm).__name__})")
     
     # Configure agent
     # Note: on_step_start/on_step_end hooks are passed to agent.run(), not Agent()
@@ -223,8 +225,9 @@ async def main():
     timeout_seconds = 300.0
     start_time = datetime.now()
     
+    history = None
     try:
-        result = await asyncio.wait_for(
+        history = await asyncio.wait_for(
             agent.run(on_step_start=on_step_start, on_step_end=on_step_end),
             timeout=timeout_seconds
         )
@@ -241,6 +244,61 @@ async def main():
         logger.error(f"Error after {elapsed:.2f} seconds: {e}")
         logger.error(traceback.format_exc())
         raise
+    
+    # Get token usage from browser-use's TokenCost service
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cost = 0.0
+    
+    print("\n" + "=" * 50)
+    print("TOKEN USAGE SUMMARY (from browser-use):")
+    print("=" * 50)
+    
+    try:
+        if history is not None and hasattr(history, 'usage') and history.usage is not None:
+            usage = history.usage
+            total_input_tokens = getattr(usage, 'total_prompt_tokens', 0) or 0
+            total_output_tokens = getattr(usage, 'total_completion_tokens', 0) or 0
+            total_cost = getattr(usage, 'total_cost', 0.0) or 0.0
+            
+            print(f"Total Input Tokens:  {total_input_tokens}")
+            print(f"Total Output Tokens: {total_output_tokens}")
+            print(f"Total Tokens:        {total_input_tokens + total_output_tokens}")
+            print(f"Total Cost:          ${total_cost:.6f}")
+        else:
+            print("Token usage data not available from history")
+    except Exception as e:
+        logger.warning(f"Could not get token usage: {e}")
+    
+    # Distribute tokens proportionally across step_end events
+    step_end_events = [e for e in telemetry_events if e['event_type'] == 'step_end']
+    num_steps = len(step_end_events)
+    
+    if num_steps > 0 and (total_input_tokens > 0 or total_output_tokens > 0):
+        # Simple even distribution (could be weighted by duration if desired)
+        tokens_per_step_input = total_input_tokens // num_steps
+        tokens_per_step_output = total_output_tokens // num_steps
+        remainder_input = total_input_tokens % num_steps
+        remainder_output = total_output_tokens % num_steps
+        
+        print(f"\nDistributing tokens across {num_steps} steps (~{tokens_per_step_input} in / ~{tokens_per_step_output} out per step)")
+        
+        step_end_count = 0
+        for event in telemetry_events:
+            if event['event_type'] == 'step_end':
+                # Add remainder to first step_end event
+                extra_in = remainder_input if step_end_count == 0 else 0
+                extra_out = remainder_output if step_end_count == 0 else 0
+                
+                event['tokens_input'] = tokens_per_step_input + extra_in
+                event['tokens_output'] = tokens_per_step_output + extra_out
+                
+                # Calculate cost using TelemetricWrapper's rates ($5/M in, $15/M out)
+                input_cost = (event['tokens_input'] / 1_000_000) * 5.00
+                output_cost = (event['tokens_output'] / 1_000_000) * 15.00
+                event['cost_usd'] = input_cost + output_cost
+                
+                step_end_count += 1
     
     # Print final JSON log output
     print("\n" + "=" * 50)
