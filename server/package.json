@@ -1,0 +1,16 @@
+{
+  "name": "clean-room",
+  "version": "1.0.0",
+  "description": "This directory contains a clean-room implementation for testing and comparing different browser automation agents with unified telemetry tracking.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@browserbasehq/stagehand": "^3.0.7"
+  }
+}
