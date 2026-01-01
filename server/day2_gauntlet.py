@@ -91,6 +91,8 @@ async def run_agent(lane: str, run_id: str) -> dict:
     elif lane == "STEEL":
         result = await agent.run(start_url="https://shipt.com")
     elif lane == "SKYVERN":
+        # Skyvern is a cloud service - uses 15 min default timeout
+        # Pass wait=False for fire-and-forget mode
         result = await agent.arun(start_url="https://shipt.com")
     elif lane == "STAGEHAND":
         result = await agent.arun(start_url="https://shipt.com")

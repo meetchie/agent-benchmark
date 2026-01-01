@@ -1,0 +1,27 @@
+Lane: SKYVERN
+Run ID: bd3c2a19-4bc1-4731-acbe-d750df494734
+Trace ID: 44495573-7549-4c63-858e-51101405cb20
+Goal: Go to shipt.com.
+
+First, you need to set a delivery address before you can search for products.
+Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
+Wait for the autocomplete dropdown and click the first suggestion.
+
+Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+
+Duration: 301.58s
+Token Burn: 0 (0 in / 0 out)
+Cost: $0.0000
+
+Telemetry Events:
+[
+  {
+    "trace_id": "44495573-7549-4c63-858e-51101405cb20",
+    "run_id": "bd3c2a19-4bc1-4731-acbe-d750df494734",
+    "lane": "SKYVERN",
+    "event_type": "artifact",
+    "artifact_type": "skyvern_task",
+    "artifact_url": "https://app.skyvern.com/tasks/tsk_v2_REDACTED",
+    "timestamp": "2026-01-01T16:51:38.972387"
+  }
+]
