@@ -77,6 +77,9 @@ class SkyvernTelemetricAgent:
         # Skyvern task ID (run_id from API response)
         self._task_id: Optional[str] = None
         
+        # Skyvern app URL (correct dashboard link)
+        self._app_url: Optional[str] = None
+        
         # Store last status data for debugging
         self._last_status_data: Optional[Dict[str, Any]] = None
     
@@ -195,8 +198,13 @@ class SkyvernTelemetricAgent:
         print(f"Agent completed in {elapsed:.2f} seconds")
         print(f"Total steps logged: {result['steps']}")
         
-        # Show status
-        status = "✅ SUCCESS" if result.get("success") else "❌ FAILED/TIMEOUT"
+        # Show status - distinguish local timeout from actual failure
+        if result.get("success"):
+            status = "✅ SUCCESS"
+        elif result.get("local_timeout"):
+            status = f"⏱️ LOCAL TIMEOUT (Skyvern: {result.get('skyvern_status', 'unknown')})"
+        else:
+            status = "❌ FAILED"
         print(f"Status: {status}")
         
         # Show result message
@@ -208,9 +216,12 @@ class SkyvernTelemetricAgent:
                 print(f"Result: {msg}")
         
         # Show where to view details
-        if self._task_id:
+        if self._app_url:
             print()
-            print(f"🔗 View full details: https://app.skyvern.com/tasks/{self._task_id}")
+            print(f"🔗 View full details: {self._app_url}")
+        elif self._task_id:
+            print()
+            print(f"🔗 Task ID: {self._task_id}")
         
         print("-" * 50)
     
@@ -244,6 +255,199 @@ class SkyvernTelemetricAgent:
         response.raise_for_status()
         return response.json()
     
+    @classmethod
+    def get_run_billing(cls, task_id: str, api_key: Optional[str] = None, verbose: bool = True) -> Dict[str, Any]:
+        """
+        Get detailed billing information for a Skyvern run.
+        
+        This fetches the run details and aggregates step counts across all tasks.
+        Billing is approximately $0.05 per step.
+        Can be called retroactively on completed tasks.
+        
+        Args:
+            task_id: The Skyvern task/run ID (e.g., "tsk_v2_...")
+            api_key: Optional API key (defaults to SKYVERN_API_KEY env var)
+            verbose: If True, print billing summary to console
+            
+        Returns:
+            Dict with aggregated billing info and per-task/step breakdown
+        """
+        COST_PER_STEP = 0.05  # Skyvern pricing: ~$0.05 per step
+        
+        key = api_key or os.getenv("SKYVERN_API_KEY")
+        if not key:
+            raise ValueError("SKYVERN_API_KEY not found")
+        
+        headers = {
+            "x-api-key": key,
+            "Content-Type": "application/json"
+        }
+        
+        # Fetch main run data (using /v1/runs endpoint)
+        response = requests.get(
+            f"{cls.BASE_URL}/runs/{task_id}",
+            headers=headers
+        )
+        response.raise_for_status()
+        run_data = response.json()
+        
+        # Extract workflow_run_id from app_url (format: https://app.skyvern.com/runs/wr_xxx)
+        app_url = run_data.get("app_url", "")
+        workflow_run_id = None
+        if "/runs/wr_" in app_url:
+            # Extract wr_xxx from the URL
+            workflow_run_id = app_url.split("/runs/")[-1].split("/")[0]
+        
+        # Fallback: if task_id is already a workflow_run_id
+        if not workflow_run_id and task_id.startswith("wr_"):
+            workflow_run_id = task_id
+        
+        # Fetch all tasks to find ones belonging to this run
+        # Use page_size param to get more historical tasks
+        tasks_response = requests.get(
+            "https://api.skyvern.com/api/v1/tasks",
+            headers=headers,
+            params={"page_size": 100}
+        )
+        all_tasks = tasks_response.json() if tasks_response.status_code == 200 else []
+        
+        # Filter tasks for this workflow run
+        run_tasks = []
+        if workflow_run_id:
+            run_tasks = [t for t in all_tasks if t.get("workflow_run_id") == workflow_run_id]
+        
+        # Initialize billing structure
+        billing = {
+            "task_id": task_id,
+            "workflow_run_id": workflow_run_id,
+            "status": run_data.get("status"),
+            "app_url": run_data.get("app_url"),
+            "created_at": run_data.get("created_at"),
+            "finished_at": run_data.get("finished_at"),
+            "total_tasks": len(run_tasks),
+            "total_steps": 0,
+            "tasks": [],
+            "totals": {
+                "steps": 0,
+                "cost_usd": 0.0,
+            }
+        }
+        
+        # Fetch steps for each task
+        for task in run_tasks:
+            tid = task.get("task_id")
+            task_info = {
+                "task_id": tid,
+                "status": task.get("status"),
+                "created_at": task.get("created_at"),
+                "steps": [],
+                "step_count": 0,
+            }
+            
+            # Fetch steps for this task
+            try:
+                steps_response = requests.get(
+                    f"https://api.skyvern.com/api/v1/tasks/{tid}/steps",
+                    headers=headers
+                )
+                if steps_response.status_code == 200:
+                    steps = steps_response.json()
+                    if isinstance(steps, list):
+                        task_info["step_count"] = len(steps)
+                        task_info["steps"] = [
+                            {
+                                "step_id": s.get("step_id"),
+                                "status": s.get("status"),
+                                "created_at": s.get("created_at"),
+                            }
+                            for s in steps
+                        ]
+            except Exception:
+                pass
+            
+            billing["tasks"].append(task_info)
+            billing["total_steps"] += task_info["step_count"]
+        
+        # Calculate estimated cost
+        billing["totals"]["steps"] = billing["total_steps"]
+        billing["totals"]["cost_usd"] = billing["total_steps"] * COST_PER_STEP
+        
+        # Store raw response for debugging
+        billing["_raw_run_data"] = run_data
+        
+        if verbose:
+            cls._print_billing_summary(billing)
+        
+        return billing
+    
+    @classmethod
+    def _print_billing_summary(cls, billing: Dict[str, Any]) -> None:
+        """Print a formatted billing summary."""
+        print()
+        print("=" * 60)
+        print("  SKYVERN RUN SUMMARY")
+        print("=" * 60)
+        print(f"  Run ID:     {billing['task_id']}")
+        print(f"  Status:     {billing['status']}")
+        
+        # Show timing info from raw data
+        raw = billing.get("_raw_run_data", {})
+        if raw.get("created_at"):
+            print(f"  Created:    {raw['created_at']}")
+        if raw.get("started_at"):
+            print(f"  Started:    {raw['started_at']}")
+        if raw.get("finished_at"):
+            print(f"  Finished:   {raw['finished_at']}")
+        
+        # Show task/step breakdown
+        total_steps = billing.get("total_steps", 0)
+        total_tasks = billing.get("total_tasks", 0)
+        totals = billing.get("totals", {})
+        
+        print()
+        print("  BILLING BREAKDOWN")
+        print("  " + "-" * 56)
+        print(f"  Total tasks:  {total_tasks}")
+        print(f"  Total steps:  {total_steps}")
+        print(f"  Cost/step:    $0.05")
+        print()
+        print(f"  💰 ESTIMATED COST: ${totals.get('cost_usd', 0):.2f}")
+        
+        # Show per-task breakdown
+        tasks = billing.get("tasks", [])
+        if tasks:
+            print()
+            print("  PER-TASK BREAKDOWN")
+            print("  " + "-" * 56)
+            for i, task in enumerate(tasks, 1):
+                tid = task.get("task_id", "unknown")[:30]
+                status = task.get("status", "?")
+                steps = task.get("step_count", 0)
+                cost = steps * 0.05
+                status_icon = "✓" if status == "completed" else "○" if status == "running" else "✗"
+                print(f"  {i:2d}. {status_icon} {tid}...")
+                print(f"      {steps} steps | ${cost:.2f} | {status}")
+        
+        # Show artifacts
+        if raw.get("recording_url"):
+            print()
+            print("  📹 RECORDING")
+            url = raw['recording_url']
+            print(f"  {url[:80]}...")
+        
+        screenshots = raw.get("screenshot_urls", [])
+        if screenshots:
+            print()
+            print(f"  📸 SCREENSHOTS: {len(screenshots)} captured")
+        
+        print()
+        if billing.get("app_url"):
+            app_url = billing["app_url"]
+            if not app_url.endswith("/overview"):
+                app_url = f"{app_url}/overview"
+            print(f"  🔗 View details: {app_url}")
+        print("=" * 60)
+    
     async def submit_task(self, start_url: Optional[str] = None) -> Dict[str, Any]:
         """
         Submit a task to Skyvern and return immediately (fire-and-forget).
@@ -262,7 +466,7 @@ class SkyvernTelemetricAgent:
         
         payload = {
             "prompt": self.goal,
-            "engine": "skyvern-2.0"
+            "engine": "skyvern-2.0",
         }
         if start_url:
             payload["url"] = start_url
@@ -456,7 +660,7 @@ class SkyvernTelemetricAgent:
             # Ref: https://www.skyvern.com/docs/api-reference/api-reference/agent/run-task
             payload = {
                 "prompt": self.goal,
-                "engine": "skyvern-2.0"
+                "engine": "skyvern-2.0",
             }
             
             if start_url:
@@ -477,9 +681,22 @@ class SkyvernTelemetricAgent:
             
             print(f"Skyvern Task ID: {self._task_id}")
             
-            # Log Skyvern task as artifact
-            task_url = f"https://app.skyvern.com/tasks/{self._task_id}"
-            self.log_artifact("skyvern_task", task_url)
+            # First poll to get app_url
+            status_response = requests.get(
+                f"{self.BASE_URL}/runs/{self._task_id}",
+                headers=self._get_headers()
+            )
+            status_response.raise_for_status()
+            initial_data = status_response.json()
+            
+            # Get correct app URL from API response
+            app_url = initial_data.get("app_url")
+            if app_url:
+                if not app_url.endswith("/overview"):
+                    app_url = f"{app_url}/overview"
+                self._app_url = app_url
+                self.log_artifact("skyvern_app_url", app_url)
+                print(f"🔗 Watch live: {app_url}")
             
             # Polling loop
             elapsed = 0.0
@@ -487,7 +704,6 @@ class SkyvernTelemetricAgent:
             
             while elapsed < timeout:
                 # Get current status via GET /v1/runs/:run_id
-                # Ref: https://www.skyvern.com/docs/api-reference/api-reference/agent/get-run
                 status_response = requests.get(
                     f"{self.BASE_URL}/runs/{self._task_id}",
                     headers=self._get_headers()
@@ -529,7 +745,8 @@ class SkyvernTelemetricAgent:
                 elapsed = (datetime.now() - start_time).total_seconds()
             
             else:
-                # Timeout - do one final fetch to get latest state
+                # Local timeout reached - task is likely still running on Skyvern
+                current_status = "unknown"
                 try:
                     status_response = requests.get(
                         f"{self.BASE_URL}/runs/{self._task_id}",
@@ -538,11 +755,21 @@ class SkyvernTelemetricAgent:
                     if status_response.status_code == 200:
                         status_data = status_response.json()
                         self._capture_skyvern_telemetry(status_data)
+                        current_status = status_data.get("status", "unknown")
                 except Exception:
                     pass
                 
-                result["message"] = f"Timeout after {timeout} seconds (task may still be running on Skyvern)"
+                # Mark as local timeout, not failure
+                result["local_timeout"] = True
+                result["skyvern_status"] = current_status
+                result["message"] = f"Local polling timeout after {int(timeout)}s - task is still {current_status} on Skyvern"
                 result["steps"] = self._logged_step_count
+                
+                print()
+                print("⚠️  LOCAL TIMEOUT - Task continues running on Skyvern!")
+                print(f"   Current Skyvern status: {current_status}")
+                if self._app_url:
+                    print(f"   Check progress at: {self._app_url}")
             
             elapsed = (datetime.now() - start_time).total_seconds()
             self._print_summary(result, elapsed)
@@ -602,7 +829,7 @@ class SkyvernTelemetricAgent:
                 # Create task via POST /v1/run/tasks
                 payload = {
                     "prompt": self.goal,
-                    "engine": "skyvern-2.0"
+                    "engine": "skyvern-2.0",
                 }
                 if start_url:
                     payload["url"] = start_url
@@ -618,21 +845,39 @@ class SkyvernTelemetricAgent:
                 
                 print(f"Skyvern Task ID: {self._task_id}")
                 
-                # Log task as artifact
-                task_url = f"https://app.skyvern.com/tasks/{self._task_id}"
-                self.log_artifact("skyvern_task", task_url)
-                
                 print()
                 print("=" * 50)
                 print("🎬 SKYVERN CLOUD TASK")
                 print("=" * 50)
-                print(f"Watch live: {task_url}")
                 print("(Skyvern runs in the cloud, not locally)")
                 print("=" * 50)
                 print()
                 
+                # First poll to get the app_url (correct watch URL)
+                async with session.get(
+                    f"{self.BASE_URL}/runs/{self._task_id}",
+                    headers=self._get_headers()
+                ) as response:
+                    response.raise_for_status()
+                    initial_data = await response.json()
+                
+                # Get the correct app URL from API response
+                app_url = initial_data.get("app_url")
+                if app_url:
+                    # Ensure URL ends with /overview for the correct page
+                    if not app_url.endswith("/overview"):
+                        app_url = f"{app_url}/overview"
+                    self._app_url = app_url
+                    self.log_artifact("skyvern_app_url", app_url)
+                    print(f"🔗 Watch live: {app_url}")
+                else:
+                    # Fallback if no app_url provided
+                    self._app_url = f"https://app.skyvern.com/tasks/{self._task_id}"
+                    print(f"🔗 Task ID: {self._task_id}")
+                
                 # Fire-and-forget mode: return immediately without waiting
                 if not wait:
+                    print()
                     print("🚀 Task submitted! (wait=False, not polling for completion)")
                     print(f"💡 Check status later with: SkyvernTelemetricAgent.get_task_status('{self._task_id}')")
                     return {
@@ -640,7 +885,7 @@ class SkyvernTelemetricAgent:
                         "message": "Task submitted (fire-and-forget mode)",
                         "steps": 0,
                         "task_id": self._task_id,
-                        "watch_url": task_url
+                        "watch_url": self._app_url
                     }
                 
                 print(f"⏳ Waiting for completion (timeout: {int(timeout)}s)...")
@@ -663,14 +908,11 @@ class SkyvernTelemetricAgent:
                     run_status = status_data.get("status") or "running"
                     poll_count += 1
                     
-                    # Show recording URL if available
+                    # Show recording URL on first poll
                     if poll_count == 1:
                         recording_url = status_data.get("recording_url")
-                        app_url = status_data.get("app_url")
                         if recording_url:
                             print(f"📹 Recording: {recording_url}")
-                        if app_url:
-                            print(f"🔗 App URL: {app_url}")
                     
                     if run_status != last_status:
                         print(f"Status: {run_status}")
@@ -706,7 +948,7 @@ class SkyvernTelemetricAgent:
                     elapsed = (datetime.now() - start_time).total_seconds()
                 
                 else:
-                    # Timeout - do one final fetch to get latest state
+                    # Local timeout reached - task is likely still running on Skyvern
                     async with session.get(
                         f"{self.BASE_URL}/runs/{self._task_id}",
                         headers=self._get_headers()
@@ -714,9 +956,21 @@ class SkyvernTelemetricAgent:
                         if response.status == 200:
                             status_data = await response.json()
                             self._capture_skyvern_telemetry(status_data)
+                            current_status = status_data.get("status", "unknown")
+                        else:
+                            current_status = "unknown"
                     
-                    result["message"] = f"Timeout after {timeout} seconds (task may still be running on Skyvern)"
+                    # Mark as local timeout, not failure
+                    result["local_timeout"] = True
+                    result["skyvern_status"] = current_status
+                    result["message"] = f"Local polling timeout after {int(timeout)}s - task is still {current_status} on Skyvern"
                     result["steps"] = self._logged_step_count
+                    
+                    print()
+                    print("⚠️  LOCAL TIMEOUT - Task continues running on Skyvern!")
+                    print(f"   Current Skyvern status: {current_status}")
+                    if self._app_url:
+                        print(f"   Check progress at: {self._app_url}")
             
             elapsed = (datetime.now() - start_time).total_seconds()
             self._print_summary(result, elapsed)

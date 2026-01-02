@@ -42,9 +42,10 @@ clean-room/
 │   ├── steel_agent.py           # Steel + LangChain
 │   ├── skyvern_agent.py         # Skyvern cloud API
 │   └── stagehand_agent.py       # Stagehand + Browserbase
-├── browser_use_logs/            # Run logs and telemetry output
+├── gauntlet_logs/               # Run logs and telemetry output
 ├── day1_test.py                 # Basic browser-use test script
 ├── day2_gauntlet.py             # Unified agent test runner
+├── check_skyvern_billing.py     # Skyvern billing/status checker
 ├── setup_agents.py              # Dependency checker script
 ├── close_sessions.py            # Browserbase session cleanup utility
 ├── telemetric_agent.py          # Backwards compatibility shim
@@ -90,6 +91,72 @@ python day2_gauntlet.py --lane BROWSERUSE
 # 4. Add first result to cart
 ```
 
+### Skyvern (Cloud-Based)
+
+Skyvern runs in the cloud and requires special handling since tasks can take 15-30+ minutes.
+
+#### Fire-and-Forget Mode (Default)
+
+```bash
+python day2_gauntlet.py --lane SKYVERN
+```
+
+This submits the task and returns immediately with:
+- Task ID and watch URL
+- Commands to check status later
+
+#### Wait Mode (Polls Until Complete)
+
+```bash
+python day2_gauntlet.py --lane SKYVERN --wait
+```
+
+Polls Skyvern every 5 seconds until completion or timeout.
+
+#### Check Status & Billing Later
+
+```bash
+# Quick status check
+python check_skyvern_billing.py <task_id> --status-only
+
+# Full billing summary with step breakdown
+python check_skyvern_billing.py <task_id>
+
+# JSON output
+python check_skyvern_billing.py <task_id> --json
+```
+
+#### Billing Information
+
+Skyvern charges ~$0.05 per step. The billing tool fetches:
+- All tasks belonging to a run
+- Step count per task
+- Estimated total cost
+
+Example output:
+```
+============================================================
+  SKYVERN RUN SUMMARY
+============================================================
+  Run ID:     tsk_v2_REDACTED
+  Status:     completed
+
+  BILLING BREAKDOWN
+  --------------------------------------------------------
+  Total tasks:  7
+  Total steps:  27
+  Cost/step:    $0.05
+
+  💰 ESTIMATED COST: $1.35
+
+  PER-TASK BREAKDOWN
+  --------------------------------------------------------
+   1. ✓ tsk_REDACTED...
+      3 steps | $0.15 | completed
+   ...
+============================================================
+```
+
 ### Day 1 Test (Basic)
 
 Simple browser-use test for development:
@@ -102,7 +169,7 @@ python day1_test.py
 
 Each run produces:
 - Console output with step-by-step progress
-- Log file in `browser_use_logs/` with full telemetry
+- Log file in `gauntlet_logs/` with full telemetry
 - Token usage and cost breakdown
 
 Example summary:
@@ -148,6 +215,26 @@ python close_sessions.py --close-all
 
 # Close specific session
 python close_sessions.py --close <session_id>
+```
+
+### Skyvern Billing Checker
+
+Check billing and status for any Skyvern task (works retroactively):
+
+```bash
+# Full billing summary
+python check_skyvern_billing.py tsk_v2_REDACTED
+
+# Quick status only
+python check_skyvern_billing.py tsk_v2_REDACTED --status-only
+
+# JSON output for scripting
+python check_skyvern_billing.py tsk_v2_REDACTED --json
+```
+
+You can also check by workflow run ID (wr_xxx format):
+```bash
+python check_skyvern_billing.py wr_REDACTED
 ```
 
 ## Documentation
