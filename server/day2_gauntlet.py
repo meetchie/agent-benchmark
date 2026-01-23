@@ -92,20 +92,28 @@ async def run_agent(lane: str, run_id: str, wait: bool = True) -> dict:
     )
     
     # Run the agent (different agents have different run methods)
-    if lane == "BROWSERUSE":
-        result = await agent.run()
-    elif lane == "STEEL":
-        result = await agent.run(start_url="https://shipt.com")
-    elif lane == "SKYVERN":
-        # Skyvern is a cloud service - default to fire-and-forget
-        # Pass --wait flag to poll for completion (can take 15-30+ mins)
-        result = await agent.arun(start_url="https://shipt.com", wait=wait)
-    elif lane == "STAGEHAND":
-        result = await agent.arun(start_url="https://shipt.com")
-    else:
-        raise ValueError(f"Unknown lane: {lane}")
+    # Wrap in try/except to preserve agent telemetry even on failure
+    result = None
+    error = None
     
-    return {"agent": agent, "result": result}
+    try:
+        if lane == "BROWSERUSE":
+            result = await agent.run()
+        elif lane == "STEEL":
+            result = await agent.run(start_url="https://shipt.com")
+        elif lane == "SKYVERN":
+            # Skyvern is a cloud service - default to fire-and-forget
+            # Pass --wait flag to poll for completion (can take 15-30+ mins)
+            result = await agent.arun(start_url="https://shipt.com", wait=wait)
+        elif lane == "STAGEHAND":
+            result = await agent.arun(start_url="https://shipt.com")
+        else:
+            raise ValueError(f"Unknown lane: {lane}")
+    except Exception as e:
+        error = e
+        result = {"success": False, "message": f"Error: {e}", "steps": getattr(agent, '_current_step_index', 0)}
+    
+    return {"agent": agent, "result": result, "error": error}
 
 
 async def main():
@@ -147,8 +155,14 @@ async def main():
         result = await run_agent(lane, run_id, wait=skyvern_wait)
         agent = result["agent"]
         run_result = result["result"]
+        run_error = result.get("error")
         
         elapsed = (datetime.now() - start_time).total_seconds()
+        
+        # If there was an error but we still have telemetry, save it
+        if run_error:
+            print(f"\n⚠️  Agent encountered error: {run_error}")
+            print(f"   Saving partial telemetry ({len(agent.telemetry_events)} events)...")
         
         # Handle Skyvern fire-and-forget mode
         if lane == "SKYVERN" and not skyvern_wait:
@@ -269,6 +283,12 @@ async def main():
             f.write(f"Trace ID: {agent.trace_id}\n")
             f.write(f"Goal: {GOAL}\n")
             f.write(f"Duration: {elapsed:.2f}s\n")
+            f.write(f"Success: {run_result.get('success', False)}\n")
+            
+            # Include error info if there was a failure
+            if run_error:
+                f.write(f"Error: {run_error}\n")
+            
             f.write(f"Token Burn: {totals['tokens_total']:,} ({totals['tokens_input']:,} in / {totals['tokens_output']:,} out)\n")
             f.write(f"Cost: ${totals['cost_usd']:.4f}\n")
             
@@ -288,8 +308,12 @@ async def main():
         
         print(f"\n  Log saved: {log_path}\n")
         
+        # Exit with error code if there was a failure
+        if run_error:
+            sys.exit(1)
+        
     except Exception as e:
-        print(f"\n❌ Error running {lane} agent: {e}")
+        print(f"\n❌ Unexpected error running {lane} agent: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

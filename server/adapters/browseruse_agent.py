@@ -2,33 +2,28 @@
 BrowserUse Telemetric Agent - Browser automation agent with Browserbase and telemetry.
 
 This module provides the BrowserUseTelemetricAgent class which wraps browser-use Agent
-with Browserbase session recording and telemetry logging via TelemetricWrapper.
+with Browserbase session recording and telemetry logging via the BaseAgent class.
 """
 
 import os
-import uuid
 import asyncio
-import json
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from browser_use import Agent
 from browser_use.llm.models import get_llm_by_name
 from browserbase import Browserbase
 from browserbase._exceptions import RateLimitError
 
-import sys
-# Add project root to path for telemetric_logger import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from telemetric_logger import TelemetricWrapper, TelemetryEvent
+from .base_agent import BaseAgent
 
 
-class BrowserUseTelemetricAgent:
+class BrowserUseTelemetricAgent(BaseAgent):
     """
-    Browser automation agent with integrated telemetry tracking.
+    Browser automation agent using browser-use library with Browserbase.
     
     Wraps browser-use Agent with Browserbase session recording and
-    TelemetricWrapper for step-by-step telemetry logging.
+    telemetry logging via BaseAgent.
     """
     
     def __init__(self, run_id: str, goal: str, lane: str = "BROWSERUSE"):
@@ -40,149 +35,72 @@ class BrowserUseTelemetricAgent:
             goal: The task/goal for the agent to accomplish
             lane: Lane identifier (default: "BROWSERUSE")
         """
-        self.run_id = run_id
-        self.lane = lane
-        self.goal = goal
+        super().__init__(run_id=run_id, goal=goal, lane=lane)
         
-        # Generate trace_id for telemetry
-        self.trace_id = str(uuid.uuid4())
-        
-        # Initialize telemetry wrapper
-        self.telemetry = TelemetricWrapper(
-            trace_id=self.trace_id,
-            run_id=self.run_id,
-            lane=self.lane
-        )
-        
-        # Store telemetry events
-        self.telemetry_events: List[Dict[str, Any]] = []
-        
-        # Step tracking
-        self._current_step_index = 0
-        self._current_action_type: Optional[str] = None
+        # Browserbase credentials
+        self._browserbase_api_key = os.getenv('BROWSERBASE_API_KEY')
+        self._browserbase_project_id = os.getenv('BROWSERBASE_PROJECT_ID')
     
-    def _convert_event_to_dict(self, event: TelemetryEvent) -> Dict[str, Any]:
-        """Convert TelemetryEvent dataclass to dictionary for JSON serialization."""
-        return {
-            'trace_id': event.trace_id,
-            'run_id': event.run_id,
-            'lane': event.lane,
-            'step_index': event.step_index,
-            'event_type': event.event_type,
-            'timestamp': event.timestamp.isoformat(),
-            'duration_ms': event.duration_ms,
-            'tokens_input': event.tokens_input,
-            'tokens_output': event.tokens_output,
-            'cost_usd': event.cost_usd,
-            'action_type': event.action_type,
-            'observation_hash': event.observation_hash
-        }
-    
-    def log_artifact(self, artifact_type: str, artifact_url: str) -> Dict[str, Any]:
-        """
-        Log an artifact event (e.g., session replay URL).
-        
-        Args:
-            artifact_type: Type of artifact (e.g., "session_replay")
-            artifact_url: URL or path to the artifact
+    async def _create_browserbase_session(self, bb: Browserbase):
+        """Create a Browserbase session, handling rate limits."""
+        try:
+            session = bb.sessions.create(
+                project_id=self._browserbase_project_id,
+                browser_settings={'record_session': True}
+            )
+            return session
+        except RateLimitError as e:
+            if "concurrent sessions limit" not in str(e).lower():
+                raise
             
-        Returns:
-            Dictionary representing the artifact event
-        """
-        event = {
-            'trace_id': self.trace_id,
-            'run_id': self.run_id,
-            'lane': self.lane,
-            'event_type': 'artifact',
-            'artifact_type': artifact_type,
-            'artifact_url': artifact_url,
-            'timestamp': datetime.now().isoformat()
-        }
-        self.telemetry_events.append(event)
-        return event
+            print("⚠️  Hit concurrent sessions limit. Closing existing sessions...")
+            try:
+                active_sessions = bb.sessions.list()
+                if active_sessions:
+                    for active_session in active_sessions:
+                        try:
+                            bb.sessions.update(
+                                id=active_session.id,
+                                project_id=self._browserbase_project_id,
+                                status='REQUEST_RELEASE'
+                            )
+                            print(f"  ✅ Closed session: {active_session.id}")
+                        except Exception as close_error:
+                            print(f"  ⚠️  Could not close session {active_session.id}: {close_error}")
+                    await asyncio.sleep(2)
+            except Exception as list_error:
+                print(f"  ⚠️  Could not list sessions: {list_error}")
+            
+            print("🔄 Retrying session creation...")
+            return bb.sessions.create(
+                project_id=self._browserbase_project_id,
+                browser_settings={'record_session': True}
+            )
     
-    async def run(self, start_url: Optional[str] = None) -> Dict[str, Any]:
+    async def run(self, start_url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """
         Run the agent with Browserbase session recording.
         
-        Initializes a Browserbase session with recording enabled,
-        runs the browser-use Agent with telemetry hooks, and logs
-        the session replay URL as an artifact.
-        
         Args:
-            start_url: Optional URL to navigate to before running (not used by browser-use, 
+            start_url: Optional URL to navigate to before running (not used by browser-use,
                       as it extracts URLs from the goal)
+            **kwargs: Additional arguments (unused)
         
         Returns:
             Dictionary with run results including history and telemetry
         """
-        # Initialize Browserbase with API key and Project ID from environment
-        browserbase_api_key = os.getenv('BROWSERBASE_API_KEY')
-        browserbase_project_id = os.getenv('BROWSERBASE_PROJECT_ID')
-        
-        if not browserbase_api_key:
+        if not self._browserbase_api_key:
             raise ValueError("BROWSERBASE_API_KEY not found in environment variables")
         
-        # Initialize Browserbase client
-        bb = Browserbase(api_key=browserbase_api_key)
+        bb = Browserbase(api_key=self._browserbase_api_key)
+        session = await self._create_browserbase_session(bb)
         
-        # Create a Browserbase session with recording enabled for video URL
-        # Handle rate limit errors by closing existing sessions
-        try:
-            session = bb.sessions.create(
-                project_id=browserbase_project_id,
-                browser_settings={
-                    'record_session': True
-                }
-            )
-        except RateLimitError as e:
-            if "concurrent sessions limit" in str(e).lower():
-                print("⚠️  Hit concurrent sessions limit. Closing existing sessions...")
-                # List and close all active sessions
-                try:
-                    active_sessions = bb.sessions.list()
-                    if active_sessions:
-                        for active_session in active_sessions:
-                            try:
-                                bb.sessions.update(
-                                    id=active_session.id,
-                                    project_id=browserbase_project_id,
-                                    status='REQUEST_RELEASE'
-                                )
-                                print(f"  ✅ Closed session: {active_session.id}")
-                            except Exception as close_error:
-                                print(f"  ⚠️  Could not close session {active_session.id}: {close_error}")
-                        # Wait a moment for sessions to close
-                        import asyncio
-                        await asyncio.sleep(2)
-                except Exception as list_error:
-                    print(f"  ⚠️  Could not list sessions: {list_error}")
-                
-                # Retry creating the session
-                print("🔄 Retrying session creation...")
-                session = bb.sessions.create(
-                    project_id=browserbase_project_id,
-                    browser_settings={
-                        'record_session': True
-                    }
-                )
-            else:
-                raise
-        
-        print(f"Starting agent run...")
-        print(f"Trace ID: {self.trace_id}")
-        print(f"Run ID: {self.run_id}")
-        print(f"Lane: {self.lane}")
-        print(f"Goal: {self.goal[:100]}..." if len(self.goal) > 100 else f"Goal: {self.goal}")
+        self.print_run_header(start_url)
         print(f"Session ID: {session.id}")
-        print("-" * 50)
         
-        # Define on_step_start hook
+        # Define hooks
         async def on_step_start(agent):
             """Hook function called at the beginning of each agent step."""
-            self._current_step_index += 1
-            
-            # Extract action information from latest action in history
             action_type = None
             action_data = None
             try:
@@ -194,21 +112,11 @@ class BrowserUseTelemetricAgent:
             except:
                 pass
             
-            self._current_action_type = action_type
-            
-            event = self.telemetry.log_step_start(
-                step_index=self._current_step_index,
-                action_type=action_type,
-                action_data=action_data
-            )
-            
-            self.telemetry_events.append(self._convert_event_to_dict(event))
+            self.log_step_start(action_type=action_type, action_data=action_data)
             print(f"[Step {self._current_step_index}] START - Action: {action_type or 'N/A'}")
         
-        # Define on_step_end hook
         async def on_step_end(agent):
             """Hook function called at the end of each agent step."""
-            # Extract observation from extracted content
             observation = None
             try:
                 if hasattr(agent.history, 'extracted_content'):
@@ -218,38 +126,23 @@ class BrowserUseTelemetricAgent:
             except:
                 pass
             
-            # Log step end using the SAME step_index from step_start
-            event = self.telemetry.log_step_end(
-                step_index=self._current_step_index,
-                tokens_input=None,  # Will be distributed after run
-                tokens_output=None,  # Will be distributed after run
-                observation=observation
-            )
-            
-            # Preserve action_type from step_start in the dict
-            event_dict = self._convert_event_to_dict(event)
-            if event_dict['action_type'] is None and self._current_action_type:
-                event_dict['action_type'] = self._current_action_type
-            
-            self.telemetry_events.append(event_dict)
-            
-            # Build output string
-            duration_str = f"{event.duration_ms:.2f}ms" if event.duration_ms else "N/A"
+            event_dict = self.log_step_end(observation=observation)
+            duration_str = f"{event_dict.get('duration_ms', 0):.2f}ms"
             print(f"[Step {self._current_step_index}] END   - Duration: {duration_str}")
         
-        # Set up LLM using browser-use's helper
+        # Set up LLM
         llm = get_llm_by_name("openai_gpt-4o")
         
-        # Initialize the browser-use Agent with the task
+        # Initialize browser-use Agent
         agent = Agent(
             task=self.goal,
             llm=llm,
-            browserbase_api_key=browserbase_api_key,
-            browserbase_project_id=browserbase_project_id,
+            browserbase_api_key=self._browserbase_api_key,
+            browserbase_project_id=self._browserbase_project_id,
             browserbase_session_id=session.id,
         )
         
-        # Run the agent with hooks
+        # Run the agent
         history = None
         start_time = datetime.now()
         result = {"success": False, "message": "", "steps": 0, "history": None}
@@ -261,9 +154,6 @@ class BrowserUseTelemetricAgent:
             )
             
             elapsed = (datetime.now() - start_time).total_seconds()
-            print("-" * 50)
-            print(f"Agent completed successfully in {elapsed:.2f} seconds!")
-            
             result["success"] = True
             result["message"] = "Agent completed successfully"
             result["steps"] = self._current_step_index
@@ -271,11 +161,10 @@ class BrowserUseTelemetricAgent:
             
         except Exception as e:
             elapsed = (datetime.now() - start_time).total_seconds()
-            print(f"Error after {elapsed:.2f} seconds: {e}")
             result["message"] = f"Error: {e}"
             raise
         
-        # Get token usage from browser-use's history if available
+        # Get token usage from browser-use history
         total_input_tokens = 0
         total_output_tokens = 0
         
@@ -284,50 +173,54 @@ class BrowserUseTelemetricAgent:
                 usage = history.usage
                 total_input_tokens = getattr(usage, 'total_prompt_tokens', 0) or 0
                 total_output_tokens = getattr(usage, 'total_completion_tokens', 0) or 0
-                
                 print(f"\nToken Usage: {total_input_tokens} in / {total_output_tokens} out")
         except Exception as e:
             print(f"Could not get token usage: {e}")
         
-        # Distribute tokens proportionally across step_end events
-        step_end_events = [e for e in self.telemetry_events if e['event_type'] == 'step_end']
-        num_steps = len(step_end_events)
-        
-        if num_steps > 0 and (total_input_tokens > 0 or total_output_tokens > 0):
-            tokens_per_step_input = total_input_tokens // num_steps
-            tokens_per_step_output = total_output_tokens // num_steps
-            remainder_input = total_input_tokens % num_steps
-            remainder_output = total_output_tokens % num_steps
-            
-            step_end_count = 0
-            for event in self.telemetry_events:
-                if event['event_type'] == 'step_end':
-                    extra_in = remainder_input if step_end_count == 0 else 0
-                    extra_out = remainder_output if step_end_count == 0 else 0
-                    
-                    event['tokens_input'] = tokens_per_step_input + extra_in
-                    event['tokens_output'] = tokens_per_step_output + extra_out
-                    
-                    # Calculate cost using TelemetricWrapper's rates ($5/M in, $15/M out)
-                    input_cost = (event['tokens_input'] / 1_000_000) * 5.00
-                    output_cost = (event['tokens_output'] / 1_000_000) * 15.00
-                    event['cost_usd'] = input_cost + output_cost
-                    
-                    step_end_count += 1
+        # Distribute tokens across step_end events
+        self._distribute_tokens(total_input_tokens, total_output_tokens)
         
         # Log session replay URL as artifact
-        # Browserbase session replay URL format
         replay_url = getattr(session, 'replay_url', None)
         if replay_url is None:
-            # Construct replay URL if not directly available
             replay_url = f"https://www.browserbase.com/sessions/{session.id}/replay"
         
-        artifact_event = self.log_artifact("session_replay", replay_url)
+        self.log_artifact("session_replay", replay_url)
         print(f"\nSession Replay URL: {replay_url}")
         
+        self.print_run_footer(elapsed, result["success"], result["message"])
+        
         return result
+    
+    def _distribute_tokens(self, total_input: int, total_output: int) -> None:
+        """Distribute total tokens proportionally across step_end events."""
+        step_end_events = [e for e in self.telemetry_events if e.get('event_type') == 'step_end']
+        num_steps = len(step_end_events)
+        
+        if num_steps == 0 or (total_input == 0 and total_output == 0):
+            return
+        
+        tokens_per_step_input = total_input // num_steps
+        tokens_per_step_output = total_output // num_steps
+        remainder_input = total_input % num_steps
+        remainder_output = total_output % num_steps
+        
+        step_count = 0
+        for event in self.telemetry_events:
+            if event['event_type'] == 'step_end':
+                extra_in = remainder_input if step_count == 0 else 0
+                extra_out = remainder_output if step_count == 0 else 0
+                
+                event['tokens_input'] = tokens_per_step_input + extra_in
+                event['tokens_output'] = tokens_per_step_output + extra_out
+                
+                # Calculate cost ($5/M in, $15/M out)
+                input_cost = (event['tokens_input'] / 1_000_000) * 5.00
+                output_cost = (event['tokens_output'] / 1_000_000) * 15.00
+                event['cost_usd'] = input_cost + output_cost
+                
+                step_count += 1
 
 
 # Backwards compatibility alias
 TelemetricAgent = BrowserUseTelemetricAgent
-

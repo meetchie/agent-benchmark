@@ -3,25 +3,21 @@ Steel Telemetric Agent - Manual Playwright on Steel with LangChain orchestration
 
 This module provides the SteelTelemetricAgent class which uses Steel SDK for
 browser sessions and LangChain's ChatOpenAI to drive Playwright interactions,
-with telemetry logging via TelemetricWrapper.
+with telemetry logging via BaseAgent.
 """
 
 import os
-import uuid
 import asyncio
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List
 
 from playwright.async_api import async_playwright, Page, Browser
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.callbacks import BaseCallbackHandler
 
-import sys
-# Add project root to path for telemetric_logger import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from telemetric_logger import TelemetricWrapper, TelemetryEvent
+from .base_agent import BaseAgent
 
 
 class TelemetryCallbackHandler(BaseCallbackHandler):
@@ -30,25 +26,18 @@ class TelemetryCallbackHandler(BaseCallbackHandler):
     def __init__(self, agent: "SteelTelemetricAgent"):
         self.agent = agent
         self._current_step_start_time: Optional[datetime] = None
-        self._current_tokens_input: int = 0
-        self._current_tokens_output: int = 0
     
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
         """Called when LLM starts processing."""
         self._current_step_start_time = datetime.now()
-        self.agent._current_step_index += 1
-        
-        event = self.agent.telemetry.log_step_start(
-            step_index=self.agent._current_step_index,
+        self.agent.log_step_start(
             action_type="llm_call",
-            action_data={"prompts": prompts[:1] if prompts else None}  # Truncate for hash
+            action_data={"prompts": prompts[:1] if prompts else None}
         )
-        self.agent.telemetry_events.append(self.agent._convert_event_to_dict(event))
         print(f"[Step {self.agent._current_step_index}] START - LLM Call")
     
     def on_llm_end(self, response, **kwargs) -> None:
         """Called when LLM finishes processing."""
-        # Extract token usage from response
         tokens_input = None
         tokens_output = None
         
@@ -60,7 +49,6 @@ class TelemetryCallbackHandler(BaseCallbackHandler):
         except Exception:
             pass
         
-        # Extract response text for observation
         observation = None
         try:
             if response.generations and response.generations[0]:
@@ -69,21 +57,17 @@ class TelemetryCallbackHandler(BaseCallbackHandler):
         except Exception:
             pass
         
-        event = self.agent.telemetry.log_step_end(
-            step_index=self.agent._current_step_index,
+        event_dict = self.agent.log_step_end(
             tokens_input=tokens_input,
             tokens_output=tokens_output,
             observation=observation
         )
         
-        event_dict = self.agent._convert_event_to_dict(event)
-        self.agent.telemetry_events.append(event_dict)
-        
-        duration_str = f"{event.duration_ms:.2f}ms" if event.duration_ms else "N/A"
+        duration_str = f"{event_dict.get('duration_ms', 0):.2f}ms"
         print(f"[Step {self.agent._current_step_index}] END   - Duration: {duration_str}, Tokens: {tokens_input or 0}/{tokens_output or 0}")
 
 
-class SteelTelemetricAgent:
+class SteelTelemetricAgent(BaseAgent):
     """
     Browser automation agent using Steel SDK with LangChain orchestration.
     
@@ -95,19 +79,26 @@ class SteelTelemetricAgent:
 Your job is to decide what action to take next to accomplish the goal.
 
 Available actions:
-- click(selector): Click on an element matching the CSS selector
+- click(selector): Click on an element matching the selector
 - type(selector, text): Type text into an element
 - goto(url): Navigate to a URL
 - scroll(direction): Scroll the page ("up" or "down")
 - wait(seconds): Wait for a specified number of seconds
 - done(result): Indicate the task is complete with a result message
 
+IMPORTANT - Selector syntax (Playwright-compatible):
+- CSS selectors: "button.submit", "#login-form", "input[type='email']"
+- Text selectors: "text=Sign In", "text=Add to cart" (finds element containing text)
+- Chained: "button >> text=Submit" (button containing "Submit")
+- DO NOT use jQuery syntax like :contains() - it is not supported!
+
 Respond with a JSON object containing:
 - "thought": Your reasoning about what to do next
 - "action": The action name
 - "params": Object with action parameters
 
-Example response:
+Example responses:
+{"thought": "I need to click the login button", "action": "click", "params": {"selector": "text=Sign In"}}
 {"thought": "I need to search for the product", "action": "type", "params": {"selector": "input[type='search']", "text": "laptop"}}
 {"thought": "Task is complete", "action": "done", "params": {"result": "Successfully found the product"}}
 """
@@ -121,25 +112,7 @@ Example response:
             goal: The task/goal for the agent to accomplish
             lane: Lane identifier (default: "STEEL")
         """
-        self.run_id = run_id
-        self.lane = lane
-        self.goal = goal
-        
-        # Generate trace_id for telemetry
-        self.trace_id = str(uuid.uuid4())
-        
-        # Initialize telemetry wrapper
-        self.telemetry = TelemetricWrapper(
-            trace_id=self.trace_id,
-            run_id=self.run_id,
-            lane=self.lane
-        )
-        
-        # Store telemetry events
-        self.telemetry_events: List[Dict[str, Any]] = []
-        
-        # Step tracking
-        self._current_step_index = 0
+        super().__init__(run_id=run_id, goal=goal, lane=lane)
         
         # Browser components (initialized in run)
         self._browser: Optional[Browser] = None
@@ -154,39 +127,8 @@ Example response:
             callbacks=[self._callback_handler]
         )
         
-        # Conversation history for context
+        # Conversation history
         self._messages: List = []
-    
-    def _convert_event_to_dict(self, event: TelemetryEvent) -> Dict[str, Any]:
-        """Convert TelemetryEvent dataclass to dictionary for JSON serialization."""
-        return {
-            'trace_id': event.trace_id,
-            'run_id': event.run_id,
-            'lane': event.lane,
-            'step_index': event.step_index,
-            'event_type': event.event_type,
-            'timestamp': event.timestamp.isoformat(),
-            'duration_ms': event.duration_ms,
-            'tokens_input': event.tokens_input,
-            'tokens_output': event.tokens_output,
-            'cost_usd': event.cost_usd,
-            'action_type': event.action_type,
-            'observation_hash': event.observation_hash
-        }
-    
-    def log_artifact(self, artifact_type: str, artifact_url: str) -> Dict[str, Any]:
-        """Log an artifact event (e.g., session URL)."""
-        event = {
-            'trace_id': self.trace_id,
-            'run_id': self.run_id,
-            'lane': self.lane,
-            'event_type': 'artifact',
-            'artifact_type': artifact_type,
-            'artifact_url': artifact_url,
-            'timestamp': datetime.now().isoformat()
-        }
-        self.telemetry_events.append(event)
-        return event
     
     async def _get_page_state(self) -> str:
         """Get current page state for LLM context."""
@@ -197,7 +139,6 @@ Example response:
             url = self._page.url
             title = await self._page.title()
             
-            # Get visible text content (truncated)
             body_text = await self._page.evaluate("""
                 () => {
                     const body = document.body;
@@ -205,7 +146,6 @@ Example response:
                 }
             """)
             
-            # Get interactive elements
             interactive = await self._page.evaluate("""
                 () => {
                     const elements = [];
@@ -277,13 +217,14 @@ Interactive Elements:
         except Exception as e:
             return f"Action failed: {e}"
     
-    async def run(self, max_steps: int = 20, start_url: Optional[str] = None) -> Dict[str, Any]:
+    async def run(self, start_url: Optional[str] = None, max_steps: int = 20, **kwargs) -> Dict[str, Any]:
         """
         Run the agent with Steel browser session.
         
         Args:
-            max_steps: Maximum number of steps before stopping
             start_url: Optional URL to start at
+            max_steps: Maximum number of steps before stopping
+            **kwargs: Additional arguments (unused)
             
         Returns:
             Dictionary with run results and telemetry
@@ -294,15 +235,9 @@ Interactive Elements:
         if not steel_api_key:
             raise ValueError("STEEL_API_KEY not found in environment variables")
         
-        # Initialize Steel client
         client = Steel(steel_api_key=steel_api_key)
         
-        print(f"Starting Steel agent run...")
-        print(f"Trace ID: {self.trace_id}")
-        print(f"Run ID: {self.run_id}")
-        print(f"Lane: {self.lane}")
-        print(f"Goal: {self.goal}")
-        print("-" * 50)
+        self.print_run_header(start_url)
         
         start_time = datetime.now()
         result = {"success": False, "message": "", "steps": 0}
@@ -311,27 +246,22 @@ Interactive Elements:
             # Create Steel session
             self._session = client.sessions.create()
             session_id = self._session.id
-            websocket_url = self._session.websocket_url
+            websocket_url = f"wss://connect.steel.dev?apiKey={steel_api_key}&sessionId={session_id}"
             
             print(f"Steel Session ID: {session_id}")
             
-            # Log session as artifact
-            session_url = f"https://app.steel.dev/sessions/{session_id}"
+            session_url = getattr(self._session, 'session_viewer_url', None) or f"https://app.steel.dev/sessions/{session_id}"
+            print(f"View live session at: {session_url}")
             self.log_artifact("steel_session", session_url)
             
-            # Connect Playwright via CDP
             async with async_playwright() as p:
                 self._browser = await p.chromium.connect_over_cdp(websocket_url)
-                
-                # Get default context and page
                 context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
-                self._page = context.pages[0] if context.pages else await context.new_page()
+                self._page = await context.new_page()
                 
-                # Navigate to start URL if provided
                 if start_url:
                     await self._page.goto(start_url, wait_until="domcontentloaded")
                 
-                # Initialize conversation
                 self._messages = [
                     SystemMessage(content=self.SYSTEM_PROMPT),
                     HumanMessage(content=f"Goal: {self.goal}\n\nCurrent page state:\n{await self._get_page_state()}")
@@ -339,13 +269,10 @@ Interactive Elements:
                 
                 # Main agent loop
                 for step in range(max_steps):
-                    # Get LLM decision (telemetry logged via callback)
                     response = await self._llm.ainvoke(self._messages)
                     response_text = response.content
                     
-                    # Parse action from response
                     try:
-                        # Handle markdown code blocks
                         if "```json" in response_text:
                             json_str = response_text.split("```json")[1].split("```")[0].strip()
                         elif "```" in response_text:
@@ -367,18 +294,15 @@ Interactive Elements:
                         self._messages.append(HumanMessage(content="Please respond with valid JSON."))
                         continue
                     
-                    # Execute action
                     action_result = await self._execute_action(action, params)
                     print(f"  Result: {action_result}")
                     
-                    # Check if done
                     if action == "done":
                         result["success"] = True
                         result["message"] = params.get("result", "Task completed")
                         result["steps"] = step + 1
                         break
                     
-                    # Update conversation with result and new page state
                     self._messages.append(AIMessage(content=response_text))
                     page_state = await self._get_page_state()
                     self._messages.append(HumanMessage(content=f"Action result: {action_result}\n\nCurrent page state:\n{page_state}"))
@@ -388,9 +312,7 @@ Interactive Elements:
                     result["steps"] = max_steps
             
             elapsed = (datetime.now() - start_time).total_seconds()
-            print("-" * 50)
-            print(f"Agent completed in {elapsed:.2f} seconds")
-            print(f"Result: {result['message']}")
+            self.print_run_footer(elapsed, result["success"], result["message"])
             
         except Exception as e:
             elapsed = (datetime.now() - start_time).total_seconds()
@@ -399,7 +321,6 @@ Interactive Elements:
             raise
         
         finally:
-            # Release Steel session
             if self._session:
                 try:
                     client.sessions.release(self._session.id)
@@ -408,4 +329,3 @@ Interactive Elements:
                     print(f"Failed to release session: {e}")
         
         return result
-
