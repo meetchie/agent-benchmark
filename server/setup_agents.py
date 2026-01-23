@@ -100,6 +100,7 @@ def main():
         "OPENAI_API_KEY": "Required for all LLM-based agents",
         "BROWSERBASE_API_KEY": "Required for BROWSERUSE and STAGEHAND",
         "BROWSERBASE_PROJECT_ID": "Required for BROWSERUSE and STAGEHAND",
+        "BROWSERBASE_ORG_ID": "Required for BROWSERUSE session replay URLs",
         "STEEL_API_KEY": "Required for STEEL agent",
         "SKYVERN_API_KEY": "Required for SKYVERN agent",
     }
@@ -155,10 +156,11 @@ def main():
             print("  OPENAI_API_KEY=your_openai_api_key_here")
             print()
         
-        if "BROWSERBASE_API_KEY" in missing_env or "BROWSERBASE_PROJECT_ID" in missing_env:
+        if "BROWSERBASE_API_KEY" in missing_env or "BROWSERBASE_PROJECT_ID" in missing_env or "BROWSERBASE_ORG_ID" in missing_env:
             print("  # Get from: https://www.browserbase.com")
             print("  BROWSERBASE_API_KEY=your_browserbase_api_key_here")
             print("  BROWSERBASE_PROJECT_ID=your_browserbase_project_id_here")
+            print("  BROWSERBASE_ORG_ID=your_browserbase_org_id_here  # Found in your dashboard URL")
             print()
         
         if "STEEL_API_KEY" in missing_env:
@@ -190,7 +192,7 @@ def main():
     agents = {
         "BROWSERUSE": {
             "packages": ["browser-use", "browserbase"],
-            "env_vars": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID", "OPENAI_API_KEY"],
+            "env_vars": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID", "BROWSERBASE_ORG_ID", "OPENAI_API_KEY"],
             "notes": [
                 "• Uses browser-use library with Browserbase cloud browsers",
                 "• Session replays available at browserbase.com",

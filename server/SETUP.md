@@ -39,6 +39,7 @@ STEEL_API_KEY=your_steel_api_key_here
 **Required:**
 - `BROWSERBASE_API_KEY` - Get from [Browserbase](https://browserbase.com)
 - `BROWSERBASE_PROJECT_ID` - Get from Browserbase dashboard
+- `BROWSERBASE_ORG_ID` - Get from Browserbase dashboard URL (the org ID in your dashboard URL)
 - `OPENAI_API_KEY` - For LLM calls
 
 **Dependencies:**
@@ -153,7 +154,7 @@ python arena.py --agent STAGEHAND --scenario hacker_news_browse
 
 - [ ] Create `.env` file in `clean-room/` directory
 - [ ] Add `OPENAI_API_KEY` to `.env`
-- [ ] For BROWSERUSE: Add `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`
+- [ ] For BROWSERUSE: Add `BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`, and `BROWSERBASE_ORG_ID`
 - [ ] For STEEL: Add `STEEL_API_KEY` and install `steel-sdk`
 - [ ] For SKYVERN: Add `SKYVERN_API_KEY` (no extra packages needed)
 - [ ] For STAGEHAND: Same Browserbase keys + install Node.js dependencies

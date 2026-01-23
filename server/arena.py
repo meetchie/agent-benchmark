@@ -53,6 +53,11 @@ def load_env():
             load_dotenv(root_env_path)
 
 
+def get_company_from_scenario(scenario_name: str) -> str:
+    """Extract company/site name from scenario name (first part before underscore)."""
+    return scenario_name.split("_")[0]
+
+
 def calculate_totals(telemetry_events: list) -> Dict[str, Any]:
     """Calculate total token burn and cost from telemetry events."""
     total_tokens_input = 0
@@ -140,9 +145,10 @@ def save_log(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
              skyvern_billing: Optional[Dict] = None, error: Optional[Exception] = None):
     """Save the run log to a file."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    company = get_company_from_scenario(scenario.name)
     log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"arena_{agent.lane.lower()}_{timestamp}.log")
+    log_path = os.path.join(log_dir, f"arena_{agent.lane.lower()}_{company}_{timestamp}.log")
     
     with open(log_path, 'w') as f:
         f.write(f"Agent: {agent.lane}\n")
@@ -234,9 +240,10 @@ def handle_skyvern_fire_and_forget(agent, result: Dict[str, Any], scenario: Scen
     
     # Save minimal log
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    company = get_company_from_scenario(scenario.name)
     log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"arena_skyvern_{timestamp}.log")
+    log_path = os.path.join(log_dir, f"arena_skyvern_{company}_{timestamp}.log")
     
     with open(log_path, 'w') as f:
         f.write(f"Agent: SKYVERN\n")

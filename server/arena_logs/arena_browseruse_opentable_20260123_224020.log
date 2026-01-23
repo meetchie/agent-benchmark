@@ -1,0 +1,184 @@
+Agent: BROWSERUSE
+Scenario: opentable_reservation
+Run ID: 1718f844-5344-453c-8495-6fef15cb73d1
+Trace ID: 2f0df5de-a88f-4546-abff-0281f21d45f1
+Goal: Go to opentable.com.
+
+Search for restaurants with these criteria:
+1. Location: Cambridge, MA
+2. Party size: 2 people
+3. Date: Select a date that's 1 week from today
+4. Time: 7:00 PM (or closest available dinner time)
+
+From the search results:
+1. Click on a well-rated restaurant (4+ stars)
+2. On the restaurant page, look for available time slots
+3. Click on an available time slot to proceed toward booking
+
+IMPORTANT - How to verify success:
+Look for ANY of these success indicators:
+1. A reservation form appears asking for your details
+2. The selected time slot is highlighted/confirmed
+3. You see a "Complete reservation" or similar button
+4. A guest information form appears
+
+NOTE: Do NOT complete the actual reservation - just get to the point where you would enter your details.
+
+Start URL: https://www.opentable.com
+Duration: 90.87s
+Success: True
+Token Burn: 50,819 (49,804 in / 1,015 out)
+Cost: $0.2642
+
+Telemetry Events:
+[
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-01-23T22:39:02.140983",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-01-23T22:39:17.299270",
+    "duration_ms": 15158.287,
+    "tokens_input": 9964,
+    "tokens_output": 203,
+    "cost_usd": 0.052865,
+    "action_type": "navigate",
+    "observation_hash": "938082336928ce21ef4f0565bcd8293089695d6e0d92b2a16934de13ee416fb7"
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-01-23T22:39:17.299373",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-01-23T22:39:30.496484",
+    "duration_ms": 13197.110999999999,
+    "tokens_input": 9960,
+    "tokens_output": 203,
+    "cost_usd": 0.052844999999999996,
+    "action_type": "click",
+    "observation_hash": "71bbcdd199a33ded7cdac4cd1ff53919a8e3d02711f9eaeb5acbdbcc060e3a8e"
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-01-23T22:39:30.496612",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-01-23T22:39:38.820649",
+    "duration_ms": 8324.037,
+    "tokens_input": 9960,
+    "tokens_output": 203,
+    "cost_usd": 0.052844999999999996,
+    "action_type": "click",
+    "observation_hash": "48dbef5abfdff870dfed3ff900cdd9d061cae507f863287e1e4b4816f70595f0"
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-01-23T22:39:38.820996",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-01-23T22:39:52.874014",
+    "duration_ms": 14053.018,
+    "tokens_input": 9960,
+    "tokens_output": 203,
+    "cost_usd": 0.052844999999999996,
+    "action_type": "click",
+    "observation_hash": "76ee6ed84268c312d745c0f6947917921f6ad32db74d03904438467e0b04ba70"
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-01-23T22:39:52.874159",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-01-23T22:40:04.100650",
+    "duration_ms": 11226.491,
+    "tokens_input": 9960,
+    "tokens_output": 203,
+    "cost_usd": 0.052844999999999996,
+    "action_type": "click",
+    "observation_hash": "7e3fdc63cde6922fd1beb787cd857ab3cab9211aa05e3362f08a6b9a229dc384"
+  },
+  {
+    "trace_id": "2f0df5de-a88f-4546-abff-0281f21d45f1",
+    "run_id": "1718f844-5344-453c-8495-6fef15cb73d1",
+    "lane": "BROWSERUSE",
+    "event_type": "artifact",
+    "artifact_type": "session_replay",
+    "artifact_url": "https://www.browserbase.com/sessions/b62c137e-9f1d-44ef-b270-0098da8b793c",
+    "timestamp": "2026-01-23T22:40:20.699300"
+  }
+]

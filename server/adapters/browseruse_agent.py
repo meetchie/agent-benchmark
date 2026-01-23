@@ -40,6 +40,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         # Browserbase credentials
         self._browserbase_api_key = os.getenv('BROWSERBASE_API_KEY')
         self._browserbase_project_id = os.getenv('BROWSERBASE_PROJECT_ID')
+        self._browserbase_org_id = os.getenv('BROWSERBASE_ORG_ID')
     
     async def _create_browserbase_session(self, bb: Browserbase):
         """Create a Browserbase session, handling rate limits."""
@@ -181,9 +182,12 @@ class BrowserUseTelemetricAgent(BaseAgent):
         self._distribute_tokens(total_input_tokens, total_output_tokens)
         
         # Log session replay URL as artifact
-        replay_url = getattr(session, 'replay_url', None)
-        if replay_url is None:
-            replay_url = f"https://www.browserbase.com/sessions/{session.id}/replay"
+        # Use the full Browserbase URL format with org and project IDs
+        if self._browserbase_org_id and self._browserbase_project_id:
+            replay_url = f"https://www.browserbase.com/sessions/{session.id}"
+        else:
+            # Fallback if org_id not configured
+            replay_url = f"https://www.browserbase.com/sessions/{session.id}"
         
         self.log_artifact("session_replay", replay_url)
         print(f"\nSession Replay URL: {replay_url}")
