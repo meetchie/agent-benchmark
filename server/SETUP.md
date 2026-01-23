@@ -1,6 +1,6 @@
 # Agent Setup Guide
 
-This guide explains how to set up each agent (BROWSERUSE, STEEL, SKYVERN, STAGEHAND) for the gauntlet test runner.
+This guide explains how to set up each agent (BROWSERUSE, STEEL, SKYVERN, STAGEHAND) for the arena test runner.
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ STEEL_API_KEY=your_steel_api_key_here
 
 **Usage:**
 ```bash
-python day2_gauntlet.py --lane BROWSERUSE
+python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
 ```
 
 ### 2. STEEL Agent
@@ -83,7 +83,7 @@ python day2_gauntlet.py --lane BROWSERUSE
 
 **Usage:**
 ```bash
-python day2_gauntlet.py --lane STEEL
+python arena.py --agent STEEL --scenario google_search
 ```
 
 **Reference:** [github.com/steel-dev/steel-browser](https://github.com/steel-dev/steel-browser)
@@ -104,7 +104,7 @@ python day2_gauntlet.py --lane STEEL
 
 **Usage:**
 ```bash
-python day2_gauntlet.py --lane SKYVERN
+python arena.py --agent SKYVERN --scenario amazon_search
 ```
 
 **Reference:** [github.com/skyvern-ai/skyvern](https://github.com/skyvern-ai/skyvern)
@@ -138,7 +138,7 @@ python day2_gauntlet.py --lane SKYVERN
 
 **Usage:**
 ```bash
-python day2_gauntlet.py --lane STAGEHAND
+python arena.py --agent STAGEHAND --scenario hacker_news_browse
 ```
 
 **Reference:** [github.com/browserbase/stagehand](https://github.com/browserbase/stagehand)
@@ -164,16 +164,19 @@ Test each agent individually:
 
 ```bash
 # Test BROWSERUSE
-python day2_gauntlet.py --lane BROWSERUSE
+python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
 
 # Test STEEL
-python day2_gauntlet.py --lane STEEL
+python arena.py --agent STEEL --scenario google_search
 
 # Test SKYVERN
-python day2_gauntlet.py --lane SKYVERN
+python arena.py --agent SKYVERN --scenario amazon_search
 
 # Test STAGEHAND
-python day2_gauntlet.py --lane STAGEHAND
+python arena.py --agent STAGEHAND --scenario hacker_news_browse
+
+# List all available scenarios
+python arena.py --list-scenarios
 ```
 
 ## Troubleshooting

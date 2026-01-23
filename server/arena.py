@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-Gauntlet - Unified test runner for browser automation agents.
+Arena - Unified test runner for browser automation agents.
 
 A clean, composable test runner that separates agent selection from scenario selection.
 
 Usage:
     # Run with specific agent and scenario
-    python gauntlet.py --agent BROWSERUSE --scenario shipt_add_to_cart
-    python gauntlet.py --agent STEEL --scenario google_search
-    python gauntlet.py --agent SKYVERN --scenario amazon_search
-    python gauntlet.py --agent STAGEHAND --scenario hacker_news_browse
+    python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
+    python arena.py --agent STEEL --scenario google_search
+    python arena.py --agent SKYVERN --scenario amazon_search
+    python arena.py --agent STAGEHAND --scenario hacker_news_browse
     
     # List available agents and scenarios
-    python gauntlet.py --list-agents
-    python gauntlet.py --list-scenarios
-    python gauntlet.py --list-scenarios --tag e-commerce
+    python arena.py --list-agents
+    python arena.py --list-scenarios
+    python arena.py --list-scenarios --tag e-commerce
     
     # Custom goal (inline)
-    python gauntlet.py --agent STEEL --goal "Go to google.com and search for cats" --url https://google.com
+    python arena.py --agent STEEL --goal "Go to google.com and search for cats" --url https://google.com
     
     # Skyvern fire-and-forget mode
-    python gauntlet.py --agent SKYVERN --scenario shipt_add_to_cart --no-wait
+    python arena.py --agent SKYVERN --scenario shipt_add_to_cart --no-wait
 """
 
 import os
@@ -77,7 +77,7 @@ def print_banner(agent_name: str, scenario: Scenario, run_id: str):
     """Print the run banner."""
     print()
     print("=" * 60)
-    print("  GAUNTLET TEST RUNNER")
+    print("  ARENA - Agent Test Runner")
     print("=" * 60)
     print(f"  Agent:    {agent_name}")
     print(f"  Scenario: {scenario.name}")
@@ -140,9 +140,9 @@ def save_log(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
              skyvern_billing: Optional[Dict] = None, error: Optional[Exception] = None):
     """Save the run log to a file."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = os.path.join(os.path.dirname(__file__), "gauntlet_logs")
+    log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"gauntlet_{agent.lane.lower()}_{timestamp}.log")
+    log_path = os.path.join(log_dir, f"arena_{agent.lane.lower()}_{timestamp}.log")
     
     with open(log_path, 'w') as f:
         f.write(f"Agent: {agent.lane}\n")
@@ -234,9 +234,9 @@ def handle_skyvern_fire_and_forget(agent, result: Dict[str, Any], scenario: Scen
     
     # Save minimal log
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = os.path.join(os.path.dirname(__file__), "gauntlet_logs")
+    log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"gauntlet_skyvern_{timestamp}.log")
+    log_path = os.path.join(log_dir, f"arena_skyvern_{timestamp}.log")
     
     with open(log_path, 'w') as f:
         f.write(f"Agent: SKYVERN\n")
@@ -260,15 +260,15 @@ async def main():
     load_env()
     
     parser = argparse.ArgumentParser(
-        description="Run browser automation agents against test scenarios",
+        description="Arena - Test browser automation agents against scenarios",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python gauntlet.py --agent BROWSERUSE --scenario shipt_add_to_cart
-  python gauntlet.py --agent STEEL --scenario google_search
-  python gauntlet.py --agent SKYVERN --scenario amazon_search --no-wait
-  python gauntlet.py --list-scenarios --tag e-commerce
-  python gauntlet.py --agent STEEL --goal "Search for cats" --url https://google.com
+  python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
+  python arena.py --agent STEEL --scenario google_search
+  python arena.py --agent SKYVERN --scenario amazon_search --no-wait
+  python arena.py --list-scenarios --tag e-commerce
+  python arena.py --agent STEEL --goal "Search for cats" --url https://google.com
 """
     )
     

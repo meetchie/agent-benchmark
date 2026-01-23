@@ -24,7 +24,7 @@ python setup_agents.py
 
 **Test:**
 ```bash
-python day2_gauntlet.py --lane INDUCED
+python arena.py --agent INDUCED --scenario google_search
 ```
 
 ### LAVAGUE Agent
@@ -46,7 +46,7 @@ python day2_gauntlet.py --lane INDUCED
 
 **Test:**
 ```bash
-python day2_gauntlet.py --lane LAVAGUE
+python arena.py --agent LAVAGUE --scenario google_search
 ```
 
 ### STEEL Agent
@@ -70,7 +70,7 @@ python day2_gauntlet.py --lane LAVAGUE
 
 **Test:**
 ```bash
-python day2_gauntlet.py --lane STEEL
+python arena.py --agent STEEL --scenario google_search
 ```
 
 ## 📝 Your .env File

@@ -101,6 +101,187 @@ Find the nearest Target store and report:
 """
 ))
 
+register_scenario(Scenario(
+    name="patagonia_add_to_cart",
+    description="Search for a product on Patagonia and add to cart",
+    start_url="https://www.patagonia.com",
+    tags=["e-commerce", "apparel", "cart"],
+    goal="""Go to patagonia.com.
+
+Search for "Better Sweater Fleece Jacket" using the search functionality.
+
+From the search results, click on the first Men's jacket result.
+
+On the product page:
+1. Select size "M" (Medium)
+2. Select any available color
+3. Click "Add to Cart"
+
+IMPORTANT - How to verify success:
+After clicking add to cart, look for ANY of these success indicators:
+1. A cart/bag icon shows an updated count (e.g., "1")
+2. A slide-out cart panel appears showing the item
+3. A confirmation message appears saying the item was added
+4. You're taken to a cart page showing the jacket
+"""
+))
+
+register_scenario(Scenario(
+    name="cargurus_search",
+    description="Search for a used car on CarGurus",
+    start_url="https://www.cargurus.com",
+    tags=["automotive", "search", "marketplace"],
+    goal="""Go to cargurus.com.
+
+Search for used cars with these criteria:
+1. Make: Toyota
+2. Model: Camry
+3. Location/ZIP: 02139 (Cambridge, MA)
+4. Maximum price: $25,000
+5. Year: 2020 or newer
+
+Wait for results to load and report:
+1. The number of results found
+2. The first 3 listings with: Year, Price, Mileage
+3. Any "Great Deal" or "Good Deal" badges on these listings
+"""
+))
+
+
+# -----------------------------------------------------------------------------
+# Food Delivery Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="doordash_add_to_cart",
+    description="Find a restaurant and add food to cart on DoorDash",
+    start_url="https://www.doordash.com",
+    tags=["food-delivery", "cart", "restaurant"],
+    goal="""Go to doordash.com.
+
+First, set your delivery address to: 1 Main St, Springfield, IL 62701
+Wait for the address to be confirmed and restaurants to load.
+
+Search for "pizza" restaurants in your area.
+
+From the search results:
+1. Click on the first pizza restaurant that has a rating of 4+ stars
+2. Select a popular/featured item (like a large cheese pizza or pepperoni pizza)
+3. Add it to your cart
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart icon shows the item count (e.g., "1")
+2. A cart summary appears at the bottom of the screen
+3. A "View Cart" or "Checkout" button appears with the item total
+"""
+))
+
+register_scenario(Scenario(
+    name="grubhub_add_to_cart",
+    description="Find a restaurant and add food to cart on Grubhub",
+    start_url="https://www.grubhub.com",
+    tags=["food-delivery", "cart", "restaurant"],
+    goal="""Go to grubhub.com.
+
+First, set your delivery address to: 1 Main St, Springfield, IL 62701
+Wait for the address to be confirmed.
+
+Search for "Chinese food" restaurants.
+
+From the search results:
+1. Click on the first Chinese restaurant that has a good rating (4+ stars)
+2. Browse the menu and select a popular dish (like General Tso's Chicken or Orange Chicken)
+3. Add it to your cart
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart/bag icon shows the item count
+2. A cart panel appears on the side showing your order
+3. A "Checkout" or "View order" button becomes visible
+"""
+))
+
+register_scenario(Scenario(
+    name="ubereats_add_to_cart",
+    description="Find a restaurant and add food to cart on Uber Eats",
+    start_url="https://www.ubereats.com",
+    tags=["food-delivery", "cart", "restaurant"],
+    goal="""Go to ubereats.com.
+
+First, set your delivery address to: 1 Main St, Springfield, IL 62701
+Wait for the address to be confirmed and nearby restaurants to load.
+
+Search for "burger" restaurants.
+
+From the search results:
+1. Click on the first burger restaurant that appears to be well-rated
+2. Select a popular burger item from their menu
+3. Add it to your cart (with default options if any customization is required)
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart icon appears with a number badge
+2. A cart summary shows at the bottom of the screen
+3. A "Go to checkout" or similar button appears
+"""
+))
+
+register_scenario(Scenario(
+    name="instacart_add_to_cart",
+    description="Set store location and add groceries to cart on Instacart",
+    start_url="https://www.instacart.com",
+    tags=["grocery", "cart", "food-delivery"],
+    goal="""Go to instacart.com.
+
+First, set your delivery address to: 1 Main St, Springfield, IL 62701
+Wait for nearby stores to load.
+
+Select a store (preferably a major grocery store like Stop & Shop, Whole Foods, or similar).
+
+Once in the store:
+1. Search for "milk" or browse to the dairy section
+2. Select a gallon of whole milk (or 2% milk)
+3. Add it to your cart
+
+IMPORTANT - How to verify success:
+After clicking add to cart, look for ANY of these success indicators:
+1. The cart icon shows an updated count
+2. A "View cart" button appears
+3. The item shows "In cart" or similar confirmation
+4. A cart panel slides open showing the item
+"""
+))
+
+register_scenario(Scenario(
+    name="opentable_reservation",
+    description="Search for a restaurant and start a reservation on OpenTable",
+    start_url="https://www.opentable.com",
+    tags=["restaurant", "booking", "reservation"],
+    goal="""Go to opentable.com.
+
+Search for restaurants with these criteria:
+1. Location: Cambridge, MA
+2. Party size: 2 people
+3. Date: Select a date that's 1 week from today
+4. Time: 7:00 PM (or closest available dinner time)
+
+From the search results:
+1. Click on a well-rated restaurant (4+ stars)
+2. On the restaurant page, look for available time slots
+3. Click on an available time slot to proceed toward booking
+
+IMPORTANT - How to verify success:
+Look for ANY of these success indicators:
+1. A reservation form appears asking for your details
+2. The selected time slot is highlighted/confirmed
+3. You see a "Complete reservation" or similar button
+4. A guest information form appears
+
+NOTE: Do NOT complete the actual reservation - just get to the point where you would enter your details.
+"""
+))
+
 
 # -----------------------------------------------------------------------------
 # Authentication / Forms Scenarios

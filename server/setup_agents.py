@@ -264,10 +264,14 @@ def main():
     print()
     print("Once everything is set up, test each agent:")
     print()
-    print("  python day2_gauntlet.py --lane BROWSERUSE")
-    print("  python day2_gauntlet.py --lane STEEL")
-    print("  python day2_gauntlet.py --lane SKYVERN")
-    print("  python day2_gauntlet.py --lane STAGEHAND")
+    print("  python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart")
+    print("  python arena.py --agent STEEL --scenario google_search")
+    print("  python arena.py --agent SKYVERN --scenario amazon_search")
+    print("  python arena.py --agent STAGEHAND --scenario hacker_news_browse")
+    print()
+    print("List available scenarios:")
+    print()
+    print("  python arena.py --list-scenarios")
     print()
     
     all_ready = (

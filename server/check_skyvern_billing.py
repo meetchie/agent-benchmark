@@ -21,9 +21,9 @@ load_dotenv()
 from adapters import SkyvernTelemetricAgent
 
 
-def save_gauntlet_log(billing: dict, run_id: str) -> str:
-    """Save billing data as a gauntlet log file."""
-    log_dir = os.path.join(os.path.dirname(__file__), "gauntlet_logs")
+def save_arena_log(billing: dict, run_id: str) -> str:
+    """Save billing data as an arena log file."""
+    log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
     os.makedirs(log_dir, exist_ok=True)
     
     # Generate timestamp from created_at or now
@@ -38,7 +38,7 @@ def save_gauntlet_log(billing: dict, run_id: str) -> str:
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    log_path = os.path.join(log_dir, f"gauntlet_skyvern_{timestamp}_{run_id}.log")
+    log_path = os.path.join(log_dir, f"arena_skyvern_{timestamp}_{run_id}.log")
     
     totals = billing.get("totals", {})
     raw = billing.get("_raw_run_data", {})
@@ -98,7 +98,7 @@ def main():
     parser.add_argument(
         "--save-log",
         action="store_true",
-        help="Save billing as a gauntlet log file"
+        help="Save billing as an arena log file"
     )
     
     args = parser.parse_args()
@@ -131,9 +131,9 @@ def main():
                 billing.pop("_raw_run_data", None)
                 print(json.dumps(billing, indent=2, default=str))
             
-            # Save as gauntlet log if requested
+            # Save as arena log if requested
             if args.save_log:
-                log_path = save_gauntlet_log(billing, args.task_id)
+                log_path = save_arena_log(billing, args.task_id)
                 print(f"\n✅ Log saved: {log_path}")
     
     except Exception as e:

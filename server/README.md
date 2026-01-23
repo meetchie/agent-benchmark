@@ -25,11 +25,15 @@ cp .env.example .env  # Then edit with your API keys
 # 2. Check setup status
 python setup_agents.py
 
-# 3. Run the gauntlet test
-python day2_gauntlet.py --lane BROWSERUSE
-python day2_gauntlet.py --lane STEEL
-python day2_gauntlet.py --lane SKYVERN
-python day2_gauntlet.py --lane STAGEHAND
+# 3. Run the arena test runner
+python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
+python arena.py --agent STEEL --scenario google_search
+python arena.py --agent SKYVERN --scenario amazon_search
+python arena.py --agent STAGEHAND --scenario hacker_news_browse
+
+# List available scenarios
+python arena.py --list-scenarios
+python arena.py --list-scenarios --tag e-commerce
 ```
 
 ## Directory Structure
@@ -42,9 +46,11 @@ clean-room/
 │   ├── steel_agent.py           # Steel + LangChain
 │   ├── skyvern_agent.py         # Skyvern cloud API
 │   └── stagehand_agent.py       # Stagehand + Browserbase
-├── gauntlet_logs/               # Run logs and telemetry output
-├── day1_test.py                 # Basic browser-use test script
-├── day2_gauntlet.py             # Unified agent test runner
+├── scenarios/                   # Test scenario definitions
+│   ├── __init__.py              # Package exports
+│   └── definitions.py           # Scenario definitions
+├── arena_logs/                  # Run logs and telemetry output
+├── arena.py                     # Unified agent test runner
 ├── check_skyvern_billing.py     # Skyvern billing/status checker
 ├── setup_agents.py              # Dependency checker script
 ├── close_sessions.py            # Browserbase session cleanup utility
@@ -76,39 +82,46 @@ SKYVERN_API_KEY=your_skyvern_api_key
 
 ## Running Tests
 
-### Day 2 Gauntlet
+### Arena Test Runner
 
-The gauntlet runs a standardized test across all agents:
+The arena runs test scenarios against any agent:
 
 ```bash
-# Test specific agent
-python day2_gauntlet.py --lane BROWSERUSE
+# Test specific agent with a scenario
+python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
+python arena.py --agent STEEL --scenario google_search
+python arena.py --agent SKYVERN --scenario opentable_reservation
+python arena.py --agent STAGEHAND --scenario hacker_news_browse
 
-# The test goal:
-# 1. Navigate to shipt.com
-# 2. Set delivery address
-# 3. Search for "Organic Bananas"
-# 4. Add first result to cart
+# List all available scenarios
+python arena.py --list-scenarios
+
+# Filter scenarios by tag
+python arena.py --list-scenarios --tag e-commerce
+python arena.py --list-scenarios --tag food-delivery
+
+# Custom goal (without using a predefined scenario)
+python arena.py --agent STEEL --goal "Go to google.com and search for cats" --url https://google.com
 ```
 
 ### Skyvern (Cloud-Based)
 
 Skyvern runs in the cloud and requires special handling since tasks can take 15-30+ minutes.
 
-#### Fire-and-Forget Mode (Default)
+#### Fire-and-Forget Mode
 
 ```bash
-python day2_gauntlet.py --lane SKYVERN
+python arena.py --agent SKYVERN --scenario shipt_add_to_cart --no-wait
 ```
 
 This submits the task and returns immediately with:
 - Task ID and watch URL
 - Commands to check status later
 
-#### Wait Mode (Polls Until Complete)
+#### Wait Mode (Default - Polls Until Complete)
 
 ```bash
-python day2_gauntlet.py --lane SKYVERN --wait
+python arena.py --agent SKYVERN --scenario shipt_add_to_cart
 ```
 
 Polls Skyvern every 5 seconds until completion or timeout.
@@ -157,19 +170,11 @@ Example output:
 ============================================================
 ```
 
-### Day 1 Test (Basic)
-
-Simple browser-use test for development:
-
-```bash
-python day1_test.py
-```
-
 ## Telemetry Output
 
 Each run produces:
 - Console output with step-by-step progress
-- Log file in `gauntlet_logs/` with full telemetry
+- Log file in `arena_logs/` with full telemetry
 - Token usage and cost breakdown
 
 Example summary:
@@ -248,19 +253,21 @@ python check_skyvern_billing.py wr_REDACTED
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   day2_gauntlet.py                       │
-│                 (Unified Test Runner)                    │
+│                      arena.py                            │
+│                (Agent Test Runner)                       │
 └───────────────────────┬─────────────────────────────────┘
                         │
-        ┌───────────────┼───────────────┐
-        │               │               │
-        ▼               ▼               ▼
-┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-│  BROWSERUSE   │ │    STEEL      │ │   SKYVERN     │
-│   Adapter     │ │   Adapter     │ │   Adapter     │
-└───────┬───────┘ └───────┬───────┘ └───────┬───────┘
-        │               │               │
-        ▼               ▼               ▼
+        ┌───────────────┼───────────────┬───────────────┐
+        │               │               │               │
+        ▼               ▼               ▼               ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│  BROWSERUSE   │ │    STEEL      │ │   SKYVERN     │ │  STAGEHAND    │
+│   Adapter     │ │   Adapter     │ │   Adapter     │ │   Adapter     │
+└───────┬───────┘ └───────┬───────┘ └───────┬───────┘ └───────┬───────┘
+        │               │               │               │
+        └───────────────┴───────────────┴───────────────┘
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 TelemetricWrapper                        │
 │        (Unified logging, cost tracking, hashing)         │
