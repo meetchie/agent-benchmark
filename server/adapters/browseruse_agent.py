@@ -7,8 +7,9 @@ with Browserbase session recording and telemetry logging via the BaseAgent class
 
 import os
 import asyncio
+import re
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from browser_use import Agent
 from browser_use.llm.models import get_llm_by_name
@@ -16,6 +17,16 @@ from browserbase import Browserbase
 from browserbase._exceptions import RateLimitError
 
 from .base_agent import BaseAgent
+
+
+# Patterns that indicate the agent failed even if no exception was thrown
+FAILURE_PATTERNS = [
+    r"Error code: 429",  # Rate limit
+    r"insufficient_quota",
+    r"Rate limit",
+    r"❌ Result failed \d+/\d+ times",
+    r"❌ Stopping due to .* consecutive failures",
+]
 
 
 class BrowserUseTelemetricAgent(BaseAgent):
@@ -146,7 +157,11 @@ class BrowserUseTelemetricAgent(BaseAgent):
         # Run the agent
         history = None
         start_time = datetime.now()
-        result = {"success": False, "message": "", "steps": 0, "history": None, "judge_result": None}
+        result = {"success": False, "message": "", "steps": 0, "history": None, "judge_result": None, 
+                  "errors_detected": [], "final_extraction": None}
+        
+        # Capture stdout/stderr to detect failure patterns
+        captured_output: List[str] = []
         
         try:
             history = await agent.run(
@@ -155,48 +170,39 @@ class BrowserUseTelemetricAgent(BaseAgent):
             )
             
             elapsed = (datetime.now() - start_time).total_seconds()
-            result["success"] = True
-            result["message"] = "Agent completed successfully"
             result["steps"] = self._current_step_index
             result["history"] = history
             
-            # Try to extract judge verdict from browser-use history
-            # browser-use may include judge evaluation in the history
+            # Check for failure patterns in telemetry events
+            errors_found = self._detect_failure_patterns()
+            result["errors_detected"] = errors_found
+            
+            if errors_found:
+                result["success"] = False
+                result["message"] = f"Agent completed but encountered errors: {'; '.join(errors_found)}"
+            else:
+                result["success"] = True
+                result["message"] = "Agent completed successfully"
+            
+            # Try to extract final content/extraction from history for judge evaluation
             try:
                 if history is not None:
-                    # Check for judge result in history attributes
-                    if hasattr(history, 'judge_result'):
-                        judge_data = history.judge_result
-                        if judge_data:
-                            result["judge_result"] = {
-                                "verdict": "PASS" if getattr(judge_data, 'success', True) else "FAIL",
-                                "reason": getattr(judge_data, 'reason', None) or getattr(judge_data, 'message', None)
-                            }
-                    # Alternative: check for evaluation/verdict attributes
-                    elif hasattr(history, 'evaluation'):
-                        eval_data = history.evaluation
-                        if eval_data:
-                            result["judge_result"] = {
-                                "verdict": "PASS" if getattr(eval_data, 'success', True) else "FAIL",
-                                "reason": getattr(eval_data, 'reason', None) or getattr(eval_data, 'message', None)
-                            }
-                    # Check if final result has judge info
-                    elif hasattr(history, 'final_result') and history.final_result:
-                        final = history.final_result
-                        if hasattr(final, 'judge_verdict') or hasattr(final, 'evaluation'):
-                            jv = getattr(final, 'judge_verdict', None) or getattr(final, 'evaluation', None)
-                            if jv:
-                                result["judge_result"] = {
-                                    "verdict": "PASS" if getattr(jv, 'success', True) else "FAIL", 
-                                    "reason": getattr(jv, 'reason', None)
-                                }
-            except Exception as judge_err:
-                # Judge extraction failed, continue without it
-                print(f"(Could not extract judge verdict: {judge_err})")
+                    # Get extracted content for judge to evaluate
+                    if hasattr(history, 'extracted_content'):
+                        extracted = history.extracted_content()
+                        if extracted:
+                            result["final_extraction"] = extracted[-1] if isinstance(extracted, list) else extracted
+                    
+                    # Also try to get final result/output
+                    if hasattr(history, 'final_result') and history.final_result:
+                        result["final_extraction"] = str(history.final_result)
+            except Exception as extract_err:
+                print(f"(Could not extract final content: {extract_err})")
             
         except Exception as e:
             elapsed = (datetime.now() - start_time).total_seconds()
             result["message"] = f"Error: {e}"
+            result["errors_detected"].append(str(e))
             raise
         
         # Get token usage from browser-use history
@@ -258,6 +264,40 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 event['cost_usd'] = input_cost + output_cost
                 
                 step_count += 1
+    
+    def _detect_failure_patterns(self) -> List[str]:
+        """
+        Scan telemetry events for failure patterns that indicate the agent 
+        didn't actually succeed even if no exception was thrown.
+        
+        Returns:
+            List of error descriptions found
+        """
+        errors = []
+        
+        # Check for repeated identical extractions (stuck in a loop)
+        extractions = []
+        for event in self.telemetry_events:
+            if event.get('event_type') == 'step_end':
+                obs = event.get('observation_hash')
+                if obs:
+                    extractions.append(obs)
+        
+        # If the last 5+ extractions are identical, the agent was stuck
+        if len(extractions) >= 5:
+            last_five = extractions[-5:]
+            if len(set(last_five)) == 1:
+                errors.append("Agent appears stuck: last 5 extractions were identical")
+        
+        # Check for rate limit patterns in any string representation
+        # This is a fallback - ideally browser-use would expose this
+        event_str = str(self.telemetry_events)
+        for pattern in FAILURE_PATTERNS:
+            if re.search(pattern, event_str):
+                errors.append(f"Detected failure pattern: {pattern}")
+                break  # Don't duplicate rate limit errors
+        
+        return errors
 
 
 # Backwards compatibility alias
