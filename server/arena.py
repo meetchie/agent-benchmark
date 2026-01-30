@@ -95,7 +95,8 @@ def print_banner(agent_name: str, scenario: Scenario, run_id: str):
 
 
 def print_summary(agent: BaseAgent, result: Dict[str, Any], elapsed: float, 
-                  scenario: Scenario, skyvern_billing: Optional[Dict] = None):
+                  scenario: Scenario, skyvern_billing: Optional[Dict] = None,
+                  judge_result: Optional[Dict[str, Any]] = None):
     """Print the final run summary."""
     totals = calculate_totals(agent.telemetry_events)
     
@@ -113,7 +114,19 @@ def print_summary(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
     print(f"  Trace ID:    {agent.trace_id}")
     print(f"  Duration:    {elapsed:.2f}s")
     print(f"  Steps:       {result.get('steps', agent._current_step_index)}")
-    print(f"  Success:     {result.get('success', False)}")
+    
+    # Show agent's self-reported success and judge verdict separately
+    agent_success = result.get('success', False)
+    print(f"  Agent Success: {agent_success}")
+    
+    if judge_result:
+        verdict = judge_result.get('verdict', 'N/A')
+        verdict_icon = "✅" if verdict == "PASS" else "❌"
+        print(f"  Judge Verdict: {verdict_icon} {verdict}")
+        if judge_result.get('reason'):
+            reason_preview = judge_result['reason'][:80] + "..." if len(judge_result.get('reason', '')) > 80 else judge_result.get('reason', '')
+            print(f"  Judge Reason:  {reason_preview}")
+    
     print()
     print("  TOKEN BURN")
     print("  ----------")
@@ -142,8 +155,22 @@ def print_summary(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
 
 def save_log(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
              scenario: Scenario, totals: Dict[str, Any], 
-             skyvern_billing: Optional[Dict] = None, error: Optional[Exception] = None):
-    """Save the run log to a file."""
+             skyvern_billing: Optional[Dict] = None, error: Optional[Exception] = None,
+             judge_result: Optional[Dict[str, Any]] = None):
+    """Save the run log to a file.
+    
+    Args:
+        agent: The agent that was run
+        result: Result dictionary from the agent
+        elapsed: Time elapsed in seconds
+        scenario: The scenario that was run
+        totals: Token/cost totals
+        skyvern_billing: Optional Skyvern billing data
+        error: Optional exception if one occurred
+        judge_result: Optional judge verdict dictionary with keys:
+            - verdict: "PASS" or "FAIL"
+            - reason: Explanation string
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     company = get_company_from_scenario(scenario.name)
     log_dir = os.path.join(os.path.dirname(__file__), "arena_logs")
@@ -158,7 +185,16 @@ def save_log(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
         f.write(f"Goal: {scenario.goal}\n")
         f.write(f"Start URL: {scenario.start_url or 'N/A'}\n")
         f.write(f"Duration: {elapsed:.2f}s\n")
-        f.write(f"Success: {result.get('success', False)}\n")
+        
+        # Agent's self-reported success
+        agent_success = result.get('success', False)
+        f.write(f"Agent Reported Success: {agent_success}\n")
+        
+        # Judge verdict (if available)
+        if judge_result:
+            f.write(f"Judge Verdict: {judge_result.get('verdict', 'N/A')}\n")
+            if judge_result.get('reason'):
+                f.write(f"Judge Reason: {judge_result.get('reason')}\n")
         
         if error:
             f.write(f"Error: {error}\n")
@@ -435,9 +471,12 @@ Examples:
         except Exception as e:
             print(f"  (Could not fetch Skyvern billing: {e})")
     
+    # Extract judge result if available (from browser-use or other agents)
+    judge_result = result.get('judge_result')
+    
     # Print summary and save log
-    totals = print_summary(agent, result, elapsed, scenario, skyvern_billing)
-    save_log(agent, result, elapsed, scenario, totals, skyvern_billing, error)
+    totals = print_summary(agent, result, elapsed, scenario, skyvern_billing, judge_result)
+    save_log(agent, result, elapsed, scenario, totals, skyvern_billing, error, judge_result)
     
     # Exit with error code if there was a failure
     if error:

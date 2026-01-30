@@ -261,10 +261,11 @@ register_scenario(Scenario(
     goal="""Go to opentable.com.
 
 Search for restaurants with these criteria:
-1. Location: Cambridge, MA
+1. Location: Boston, MA
 2. Party size: 2 people
 3. Date: Select a date that's 1 week from today
 4. Time: 7:00 PM (or closest available dinner time)
+5. Cuisine: Italian
 
 From the search results:
 1. Click on a well-rated restaurant (4+ stars)

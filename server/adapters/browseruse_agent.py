@@ -146,7 +146,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         # Run the agent
         history = None
         start_time = datetime.now()
-        result = {"success": False, "message": "", "steps": 0, "history": None}
+        result = {"success": False, "message": "", "steps": 0, "history": None, "judge_result": None}
         
         try:
             history = await agent.run(
@@ -159,6 +159,40 @@ class BrowserUseTelemetricAgent(BaseAgent):
             result["message"] = "Agent completed successfully"
             result["steps"] = self._current_step_index
             result["history"] = history
+            
+            # Try to extract judge verdict from browser-use history
+            # browser-use may include judge evaluation in the history
+            try:
+                if history is not None:
+                    # Check for judge result in history attributes
+                    if hasattr(history, 'judge_result'):
+                        judge_data = history.judge_result
+                        if judge_data:
+                            result["judge_result"] = {
+                                "verdict": "PASS" if getattr(judge_data, 'success', True) else "FAIL",
+                                "reason": getattr(judge_data, 'reason', None) or getattr(judge_data, 'message', None)
+                            }
+                    # Alternative: check for evaluation/verdict attributes
+                    elif hasattr(history, 'evaluation'):
+                        eval_data = history.evaluation
+                        if eval_data:
+                            result["judge_result"] = {
+                                "verdict": "PASS" if getattr(eval_data, 'success', True) else "FAIL",
+                                "reason": getattr(eval_data, 'reason', None) or getattr(eval_data, 'message', None)
+                            }
+                    # Check if final result has judge info
+                    elif hasattr(history, 'final_result') and history.final_result:
+                        final = history.final_result
+                        if hasattr(final, 'judge_verdict') or hasattr(final, 'evaluation'):
+                            jv = getattr(final, 'judge_verdict', None) or getattr(final, 'evaluation', None)
+                            if jv:
+                                result["judge_result"] = {
+                                    "verdict": "PASS" if getattr(jv, 'success', True) else "FAIL", 
+                                    "reason": getattr(jv, 'reason', None)
+                                }
+            except Exception as judge_err:
+                # Judge extraction failed, continue without it
+                print(f"(Could not extract judge verdict: {judge_err})")
             
         except Exception as e:
             elapsed = (datetime.now() - start_time).total_seconds()
