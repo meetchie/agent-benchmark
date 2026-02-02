@@ -173,16 +173,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
             result["steps"] = self._current_step_index
             result["history"] = history
             
-            # Check for failure patterns in telemetry events
-            errors_found = self._detect_failure_patterns()
-            result["errors_detected"] = errors_found
-            
-            if errors_found:
-                result["success"] = False
-                result["message"] = f"Agent completed but encountered errors: {'; '.join(errors_found)}"
-            else:
-                result["success"] = True
-                result["message"] = "Agent completed successfully"
+            # Tentatively mark as success - will be re-evaluated after token check
+            result["success"] = True
+            result["message"] = "Agent completed successfully"
             
             # Try to extract final content/extraction from history for judge evaluation
             try:
@@ -220,6 +213,20 @@ class BrowserUseTelemetricAgent(BaseAgent):
         
         # Distribute tokens across step_end events
         self._distribute_tokens(total_input_tokens, total_output_tokens)
+        
+        # Re-check for failure patterns now that we have token info
+        total_tokens = total_input_tokens + total_output_tokens
+        additional_errors = self._detect_failure_patterns(total_tokens=total_tokens)
+        
+        # Merge any new errors found
+        for err in additional_errors:
+            if err not in result["errors_detected"]:
+                result["errors_detected"].append(err)
+        
+        # Update success status if new errors were found
+        if result["errors_detected"] and result["success"]:
+            result["success"] = False
+            result["message"] = f"Agent completed but encountered errors: {'; '.join(result['errors_detected'])}"
         
         # Log session replay URL as artifact
         # Use the full Browserbase URL format with org and project IDs
@@ -265,32 +272,53 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 
                 step_count += 1
     
-    def _detect_failure_patterns(self) -> List[str]:
+    def _detect_failure_patterns(self, total_tokens: int = 0) -> List[str]:
         """
         Scan telemetry events for failure patterns that indicate the agent 
         didn't actually succeed even if no exception was thrown.
+        
+        Args:
+            total_tokens: Total tokens used in the run (0 suggests early termination)
         
         Returns:
             List of error descriptions found
         """
         errors = []
         
-        # Check for repeated identical extractions (stuck in a loop)
-        extractions = []
+        # Collect observation hashes from step_end events
+        observations = []
         for event in self.telemetry_events:
             if event.get('event_type') == 'step_end':
                 obs = event.get('observation_hash')
                 if obs:
-                    extractions.append(obs)
+                    observations.append(obs)
         
-        # If the last 5+ extractions are identical, the agent was stuck
-        if len(extractions) >= 5:
-            last_five = extractions[-5:]
-            if len(set(last_five)) == 1:
-                errors.append("Agent appears stuck: last 5 extractions were identical")
+        num_steps = len(observations)
         
-        # Check for rate limit patterns in any string representation
-        # This is a fallback - ideally browser-use would expose this
+        # Check 1: If we have 3+ observations and they're ALL identical = stuck
+        if num_steps >= 3:
+            if len(set(observations)) == 1:
+                errors.append(f"Agent stuck: all {num_steps} steps had identical observations")
+        
+        # Check 2: If the last 3+ observations are identical = stuck in a loop
+        if num_steps >= 3:
+            last_three = observations[-3:]
+            if len(set(last_three)) == 1:
+                # Only add if not already caught by check 1
+                if len(set(observations)) > 1:
+                    errors.append("Agent stuck in loop: last 3 observations were identical")
+        
+        # Check 3: Very few steps for what should be a complex task
+        # Complex goals have multiple numbered steps, so < 10 steps is suspicious
+        goal_has_numbered_steps = any(f"{i}." in self.goal for i in range(1, 6))
+        if goal_has_numbered_steps and num_steps < 10:
+            errors.append(f"Incomplete run: only {num_steps} steps for a multi-step task")
+        
+        # Check 4: Zero tokens = LLM never responded (rate limited from the start)
+        if total_tokens == 0 and num_steps > 0:
+            errors.append("Zero tokens recorded: LLM likely rate-limited")
+        
+        # Check 5: Look for rate limit patterns in any string representation
         event_str = str(self.telemetry_events)
         for pattern in FAILURE_PATTERNS:
             if re.search(pattern, event_str):
