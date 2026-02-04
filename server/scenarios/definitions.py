@@ -22,6 +22,7 @@ class Scenario:
     goal: str
     start_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    success_criteria: Optional[str] = None  # Explicit criteria for judge to evaluate
     
     def __str__(self) -> str:
         return f"{self.name}: {self.description}"
@@ -63,6 +64,50 @@ After clicking the add-to-cart button, look for ANY of these success indicators:
 2. The cart icon in the top-right shows a number badge (like "1")
 3. A toast/notification appears saying the item was added
 """
+))
+
+register_scenario(Scenario(
+    name="shipt_complex_cart_validation",
+    description="Complex multi-item order with strict attribute and quantity logic",
+    start_url="https://shipt.com",
+    tags=["agentic-flow", "logic-test", "dirty-data"],
+    goal="""Go to shipt.com.
+
+1. **Setup:** Enter delivery address: 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
+
+2. **Task - Precision Search:**
+   - Search for "Granny Smith Apples".
+   - CRITICAL: Do NOT add the first result blindly. Find a loose individual apple (not a pre-bagged item) and add exactly **6 individual apples**.
+   - Note: If the site uses "lbs" instead of count, estimate 0.5 lbs per apple and add 3 lbs.
+
+3. **Task - Ambiguity Resolution:**
+   - Search for "Milk".
+   - Find a "Gallon of Whole Milk" that is explicitly **NOT Organic**.
+   - Add 1 to cart.
+
+4. **Task - Cross-Category Search:**
+   - Search for "Advil" (Brand search).
+   - Verify the result is actually "Ibuprofen" and represents a "Tablet" or "Caplet" form (avoid liquid gels if possible).
+   - Add the smallest pack size available (e.g., 20 or 50 count).
+
+5. **Verification:**
+   - Go to checkout/cart view.
+   - Verify that the Apple count is 6 (or ~3lbs).
+   - Verify the Milk is strictly "Whole" and standard (not organic).
+   - Verify the total cart item count is 3 unique products.
+""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. Cart contains exactly 3 UNIQUE products (not 3 total items, but 3 different products)
+2. Cart contains Granny Smith Apples - either 6 individual apples OR approximately 3 lbs
+3. Cart contains a gallon of WHOLE milk that is NOT organic
+4. Cart contains Advil (Ibuprofen) in tablet or caplet form (smallest available pack size)
+
+The task FAILS if:
+- Any of the 3 products are missing from the cart
+- The milk is organic
+- The apple quantity is wrong (not 6 / not ~3lbs)
+- The agent hit rate limits and could not complete verification
+- The cart verification shows fewer than 3 distinct products"""
 ))
 
 register_scenario(Scenario(
@@ -261,10 +306,11 @@ register_scenario(Scenario(
     goal="""Go to opentable.com.
 
 Search for restaurants with these criteria:
-1. Location: Cambridge, MA
+1. Location: Boston, MA
 2. Party size: 2 people
 3. Date: Select a date that's 1 week from today
 4. Time: 7:00 PM (or closest available dinner time)
+5. Cuisine: Italian
 
 From the search results:
 1. Click on a well-rated restaurant (4+ stars)
