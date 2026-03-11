@@ -43,3 +43,13 @@ def test_error_response():
     resp = state.to_response()
     assert resp["status"] == "error"
     assert resp["message"] == "Container error"
+
+
+def test_complete_response_with_failure():
+    state = RunState(run_id="test-4", status="complete", success=False,
+                     summary="Agent did not complete the task.", total_ms=5000)
+    state.steps = [make_step(1)]
+    resp = state.to_response()
+    assert resp["status"] == "complete"
+    assert resp["success"] is False
+    assert "Agent did not complete" in resp["summary"]

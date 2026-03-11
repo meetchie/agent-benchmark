@@ -39,3 +39,8 @@ def test_status_not_found():
 def test_start_missing_fields():
     resp = client.post("/benchmark/start", json={"url": "https://example.com"})
     assert resp.status_code == 422  # FastAPI validation error
+
+
+def test_start_invalid_url():
+    resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
+    assert resp.status_code == 422

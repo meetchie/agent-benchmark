@@ -5,7 +5,6 @@ Manages in-memory run state, captures screenshots after each agent action,
 and provides step descriptions for the benchmark UI.
 """
 
-import asyncio
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -113,7 +112,9 @@ async def _take_screenshot(agent) -> Optional[str]:
         await page.set_viewport_size({"width": 1280, "height": 800})
         img_bytes = await page.screenshot(type="jpeg", quality=80, full_page=False)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.debug(f"_take_screenshot failed: {e}")
         return None
 
 
@@ -196,8 +197,9 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
             elif hasattr(history, 'final_result') and history.final_result:
                 summary = str(history.final_result)[:300]
 
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.debug(f"Success determination failed: {e}")
 
         if not summary:
             summary = "Agent completed the task." if success else "Agent did not complete the task."
