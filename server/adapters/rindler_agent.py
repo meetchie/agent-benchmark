@@ -7,8 +7,14 @@ to drive browser actions on the Go server, integrated with arena telemetry.
 
 import json
 import os
+import aiohttp
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+try:
+    from .base_agent import BaseAgent
+except ImportError:
+    BaseAgent = object  # Tests load this module directly; agent class won't be usable but other classes will import fine
 
 
 # ---------------------------------------------------------------------------
@@ -233,3 +239,121 @@ class LLMClient:
             tokens_input=usage.input_tokens,
             tokens_output=usage.output_tokens,
         )
+
+
+# ---------------------------------------------------------------------------
+# Rindler Telemetric Agent
+# ---------------------------------------------------------------------------
+
+class RindlerTelemetricAgent(BaseAgent):
+    """
+    MCP-based browser automation agent connecting to the Rindler Go server.
+    Uses LLM tool-calling to drive browser actions over SSE.
+    """
+
+    def __init__(self, run_id: str, goal: str, lane: str = "RINDLER", **kwargs):
+        super().__init__(run_id=run_id, goal=goal, lane=lane)
+        self.server_url = os.environ["RINDLER_SERVER_URL"]
+        self.email = os.environ["RINDLER_EMAIL"]
+        self.password = os.environ["RINDLER_PASSWORD"]
+        self.llm_name = kwargs.get("llm", "gpt-4o-mini")
+        self.max_steps = kwargs.get("max_steps", 25)
+        self._token = None
+        self._session_id = None
+
+    async def _login(self) -> str:
+        url = f"{self.server_url}/auth/login"
+        async with aiohttp.ClientSession() as http:
+            async with http.post(url, json={"email": self.email, "password": self.password}) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise RuntimeError(f"Login failed ({resp.status}): {body}")
+                data = await resp.json()
+                return data["token"]
+
+    def _build_initial_messages(self, provider: str, accessibility_tree: str) -> list:
+        tree = truncate(accessibility_tree, MAX_TREE_CHARS)
+        content = f"Goal: {self.goal}\n\nCurrent page:\n{tree}"
+        return [{"role": "user", "content": content}]
+
+    def _append_tool_exchange(self, provider: str, messages: list, llm_resp: LLMResponse, parsed_result: dict) -> list:
+        result_text = truncate(json.dumps(parsed_result), MAX_RESULT_CHARS)
+        messages = list(messages)
+        if provider == "openai":
+            messages.append({
+                "role": "assistant",
+                "tool_calls": [{"id": llm_resp.tool_call_id, "type": "function",
+                    "function": {"name": llm_resp.tool_name, "arguments": json.dumps(llm_resp.tool_args)}}],
+            })
+            messages.append({"role": "tool", "tool_call_id": llm_resp.tool_call_id, "content": result_text})
+        else:
+            messages.append({
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": llm_resp.tool_call_id,
+                    "name": llm_resp.tool_name, "input": llm_resp.tool_args}],
+            })
+            messages.append({
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": llm_resp.tool_call_id, "content": result_text}],
+            })
+        return messages
+
+    def _build_result(self, done_args: dict, steps: int) -> dict:
+        return {
+            "success": done_args.get("success", False),
+            "message": done_args.get("message", ""),
+            "steps": steps,
+            "final_extraction": done_args.get("message", ""),
+        }
+
+    def _compute_cost(self, tokens_input: int, tokens_output: int) -> float:
+        rates = COST_RATES.get(self.llm_name, COST_RATES["gpt-4o-mini"])
+        return (tokens_input / 1_000_000) * rates["input"] + (tokens_output / 1_000_000) * rates["output"]
+
+    async def run(self, start_url=None, **kwargs):
+        from mcp.client.sse import sse_client
+        from mcp import ClientSession
+
+        self.print_run_header(start_url)
+        self._token = await self._login()
+        llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
+
+        async with sse_client(self.server_url + "/mcp/") as (read, write):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                mcp_tools = (await client.list_tools()).tools
+                llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
+                llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
+
+                raw = await client.call_tool("browse_to_url", MCPToolBridge.inject_auth_token({"url": start_url}, self._token))
+                parsed = parse_tool_result(raw)
+                self._session_id = parsed.get("session_id")
+                messages = self._build_initial_messages(llm.provider, parsed.get("accessibility_tree", ""))
+
+                try:
+                    for step in range(self.max_steps):
+                        llm_response = await llm.call(messages, llm_tools)
+                        if llm_response.tool_name == "done":
+                            return self._build_result(llm_response.tool_args or {}, step + 1)
+                        if llm_response.tool_name:
+                            self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
+                            tool_args = MCPToolBridge.inject_auth_token(llm_response.tool_args, self._token)
+                            raw = await client.call_tool(llm_response.tool_name, tool_args)
+                            parsed = parse_tool_result(raw)
+                            event_dict = self.log_step_end(
+                                tokens_input=llm_response.tokens_input,
+                                tokens_output=llm_response.tokens_output,
+                                observation={"tool_result": parsed},
+                            )
+                            event_dict["cost_usd"] = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            messages = self._append_tool_exchange(llm.provider, messages, llm_response, parsed)
+                        else:
+                            messages.append({"role": "assistant", "content": llm_response.text})
+                finally:
+                    if self._session_id:
+                        try:
+                            await client.call_tool("close_session", MCPToolBridge.inject_auth_token({"session_id": self._session_id}, self._token))
+                        except Exception:
+                            pass
+
+        return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)

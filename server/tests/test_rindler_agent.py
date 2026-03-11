@@ -18,6 +18,7 @@ MCPToolBridge = _mod.MCPToolBridge
 parse_tool_result = _mod.parse_tool_result
 LLMResponse = _mod.LLMResponse
 LLMClient = _mod.LLMClient
+RindlerTelemetricAgent = _mod.RindlerTelemetricAgent
 
 
 class FakeTool:
@@ -243,3 +244,75 @@ class TestLLMClient:
         assert result.text is None
         assert result.tokens_input == 200
         assert result.tokens_output == 30
+
+
+class TestRindlerHelpers:
+
+    def _make_agent(self):
+        """Create a partially initialized agent for testing helper methods."""
+        agent = object.__new__(RindlerTelemetricAgent)
+        agent.goal = "Buy bananas"
+        agent.llm_name = "gpt-4o-mini"
+        return agent
+
+    def test_build_initial_messages_openai(self):
+        agent = self._make_agent()
+        msgs = agent._build_initial_messages("openai", "<tree>button 'Add'</tree>")
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+        assert "Buy bananas" in msgs[0]["content"]
+        assert "button 'Add'" in msgs[0]["content"]
+
+    def test_build_initial_messages_truncates(self):
+        agent = self._make_agent()
+        long_tree = "x" * 5000
+        msgs = agent._build_initial_messages("openai", long_tree)
+        assert "truncated" in msgs[0]["content"]
+        assert len(msgs[0]["content"]) < 5000
+
+    def test_append_tool_exchange_openai(self):
+        agent = self._make_agent()
+        resp = LLMResponse(tool_name="browse_to_url", tool_args={"url": "https://example.com"},
+                          tool_call_id="call_123", text=None, tokens_input=100, tokens_output=25)
+        parsed = {"session_id": "s1", "accessibility_tree": "<tree/>"}
+        msgs = [{"role": "user", "content": "goal"}]
+        result = agent._append_tool_exchange("openai", msgs, resp, parsed)
+        assert len(result) == 3
+        assert result[1]["role"] == "assistant"
+        assert result[1]["tool_calls"][0]["id"] == "call_123"
+        assert result[2]["role"] == "tool"
+        assert result[2]["tool_call_id"] == "call_123"
+
+    def test_append_tool_exchange_anthropic(self):
+        agent = self._make_agent()
+        resp = LLMResponse(tool_name="click_element", tool_args={"session_id": "s1", "selector": "#btn"},
+                          tool_call_id="toolu_456", text=None, tokens_input=200, tokens_output=50)
+        parsed = {"session_id": "s1", "success": True}
+        msgs = [{"role": "user", "content": "goal"}]
+        result = agent._append_tool_exchange("anthropic", msgs, resp, parsed)
+        assert len(result) == 3
+        assert result[1]["role"] == "assistant"
+        assert result[1]["content"][0]["type"] == "tool_use"
+        assert result[2]["role"] == "user"
+        assert result[2]["content"][0]["type"] == "tool_result"
+        assert result[2]["content"][0]["tool_use_id"] == "toolu_456"
+
+    def test_build_result(self):
+        agent = self._make_agent()
+        result = agent._build_result({"success": True, "message": "Done!"}, 5)
+        assert result["success"] is True
+        assert result["message"] == "Done!"
+        assert result["steps"] == 5
+        assert result["final_extraction"] == "Done!"
+
+    def test_compute_cost_gpt4o_mini(self):
+        agent = self._make_agent()
+        agent.llm_name = "gpt-4o-mini"
+        cost = agent._compute_cost(1_000_000, 1_000_000)
+        assert abs(cost - 0.75) < 0.001  # 0.15 + 0.60
+
+    def test_compute_cost_unknown_model_defaults(self):
+        agent = self._make_agent()
+        agent.llm_name = "unknown-model"
+        cost = agent._compute_cost(1_000_000, 1_000_000)
+        assert abs(cost - 0.75) < 0.001  # falls back to gpt-4o-mini rates
