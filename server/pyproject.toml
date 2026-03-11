@@ -26,6 +26,10 @@ dependencies = [
     
     # Optional: for MCP integration
     "mcp>=1.0.0",
+
+    # LLM providers for RINDLER agent
+    "openai>=1.0.0",
+    "anthropic>=0.30.0",
 ]
 
 [project.optional-dependencies]

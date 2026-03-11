@@ -518,7 +518,21 @@ Examples:
         type=str,
         help="Filter scenarios by tag (use with --list-scenarios)"
     )
-    
+
+    # Rindler-specific
+    parser.add_argument(
+        "--llm",
+        type=str,
+        default="gpt-4o-mini",
+        help="LLM model for RINDLER agent (e.g., gpt-4o-mini, gpt-4o, claude-sonnet)"
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=25,
+        help="Max action steps for RINDLER agent"
+    )
+
     args = parser.parse_args()
     
     # Handle listing options
@@ -573,10 +587,16 @@ Examples:
     AgentClass = get_agent_class(agent_name)
     run_id = str(uuid.uuid4())
     
+    extra_kwargs = {}
+    if agent_name == "RINDLER":
+        extra_kwargs["llm"] = args.llm
+        extra_kwargs["max_steps"] = args.max_steps
+
     agent = AgentClass(
         run_id=run_id,
         goal=scenario.goal,
         lane=agent_name,
+        **extra_kwargs,
     )
     
     # Determine if we should wait (Skyvern-specific)

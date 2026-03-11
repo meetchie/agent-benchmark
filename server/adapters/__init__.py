@@ -18,6 +18,7 @@ from .browseruse_agent import BrowserUseTelemetricAgent, TelemetricAgent
 from .steel_agent import SteelTelemetricAgent
 from .skyvern_agent import SkyvernTelemetricAgent
 from .stagehand_agent import StagehandTelemetricAgent
+from .rindler_agent import RindlerTelemetricAgent
 
 # Agent registry for easy lookup by name
 AGENTS = {
@@ -25,6 +26,7 @@ AGENTS = {
     "STEEL": SteelTelemetricAgent,
     "SKYVERN": SkyvernTelemetricAgent,
     "STAGEHAND": StagehandTelemetricAgent,
+    "RINDLER": RindlerTelemetricAgent,
 }
 
 def get_agent_class(name: str):
@@ -56,7 +58,8 @@ __all__ = [
     "SteelTelemetricAgent",
     "SkyvernTelemetricAgent",
     "StagehandTelemetricAgent",
-    
+    "RindlerTelemetricAgent",
+
     # Registry
     "AGENTS",
     "get_agent_class",
