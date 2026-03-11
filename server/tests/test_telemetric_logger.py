@@ -16,6 +16,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from telemetric_logger import TelemetryEvent, TelemetricWrapper
 
 
+class TestImportSmokeTest:
+
+    def test_base_agent_imports_with_telemetric_logger(self):
+        """Spec requires: 'from adapters.base_agent import BaseAgent' succeeds."""
+        from adapters.base_agent import BaseAgent
+        assert hasattr(BaseAgent, "log_step_start")
+        assert hasattr(BaseAgent, "log_step_end")
+
+
 class TestTelemetryEvent:
 
     def test_create_event_with_required_fields(self):

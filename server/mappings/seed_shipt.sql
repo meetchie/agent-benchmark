@@ -179,7 +179,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO schemas (id, site_id, definition, version)
 VALUES ('758e1b62-12b8-5637-8fda-845702c40823', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
   "tool_name": "shipt_adjust_quantity",
-  "tool_description": "Change the quantity of an item already in the Shipt cart",
+  "tool_description": "Increment the quantity of an item in the Shipt cart by 1. Call multiple times to reach the desired quantity.",
   "tool_hash": "12fb574c152c",
   "parameters": {
     "product_name": {

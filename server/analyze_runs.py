@@ -73,14 +73,16 @@ def parse_log_file(path: Path) -> dict:
             except ValueError:
                 pass
 
-    # Count steps from telemetry events
-    tel_match = re.search(r"Telemetry Events:\s*\n(\[.*?\])", text, re.DOTALL)
-    if tel_match:
-        try:
-            events = json.loads(tel_match.group(1))
-            result["steps"] = sum(1 for e in events if e.get("event_type") == "step_end")
-        except json.JSONDecodeError:
-            pass
+    # Count steps from telemetry events (JSON array is always last in the file)
+    for i, line in enumerate(lines):
+        if line.startswith("Telemetry Events:"):
+            rest = "\n".join(lines[i + 1:])
+            try:
+                events = json.loads(rest.strip())
+                result["steps"] = sum(1 for e in events if e.get("event_type") == "step_end")
+            except json.JSONDecodeError:
+                pass
+            break
 
     return result
 

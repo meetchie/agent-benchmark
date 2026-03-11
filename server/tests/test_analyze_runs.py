@@ -160,7 +160,7 @@ class TestFiltering:
         runs = self._parse_all_fixtures()
         filtered = [r for r in runs if r["agent"].upper() in {"RINDLER"}]
         assert all(r["agent"] == "RINDLER" for r in filtered)
-        assert len(filtered) >= 2  # At least the 3 RINDLER fixtures
+        assert len(filtered) >= 3  # At least the 3 RINDLER fixtures
 
     def test_filter_by_scenario(self):
         runs = self._parse_all_fixtures()
