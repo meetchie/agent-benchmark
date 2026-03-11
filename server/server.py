@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from benchmark_runner import RunState, run_benchmark
 
@@ -42,6 +42,13 @@ app.add_middleware(
 class StartRequest(BaseModel):
     url: str
     goal: str
+
+    @field_validator("url")
+    @classmethod
+    def url_must_be_http(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("url must start with http:// or https://")
+        return v
 
 
 @app.get("/health")

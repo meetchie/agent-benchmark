@@ -7,7 +7,6 @@ and provides step descriptions for the benchmark UI.
 
 import asyncio
 import base64
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -96,8 +95,9 @@ def _format_action(agent) -> str:
                 return f"Done: {str(result)[:60]}"
             else:
                 return f"{action_type.replace('_', ' ').capitalize()}"
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.debug(f"_format_action failed: {e}")
     return "Processing..."
 
 
@@ -167,13 +167,26 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
 
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
 
-        # Determine success from agent history
+        # Determine success from agent's self-report at run end
         success = False
         summary = ""
         try:
-            # Agent is considered successful if it completed (reached 'done' action)
-            if hasattr(history, 'is_done') and history.is_done():
-                success = True
+            # Try is_successful() first (available in some browser_use versions)
+            if hasattr(history, 'is_successful') and callable(history.is_successful):
+                success = bool(history.is_successful())
+            else:
+                # Fall back: inspect the done action's success field
+                actions = history.model_actions() if hasattr(history, 'model_actions') else []
+                for action in reversed(actions):
+                    if isinstance(action, dict) and 'done' in action:
+                        done_data = action['done']
+                        if isinstance(done_data, dict):
+                            success = bool(done_data.get('success', False))
+                        break
+                    elif hasattr(action, 'done') and action.done is not None:
+                        done_action = action.done
+                        success = bool(getattr(done_action, 'success', False))
+                        break
 
             # Get summary from final result
             if hasattr(history, 'final_result') and callable(history.final_result):
@@ -183,8 +196,6 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
             elif hasattr(history, 'final_result') and history.final_result:
                 summary = str(history.final_result)[:300]
 
-            if not success and not summary:
-                summary = "Agent did not complete the task."
         except Exception:
             pass
 
