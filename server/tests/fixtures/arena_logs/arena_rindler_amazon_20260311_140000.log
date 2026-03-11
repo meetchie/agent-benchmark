@@ -1,0 +1,25 @@
+Agent: RINDLER
+Scenario: amazon_search
+Run ID: 55555555-5555-5555-5555-555555555555
+Trace ID: 66666666-6666-6666-6666-666666666666
+Goal: Search for wireless headphones on Amazon
+Start URL: https://amazon.com
+Duration: 30.20s
+Agent Reported Success: True
+Token Burn: 800 (700 in / 100 out)
+Cost: $0.0080
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully searched for headphones.
+--- END JUDGE EVALUATION ---
+
+Telemetry Events:
+[
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 1, "event_type": "step_start"},
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 1, "event_type": "step_end", "duration_ms": 8000, "tokens_input": 200, "tokens_output": 30},
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 2, "event_type": "step_start"},
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 2, "event_type": "step_end", "duration_ms": 5000, "tokens_input": 250, "tokens_output": 35},
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 3, "event_type": "step_start"},
+  {"trace_id": "66666666", "run_id": "55555555", "lane": "RINDLER", "step_index": 3, "event_type": "step_end", "duration_ms": 7000, "tokens_input": 250, "tokens_output": 35}
+]
