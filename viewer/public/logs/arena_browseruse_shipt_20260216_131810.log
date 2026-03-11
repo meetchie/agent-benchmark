@@ -1,0 +1,490 @@
+Agent: BROWSERUSE
+Scenario: shipt_add_to_cart
+Run ID: 2f4fdebf-b5e7-42fa-85c1-e3115f49531f
+Trace ID: 415cbf49-929b-42ed-9d42-c8739e0b964b
+Goal: Go to shipt.com.
+
+First, you need to set a delivery address before you can search for products.
+Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
+Wait for the autocomplete dropdown and click the first suggestion.
+
+Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+
+IMPORTANT - How to verify success:
+After clicking the add-to-cart button, look for ANY of these success indicators:
+1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
+2. The cart icon in the top-right shows a number badge (like "1")
+3. A toast/notification appears saying the item was added
+
+Start URL: https://shipt.com
+Duration: 259.50s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully set the delivery address, searched for 'Organic Bananas', and added the product to the cart. The presence of '1 in cart' on the product card confirms the item was added, meeting the success criteria.
+Criteria Met: Set the delivery address to '1 Main St, Springfield, IL 62701' (evidence: previous evaluation confirmed address was set), Searched for 'Organic Bananas' (evidence: previous evaluation confirmed search was performed), Added the first result to the cart (evidence: '1 in cart' on the product card was observed)
+--- END JUDGE EVALUATION ---
+Token Burn: 195,997 (193,126 in / 2,871 out)
+Cost: $1.0087
+
+Telemetry Events:
+[
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:13:54.868002",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:14:05.394088",
+    "duration_ms": 10526.086,
+    "tokens_input": 12076,
+    "tokens_output": 186,
+    "cost_usd": 0.06317,
+    "action_type": "navigate",
+    "observation_hash": "6ae5ecd8fd5a85a5ae71f2e78bc8a7ab9903e45cfbb946b020078f65df52bd9a"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:14:05.394186",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "search_page",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:14:14.538586",
+    "duration_ms": 9144.4,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "search_page",
+    "observation_hash": "c54dc0e93a1dbe59d524e37abdd1533e256faf1419e5601e940c07415a44e3de"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:14:14.538739",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "search_page",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:14:37.021887",
+    "duration_ms": 22483.148,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "search_page",
+    "observation_hash": "c54dc0e93a1dbe59d524e37abdd1533e256faf1419e5601e940c07415a44e3de"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:14:37.021993",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "search_page",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:14:55.723070",
+    "duration_ms": 18701.077,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "search_page",
+    "observation_hash": "337d14551674a150db02d797b04bccfb202e9c50232850d02916531a1a2c6b0e"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:14:55.723197",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:15:11.621898",
+    "duration_ms": 15898.701000000001,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "scroll",
+    "observation_hash": "964865d82c3b6e370810d6e4e4d77cfa4647503db8d424bc882166576b1865c6"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:15:11.622027",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:15:19.891009",
+    "duration_ms": 8268.982,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "scroll",
+    "observation_hash": "ed1f05d95209e4f4b99cf4acf17cebcd2bc2384004dd25c0b779c71f5966e8cd"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:15:19.891147",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:15:33.294318",
+    "duration_ms": 13403.171,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "1d61158ee8e8a87cc69a44da36790907f00d27001a17b49d8d377edbbf399d91"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:15:33.294486",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:15:47.171655",
+    "duration_ms": 13877.169,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "a3351301de22060153901d9043b25f43d2e5e8b1e18e3ecf6f6642e1eb3c52b4"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:15:47.171825",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:16:14.512155",
+    "duration_ms": 27340.33,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "bd9327da5c6fbc71c8b6cf4a252f7a1c3e72e81c43b4e2c720b1f5f14d2c20f9"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:16:14.512349",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "wait",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:16:30.823323",
+    "duration_ms": 16310.974000000002,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "wait",
+    "observation_hash": "14487d507b367b1e04f7cd6bc5cd761263e6ae58dffd609b2ed9d56750259842"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:16:30.823496",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:16:43.308368",
+    "duration_ms": 12484.872,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "1e5031ea035e0a37e406e2c5209a727227d8c3ba1b01bc26e366ded9231c62be"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:16:43.308630",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "send_keys",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:16:58.308075",
+    "duration_ms": 14999.445,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "send_keys",
+    "observation_hash": "4534ad3d472541c285ddedb41e42aedc32b9c896b1be4d00368a96c43fd18bed"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:16:58.308274",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:17:07.631343",
+    "duration_ms": 9323.069,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "b86bb2f92257485be079ba19a1574e3728bf890e6138049cf0cd22d01179bd5e"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:17:07.631581",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:17:20.338274",
+    "duration_ms": 12706.693,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "9e16981caf82223ff5866f3cc32e89e57c326eaea58d1816be2460196b798164"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:17:20.338589",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:17:37.070815",
+    "duration_ms": 16732.226000000002,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "click",
+    "observation_hash": "ac7feb31aec744860f76e811d92d147045b817bd0c8be98b188826a6e7f6aaac"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:17:37.071106",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "search_page",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:17:46.683806",
+    "duration_ms": 9612.7,
+    "tokens_input": 12070,
+    "tokens_output": 179,
+    "cost_usd": 0.06303500000000001,
+    "action_type": "search_page",
+    "observation_hash": "2426ff949094d13c5b465713834bafe8aa8e2b0ff1a37d63cbcea55bfcd2c48b"
+  },
+  {
+    "trace_id": "415cbf49-929b-42ed-9d42-c8739e0b964b",
+    "run_id": "2f4fdebf-b5e7-42fa-85c1-e3115f49531f",
+    "lane": "BROWSERUSE",
+    "event_type": "artifact",
+    "artifact_type": "session_replay",
+    "artifact_url": "https://www.browserbase.com/sessions/7bad1bf1-439c-4dca-87cd-0e5525da0dd8",
+    "timestamp": "2026-02-16T13:18:06.707170"
+  }
+]

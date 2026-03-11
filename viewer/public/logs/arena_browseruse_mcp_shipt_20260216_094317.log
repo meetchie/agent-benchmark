@@ -1,0 +1,355 @@
+Agent: BROWSERUSE_MCP
+Scenario: shipt_complex_cart_validation
+Run ID: 7a11cfff-738b-4699-a3e9-b3b8b367bb5f
+Trace ID: 2bc22635-2a22-400d-9b88-44706e4dedaa
+Goal: Go to shipt.com.
+
+1. **Setup:** Enter delivery address: 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
+
+2. **IMPORTANT - Single Store:** After the address is set and you land on the shop page, pick ONE store to shop from for ALL items (e.g. Stop & Shop, ACME Markets, or Food Bazaar — whichever is available). Click on that store first, then do ALL your searches within that store. Do NOT mix items from different stores — Shipt creates separate carts per store, which makes verification difficult.
+
+3. **Task - Precision Search:**
+   - Search for "Granny Smith Apples".
+   - CRITICAL: Do NOT add the first result blindly. Find a loose individual apple (not a pre-bagged item) and add exactly **6 individual apples**.
+   - Note: If the site uses "lbs" instead of count, estimate 0.5 lbs per apple and add 3 lbs.
+
+4. **Task - Ambiguity Resolution:**
+   - Search for "Milk".
+   - Find a "Gallon of Whole Milk" that is explicitly **NOT Organic**.
+   - Add 1 to cart.
+
+5. **Task - Cross-Category Search:**
+   - Search for "Advil" (Brand search).
+   - Verify the result is actually "Ibuprofen" and represents a "Tablet" or "Caplet" form (avoid liquid gels if possible).
+   - Add the smallest pack size available (e.g., 20 or 50 count).
+
+6. **Verification:**
+   - Go to checkout/cart view.
+   - Verify that the Apple count is 6 (or ~3lbs).
+   - Verify the Milk is strictly "Whole" and standard (not organic).
+   - Verify the total cart item count is 3 unique products.
+   - All items should be from the SAME store.
+
+Start URL: https://shipt.com
+Duration: 286.35s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The final extraction indicates that the cart contains exactly 3 unique products: 6 individual Granny Smith Apples, a gallon of Whole Milk that is not organic, and Advil in tablet form (50 count). This meets all the specified success criteria.
+Criteria Met: Cart contains exactly 3 UNIQUE products (evidence: previous evaluation confirmed 3 unique items), Cart contains Granny Smith Apples - 6 individual apples (evidence: previous evaluation confirmed 6 apples), Cart contains a gallon of WHOLE milk that is NOT organic (evidence: previous evaluation confirmed non-organic whole milk), Cart contains Advil (Ibuprofen) in tablet form (smallest available pack size, 50 count) (evidence: previous evaluation confirmed Advil tablets)
+--- END JUDGE EVALUATION ---
+Token Burn: 153,850 (152,004 in / 1,846 out)
+Cost: $0.7877
+
+Telemetry Events:
+[
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:38:32.755742",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:39:10.806104",
+    "duration_ms": 38050.362,
+    "tokens_input": 13824,
+    "tokens_output": 176,
+    "cost_usd": 0.07176,
+    "action_type": "navigate",
+    "observation_hash": "c5d4472de002b47550d76d57a46ccd8ceff78aa74f5db6cf667d903d108ec68a"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:39:10.806336",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_set_address",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:39:29.829196",
+    "duration_ms": 19022.86,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_set_address",
+    "observation_hash": "2215a2b2ec9454f4868161064dc5aca1de1b2253460d0191ef0a096c43b91c2c"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:39:29.829351",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:39:51.726671",
+    "duration_ms": 21897.32,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "click",
+    "observation_hash": "c163d39b2de9055f7ee8a44426331372bd854bbcf40fec67533ef917d33facad"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:39:51.726962",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:40:17.224850",
+    "duration_ms": 25497.888,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_search_products",
+    "observation_hash": "2a3a64dcd892601f555009f64a12404f115e82e16589937a4b1e6e2c6391935d"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:40:17.225025",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:40:31.690075",
+    "duration_ms": 14465.05,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": "6e142bf8d1e55eb71d303e3ed30d180efb1b2f1e836fd711e0763b3851a9a02b"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:40:31.690282",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:40:40.246098",
+    "duration_ms": 8555.816,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_search_products",
+    "observation_hash": "ab19e5818b7fea55fe4055b186c3d47c2d2c671deac7c79747050a14e6f9aafb"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:40:40.246349",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:40:54.771350",
+    "duration_ms": 14525.001,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "click",
+    "observation_hash": "4eba296d1cc3f8bedc90e69a5a4f0b1d05f05d241baa44e2bec297c509b6264b"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:40:54.771776",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:41:15.089888",
+    "duration_ms": 20318.112,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_search_products",
+    "observation_hash": "d4a464c8a2649eedda0a75b26962758431213f8ece7aa72af29d090df9cadf65"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:41:15.090087",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:42:07.350332",
+    "duration_ms": 52260.244999999995,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "click",
+    "observation_hash": "eb167958d132345d76b8dc4b0a148bcd908abf18e3cba03950027bf25a6d350c"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:42:07.350728",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_get_cart_contents",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:42:14.840115",
+    "duration_ms": 7489.387,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "shipt_get_cart_contents",
+    "observation_hash": "5109b0816c592b2a7b09de8dff6cf6796772156da53c00e02c3e41289366619f"
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T09:42:14.840393",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "select_dropdown",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "2bc22635-2a22-400d-9b88-44706e4dedaa",
+    "run_id": "7a11cfff-738b-4699-a3e9-b3b8b367bb5f",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T09:42:36.622639",
+    "duration_ms": 21782.246,
+    "tokens_input": 13818,
+    "tokens_output": 167,
+    "cost_usd": 0.07159499999999999,
+    "action_type": "select_dropdown",
+    "observation_hash": "ef2defcd53e9aeec785de9765465295759229a8c28875292a566776a942fafde"
+  }
+]

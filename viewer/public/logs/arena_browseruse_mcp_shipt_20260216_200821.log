@@ -1,0 +1,149 @@
+Agent: BROWSERUSE_MCP
+Scenario: shipt_add_to_cart
+Run ID: a650a6bf-fcc8-4775-9c13-a51bbf3b0956
+Trace ID: e47810c4-5c6b-4b3a-bed7-4f644eb3288e
+Goal: Go to shipt.com.
+
+First, you need to set a delivery address before you can search for products.
+Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
+Wait for the autocomplete dropdown and click the first suggestion.
+
+Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+
+IMPORTANT - How to verify success:
+After clicking the add-to-cart button, look for ANY of these success indicators:
+1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
+2. The cart icon in the top-right shows a number badge (like "1")
+3. A toast/notification appears saying the item was added
+
+Start URL: https://shipt.com
+Duration: 66.03s
+Agent Reported Success: True
+
+--- FINAL EXTRACTION ---
+<bound method AgentHistoryList.final_result of AgentHistoryList(all_results=[ActionResult(is_done=False, success=None, judgement=None, error=None, attachments=None, images=None, long_term_memory='Found initial url and automatically loaded it. Navigated to https://shipt.com', extracted_content='🔗 Navigated to https://shipt.com', include_extracted_content_only_once=False, metadata=None, include_in_memory=False), ActionResult(is_done=False, success=None, judgement=None, error=None, attachments=None, images=None, long_term_memory=None, extracted_content='{\n  "status": "address_set",\n  "address": "1 Main St, Springfield, IL 62701",\n  "flow": "homepage_input",\n  "current_url": "https://www.shipt.com/shop",\n  "page_title": "Shop Stores Near You for Same-Day Delivery | Shipt"\n}', include_extracted_content_only_once=False, metadata=None, include_in_memory=False), ActionResult(is_done=False, success=None, judgement=None, error=None, attachments=None, images=None, long_term_memory=None, extracted_content='{\n  "status": "results_loaded",\n  "query": "Organic Bananas",\n  "product_count": 24,\n  "products": [\n    {\n      "index": 0,\n      "name": "Fresh Organic Bananas - 2lb - Good & Gather\\u2122",\n      "aria_label": "Add 1  Fresh Organic Bananas - 2lb - Good & Gather\\u2122 to cart"\n    },\n    {\n      "index": 1,\n      "name": "Fresh Banana - each - Good & Gather\\u2122",\n      "aria_label": "Add 1  Fresh Banana - each - Good & Gather\\u2122 to cart"\n    },\n    {\n      "index": 2,\n      "name": "Pure Organic Layered Fruit Snacks Strawberry Banana - 6.2oz/12ct",\n      "aria_label": "Add 1  Pure Organic Layered Fruit Snacks Strawberry Banana - 6.2oz/12ct to cart"\n    },\n    {\n      "index": 3,\n      "name": "Fresh Organic Raspberries - 6oz",\n      "aria_label": "Add 1  Fresh Organic Raspberries - 6oz to cart"\n    },\n    {\n      "index": 4,\n      "name": "Fresh Organic Strawberries - 16oz",\n      "aria_label": "Add 1  Fresh Organic Strawberries - 16oz to cart"\n    },\n    {\n      "index": 5,\n      "name": "Fresh Organic Blackberries - 6oz",\n      "aria_label": "Add 1  Fresh Organic Blackberries - 6oz to cart"\n    },\n    {\n      "index": 6,\n      "name": "GoNanas Chocolate Covered Raspberry Banana Bread Mix - 13oz",\n      "aria_label": "Add 1  GoNanas Chocolate Covered Raspberry Banana Bread Mix - 13oz to cart"\n    },\n    {\n      "index": 7,\n      "name": "Larabar Banana Chocolate Chip - 12ct",\n      "aria_label": "Add 1  Larabar Banana Chocolate Chip - 12ct to cart"\n    },\n    {\n      "index": 8,\n      "name": "Fresh Organic Blueberries - 1pt",\n      "aria_label": "Add 1  Fresh Organic Blueberries - 1pt to cart"\n    },\n    {\n      "index": 9,\n      "name": "Fresh Organic Gala Apples - 2lbs Bag - Good & Gather\\u2122",\n      "aria_label": "Add 1  Fresh Organic Gala Apples - 2lbs Bag - Good & Gather\\u2122 to cart"\n    }\n  ],\n  "current_url": "https://www.shipt.com/shop/stores/search?query=Organic%20Bananas&searchType=typed"\n}', include_extracted_content_only_once=False, metadata=None, include_in_memory=False), ActionResult(is_done=False, success=None, judgement=None, error=None, attachments=None, images=None, long_term_memory=None, extracted_content='{\n  "status": "added",\n  "product": "Add 1  Fresh Organic Bananas - 2lb - Good & Gather\\u2122 to cart",\n  "quantity_requested": 1,\n  "quantity_confirmed": 1\n}', include_extracted_content_only_once=False, metadata=None, include_in_memory=False), ActionResult(is_done=True, success=True, judgement=JudgementResult(reasoning="The task required setting a delivery address, searching for 'Organic Bananas', and adding the first result to the cart with verification of success indicators. The agent successfully set the address to '1 Main St, Springfield, IL 62701', searched for 'Organic Bananas', and added 'Fresh Organic Bananas - 2lb - Good & Gather™' to the cart. The success indicators were verified as '1 in cart' was visible on the product card and the cart icon showed a badge with '1'. All steps were executed correctly, and the output matched the user's request.", verdict=True, failure_reason='', impossible_task=False, reached_captcha=False), error=None, attachments=[], images=None, long_term_memory="Task completed: True - The task is complete. The delivery address was set to '1 Main St, Springfield, IL 62701', and 'Fresh Org - 192 more characters", extracted_content="The task is complete. The delivery address was set to '1 Main St, Springfield, IL 62701', and 'Fresh Organic Bananas - 2lb - Good & Gather™' was successfully added to the cart. Success indicators were verified: '1 in cart' is visible on the product card, and the cart icon shows a badge with '1'.", include_extracted_content_only_once=False, metadata=None, include_in_memory=False)], all_model_outputs=[{'navigate': {'url': 'https://shipt.com', 'new_tab': False}, 'interacted_element': None}, {'shipt_set_address': {'address': '1 Main St, Springfield, IL 62701'}, 'interacted_element': None}, {'shipt_search_products': {'query': 'Organic Bananas'}, 'interacted_element': None}, {'shipt_add_to_cart': {'product_index': 0, 'product_name': 'Fresh Organic Bananas - 2lb - Good & Gather™', 'quantity': 1}, 'interacted_element': None}, {'done': {'text': "The task is complete. The delivery address was set to '1 Main St, Springfield, IL 62701', and 'Fresh Organic Bananas - 2lb - Good & Gather™' was successfully added to the cart. Success indicators were verified: '1 in cart' is visible on the product card, and the cart icon shows a badge with '1'.", 'success': True}, 'interacted_element': None}])>
+--- END FINAL EXTRACTION ---
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully set the delivery address, searched for 'Organic Bananas', and added 'Fresh Organic Bananas - 2lb - Good & Gather™' to the cart. The success indicators were verified as '1 in cart' was visible on the product card and the cart icon showed a badge with '1'.
+Criteria Met: A delivery address was set (evidence: 'address_set' status with address '1 Main St, Springfield, IL 62701'), The agent searched for 'Organic Bananas' (evidence: 'query': 'Organic Bananas' with 24 products loaded), An Organic Bananas product was added to the cart (evidence: 'Fresh Organic Bananas - 2lb - Good & Gather™' added to cart), At least ONE success indicator was observed (evidence: '1 in cart' visible on product card and cart icon badge with '1')
+--- END JUDGE EVALUATION ---
+Token Burn: 49,325 (48,507 in / 818 out)
+Cost: $0.2548
+
+Telemetry Events:
+[
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T20:07:19.925056",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T20:07:37.825686",
+    "duration_ms": 17900.63,
+    "tokens_input": 12129,
+    "tokens_output": 206,
+    "cost_usd": 0.063735,
+    "action_type": "navigate",
+    "observation_hash": "e3d2bf1adcb0d4a01eca761b417f710598cea11295842656593f3776cec1c92f"
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T20:07:37.826013",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_set_address",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T20:07:47.708599",
+    "duration_ms": 9882.586,
+    "tokens_input": 12126,
+    "tokens_output": 204,
+    "cost_usd": 0.06369,
+    "action_type": "shipt_set_address",
+    "observation_hash": "a7f2e5b7b669060c236e73b1955427e08115a97256267b2e48c8d91bacd416be"
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T20:07:47.708707",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T20:08:00.599039",
+    "duration_ms": 12890.332,
+    "tokens_input": 12126,
+    "tokens_output": 204,
+    "cost_usd": 0.06369,
+    "action_type": "shipt_search_products",
+    "observation_hash": "0183358b42951fbe193cefe5b6d6212a43d87fa8042e4099666eb163e8960a27"
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T20:08:00.599221",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "e47810c4-5c6b-4b3a-bed7-4f644eb3288e",
+    "run_id": "a650a6bf-fcc8-4775-9c13-a51bbf3b0956",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T20:08:09.169697",
+    "duration_ms": 8570.475999999999,
+    "tokens_input": 12126,
+    "tokens_output": 204,
+    "cost_usd": 0.06369,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": "3381da0a5dde63da39871cb3bc20d43ab6d222618318c33e2057b2cf63456b2f"
+  }
+]

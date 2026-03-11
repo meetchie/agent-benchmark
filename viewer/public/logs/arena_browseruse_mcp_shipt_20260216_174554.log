@@ -1,0 +1,147 @@
+Agent: BROWSERUSE_MCP
+Scenario: shipt_add_to_cart
+Run ID: 972a4cbc-4813-44f2-8ce7-74b0f5e5191c
+Trace ID: f5ad991b-42f7-4c86-8738-22b1250b1dfb
+Goal: Go to shipt.com.
+
+First, you need to set a delivery address before you can search for products.
+Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
+Wait for the autocomplete dropdown and click the first suggestion.
+
+Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+
+IMPORTANT - How to verify success:
+After clicking the add-to-cart button, look for ANY of these success indicators:
+1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
+2. The cart icon in the top-right shows a number badge (like "1")
+3. A toast/notification appears saying the item was added
+
+Start URL: https://shipt.com
+Duration: 102.79s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully completed all required steps: setting the delivery address, searching for 'Organic Bananas', and adding the product to the cart. The final extraction confirms the presence of '1 in cart' on the product card, which satisfies the success criteria.
+Criteria Met: Set the delivery address (evidence: '1 Main St, Springfield, IL 62701' was set), Searched for 'Organic Bananas' (evidence: search action was completed), Added the first result to the cart (evidence: 'Fresh Organic Bananas - 2lb - Good & Gather™' added), Verified success indicator (evidence: '1 in cart' displayed on product card)
+Criteria Failed: 
+Errors Observed by Judge: 
+--- END JUDGE EVALUATION ---
+Token Burn: 60,906 (59,971 in / 935 out)
+Cost: $0.3139
+
+Telemetry Events:
+[
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T17:44:14.438973",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T17:44:53.163500",
+    "duration_ms": 38724.527,
+    "tokens_input": 14995,
+    "tokens_output": 236,
+    "cost_usd": 0.078515,
+    "action_type": "navigate",
+    "observation_hash": "c5d4472de002b47550d76d57a46ccd8ceff78aa74f5db6cf667d903d108ec68a"
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T17:44:53.163608",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_set_address",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T17:45:04.229128",
+    "duration_ms": 11065.519999999999,
+    "tokens_input": 14992,
+    "tokens_output": 233,
+    "cost_usd": 0.078455,
+    "action_type": "shipt_set_address",
+    "observation_hash": "6cd99259fa19006be68c2528cc47244369f33072bed9a3dea79a09ad23798ef7"
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T17:45:04.229276",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T17:45:19.530540",
+    "duration_ms": 15301.264,
+    "tokens_input": 14992,
+    "tokens_output": 233,
+    "cost_usd": 0.078455,
+    "action_type": "shipt_search_products",
+    "observation_hash": "0183358b42951fbe193cefe5b6d6212a43d87fa8042e4099666eb163e8960a27"
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T17:45:19.530696",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "f5ad991b-42f7-4c86-8738-22b1250b1dfb",
+    "run_id": "972a4cbc-4813-44f2-8ce7-74b0f5e5191c",
+    "lane": "BROWSERUSE_MCP",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T17:45:39.562188",
+    "duration_ms": 20031.492,
+    "tokens_input": 14992,
+    "tokens_output": 233,
+    "cost_usd": 0.078455,
+    "action_type": "shipt_add_to_cart",
+    "observation_hash": "e3bbade1ae5908a011bc75f9a3ed31645331b26de9e4874ffd35ddf88be3bd0c"
+  }
+]

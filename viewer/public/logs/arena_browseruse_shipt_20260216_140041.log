@@ -1,0 +1,379 @@
+Agent: BROWSERUSE
+Scenario: shipt_add_to_cart
+Run ID: e68555fd-a858-4b24-b26d-b39d6ce0d199
+Trace ID: d7271762-d73a-4c8d-8691-c8721b656b72
+Goal: Go to shipt.com.
+
+First, you need to set a delivery address before you can search for products.
+Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
+Wait for the autocomplete dropdown and click the first suggestion.
+
+Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+
+IMPORTANT - How to verify success:
+After clicking the add-to-cart button, look for ANY of these success indicators:
+1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
+2. The cart icon in the top-right shows a number badge (like "1")
+3. A toast/notification appears saying the item was added
+
+Start URL: https://shipt.com
+Duration: 225.91s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully navigated to shipt.com, set the delivery address, searched for 'Organic Bananas', and added the first result to the cart. The presence of '1 in cart' on the product card confirms the item was added, meeting the success criteria.
+Criteria Met: Navigated to shipt.com (evidence: previous evaluation confirmed navigation), Set the delivery address to '1 Main St, Springfield, IL 62701' (evidence: previous evaluation confirmed address setting), Searched for 'Organic Bananas' (evidence: previous evaluation confirmed search), Added the first result to the cart (evidence: previous evaluation confirmed addition), Verified '1 in cart' on the product card (evidence: previous evaluation confirmed this indicator)
+Criteria Failed: Checked for cart icon badge (evidence: previous evaluation noted failure), Checked for item added notification (evidence: previous evaluation noted failure)
+--- END JUDGE EVALUATION ---
+Token Burn: 145,081 (142,653 in / 2,428 out)
+Cost: $0.7497
+
+Telemetry Events:
+[
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:56:53.124062",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:57:08.293009",
+    "duration_ms": 15168.947,
+    "tokens_input": 11896,
+    "tokens_output": 206,
+    "cost_usd": 0.06257,
+    "action_type": "navigate",
+    "observation_hash": "c69926252778ba902956b638e83966e9d485476aac5f2bb72cbf616b053b9d20"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:57:08.293102",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "input",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:57:24.818470",
+    "duration_ms": 16525.368,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "input",
+    "observation_hash": "cb2011c2d9b8e2883bdf390737ede7eb03b883684b2d2c6c87f13708badbdc5c"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:57:24.818601",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:57:47.767564",
+    "duration_ms": 22948.963,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "f3d668105d36dd4543aa64366bcb5c1c89cf4249f55a60b4c4dd57924acdbab8"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:57:47.767681",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:58:00.349210",
+    "duration_ms": 12581.529,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "8610ed8fe8c9df1bcef43181a05c7235d099fc6ae7ed9e762b08a6a6b9b3ba9a"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:58:00.349341",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "wait",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:58:16.932768",
+    "duration_ms": 16583.427,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "wait",
+    "observation_hash": "14487d507b367b1e04f7cd6bc5cd761263e6ae58dffd609b2ed9d56750259842"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:58:16.932906",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:58:32.007370",
+    "duration_ms": 15074.464,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "14a0db42e422c3c3ce980fe2b22d666ef590e06756986aac9f31027089c62542"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:58:32.007531",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:58:43.500536",
+    "duration_ms": 11493.005000000001,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "48b0263b7276ae96dd5bc7037f0cd9538e6c483ad7bedc3d1cba5eea2314482c"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:58:43.500810",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:59:05.651918",
+    "duration_ms": 22151.108,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "01cab87c4b048862310edab05fae11fd479cdaf3d2ca73fd0e0339d3225573d3"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:59:05.652101",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:59:17.000905",
+    "duration_ms": 11348.804,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "33e6d9ba0eeb2ce371ac824956986b2a8d953de85dfd065fc97409de2ce4672f"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:59:17.001080",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "find_elements",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:59:33.707634",
+    "duration_ms": 16706.554,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "find_elements",
+    "observation_hash": "6b3650075cdc95c23133595403213666bdd8cedd63691798f93d2160cf845c4e"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:59:33.707810",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T13:59:50.039111",
+    "duration_ms": 16331.301,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "click",
+    "observation_hash": "97665c6194c7ba4f2f6aa73d2436972ed1025dc564eb105d5765239244367cc7"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T13:59:50.039329",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "search_page",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T14:00:04.645722",
+    "duration_ms": 14606.393,
+    "tokens_input": 11887,
+    "tokens_output": 202,
+    "cost_usd": 0.062465,
+    "action_type": "search_page",
+    "observation_hash": "564385c6db0110de3f97d436e89d4e3a1497741d9476ca2ceef03df69a474fba"
+  },
+  {
+    "trace_id": "d7271762-d73a-4c8d-8691-c8721b656b72",
+    "run_id": "e68555fd-a858-4b24-b26d-b39d6ce0d199",
+    "lane": "BROWSERUSE",
+    "event_type": "artifact",
+    "artifact_type": "session_replay",
+    "artifact_url": "https://www.browserbase.com/sessions/4360baa7-9b43-40d7-a36a-93937033f76f",
+    "timestamp": "2026-02-16T14:00:35.810810"
+  }
+]

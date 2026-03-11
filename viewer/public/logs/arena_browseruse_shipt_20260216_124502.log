@@ -1,0 +1,702 @@
+Agent: BROWSERUSE
+Scenario: shipt_complex_cart_validation
+Run ID: bd87abf9-2d6e-436b-9674-dc26c1d1475a
+Trace ID: 85e3aa13-0489-486a-8818-43f7452ba998
+Goal: Go to shipt.com.
+
+1. **Setup:** Enter delivery address: 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
+
+2. **IMPORTANT - Single Store:** After the address is set and you land on the shop page, pick ONE store to shop from for ALL items (e.g. Stop & Shop, ACME Markets, or Food Bazaar — whichever is available). Click on that store first, then do ALL your searches within that store. Do NOT mix items from different stores — Shipt creates separate carts per store, which makes verification difficult.
+
+3. **Task - Precision Search:**
+   - Search for "Granny Smith Apples".
+   - CRITICAL: Do NOT add the first result blindly. Find a loose individual apple (not a pre-bagged item) and add exactly **6 individual apples**.
+   - Note: If the site uses "lbs" instead of count, estimate 0.5 lbs per apple and add 3 lbs.
+
+4. **Task - Ambiguity Resolution:**
+   - Search for "Milk".
+   - Find a "Gallon of Whole Milk" that is explicitly **NOT Organic**.
+   - Add 1 to cart.
+
+5. **Task - Cross-Category Search:**
+   - Search for "Advil" (Brand search).
+   - Verify the result is actually "Ibuprofen" and represents a "Tablet" or "Caplet" form (avoid liquid gels if possible).
+   - Add the smallest pack size available (e.g., 20 or 50 count).
+
+6. **Verification:**
+   - Go to checkout/cart view.
+   - Verify that the Apple count is 6 (or ~3lbs).
+   - Verify the Milk is strictly "Whole" and standard (not organic).
+   - Verify the total cart item count is 3 unique products.
+   - All items should be from the SAME store.
+
+Start URL: https://shipt.com
+Duration: 498.54s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: FAIL
+Judge Reason: The agent failed to meet the success criteria as the cart contained 7 Granny Smith Apples instead of the required 6, and the Advil product added was 'Advil Sinus Congestion & Pain', which does not meet the specified criteria for Ibuprofen tablets or caplets.
+Criteria Met: Cart contains a gallon of WHOLE milk that is NOT organic (evidence: previous evaluation confirmed this), Cart contains Granny Smith Apples - either 6 individual apples OR approximately 3 lbs (evidence: previous evaluation confirmed apples were added, but quantity was incorrect), Cart contains 3 UNIQUE products from the same store (evidence: previous evaluation confirmed this)
+Criteria Failed: Cart contains exactly 3 UNIQUE products (not 3 total items, but 3 different products) (evidence: previous evaluation noted incorrect Advil product), Cart contains Advil (Ibuprofen) in tablet or caplet form (smallest available pack size) (evidence: 'Advil Sinus Congestion & Pain' was added instead)
+Errors Observed by Judge: Added 7 Granny Smith Apples instead of 6, Added 'Advil Sinus Congestion & Pain' instead of a standard Ibuprofen tablet or caplet
+--- END JUDGE EVALUATION ---
+Token Burn: 347,415 (342,824 in / 4,591 out)
+Cost: $1.7830
+
+Telemetry Events:
+[
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:36:42.377489",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:37:02.225517",
+    "duration_ms": 19848.028,
+    "tokens_input": 14914,
+    "tokens_output": 213,
+    "cost_usd": 0.077765,
+    "action_type": "navigate",
+    "observation_hash": "927eff30bdc81f671a4cfd53b6b43800e21c0ef2a669111dd5303a5870e3fa7b"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:37:02.225627",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:37:29.278046",
+    "duration_ms": 27052.419,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "19148a1d9191e32e926cdfa769176840218d2cf68974aa50efbbb216461f9f58"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:37:29.278171",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:37:55.385879",
+    "duration_ms": 26107.708,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "94f07ab2cdd55ef5b5e8d1ddf6049ef817fad07f00b741c0f8f3bab44e8a90ec"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:37:55.386032",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:38:24.685519",
+    "duration_ms": 29299.487,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "b082acf658fcc3395abd75319ddd2261feb598eff0e8e23dc6acb533e2c7d9b9"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:38:24.685737",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:38:43.562381",
+    "duration_ms": 18876.644,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "32c84ed0b1933a0916acd1aea603ba225abbb8c7fec125ceb0b139f42d83aa8b"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:38:43.562539",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:39:01.302321",
+    "duration_ms": 17739.782000000003,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "c0e2857a175b6a6a8f1826ae6d39a4cdc7b1fb4261fe2a5164f05bae1f6ff230"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:39:01.302494",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:39:18.898568",
+    "duration_ms": 17596.074,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "7a674eb23a17bb273c7dc58c64b2c5102ef178765c8526157dc9103e691e6476"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:39:18.898758",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:39:48.022481",
+    "duration_ms": 29123.722999999998,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "scroll",
+    "observation_hash": "6345cb04005c517fea83e2747fc4ee48297d7d780db11d42e98392f0c4c20220"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:39:48.022691",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:40:03.629898",
+    "duration_ms": 15607.207,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "67bfb7c178c8b6c56d93b3c127322c20a46a812c606bf3198e4602ac53451acb"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:40:03.630187",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:40:26.152403",
+    "duration_ms": 22522.216,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "16b6dc740d9c8b2f88256ece62ab34fa58c32c2a8811ac78b8432ee51643d031"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:40:26.152677",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:40:44.911506",
+    "duration_ms": 18758.828999999998,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "34c9e1070282450ee3132372c224ab04de7b47685d72c5217ba407a5d396bd3f"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:40:44.911827",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:41:02.826434",
+    "duration_ms": 17914.607,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "c734e00db13506c339db37009e39ec056a27a2820db08a7968d36ffd32d247ba"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:41:02.826687",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:41:17.621351",
+    "duration_ms": 14794.663999999999,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "scroll",
+    "observation_hash": "83b4e716253bac8ae77d4c3df0ea3f8cdb473cd03209ba1d9537637709437b21"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:41:17.621623",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:41:48.415577",
+    "duration_ms": 30793.953999999998,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "db07157b12d6ffdf122ad281519a06f564a2ee2da95625a3ee955db192eadb8f"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:41:48.415856",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:42:08.709928",
+    "duration_ms": 20294.072,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "c6443d59dfd86faa388ccfb5e1e6e229e8dbec910890bb759646f0f4f875190e"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:42:08.710242",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:42:24.864710",
+    "duration_ms": 16154.468,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "scroll",
+    "observation_hash": "57db9e16bf9718acc22ce7b3cc23bb2b8e53d4656e0f5f27c3ced4f6c0f3383b"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 17,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:42:24.864998",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 17,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:42:41.799840",
+    "duration_ms": 16934.842,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "1587ba692fa462a15008b87cc5e3e30e041feaf3b15f6cff1fe6f40f38c6ff39"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 18,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:42:41.800223",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 18,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:42:59.218513",
+    "duration_ms": 17418.289999999997,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "94c3d2859d7717ce58a60779882e444a8113eb444f2f5637dcc3081029fd08fe"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 19,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:42:59.218900",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 19,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:43:17.271202",
+    "duration_ms": 18052.302,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "6a827b8cfde6494948d17977dc1d3c70398f459a4c132f47fb9f141d93b509d0"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 20,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:43:17.271540",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 20,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:43:28.615673",
+    "duration_ms": 11344.133,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "4531925179c25850de49f654569c275c7fd59c37b57a6cf3abac1667ba54054f"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 21,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:43:28.616063",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 21,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:43:43.667413",
+    "duration_ms": 15051.349999999999,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "8d7798a507edd66749a363682ad42574e17832dec28f332675a235a270654118"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 22,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:43:43.667776",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 22,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:44:08.827431",
+    "duration_ms": 25159.655000000002,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "2c3a1e3d6e326ba739e41565106894d5d03f13cc650b533769ff2c170d67f7b5"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 23,
+    "event_type": "step_start",
+    "timestamp": "2026-02-16T12:44:08.827926",
+    "duration_ms": null,
+    "tokens_input": null,
+    "tokens_output": null,
+    "cost_usd": null,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "step_index": 23,
+    "event_type": "step_end",
+    "timestamp": "2026-02-16T12:44:21.687214",
+    "duration_ms": 12859.287999999999,
+    "tokens_input": 14905,
+    "tokens_output": 199,
+    "cost_usd": 0.07751,
+    "action_type": "click",
+    "observation_hash": "8057f25e3ba80b33ff1dcbd77abd7ddb82e10ee59f10617bc740648cbbf488bf"
+  },
+  {
+    "trace_id": "85e3aa13-0489-486a-8818-43f7452ba998",
+    "run_id": "bd87abf9-2d6e-436b-9674-dc26c1d1475a",
+    "lane": "BROWSERUSE",
+    "event_type": "artifact",
+    "artifact_type": "session_replay",
+    "artifact_url": "https://www.browserbase.com/sessions/3f040de3-c3c7-4d80-99ce-9cff55b667fb",
+    "timestamp": "2026-02-16T12:44:51.359323"
+  }
+]
