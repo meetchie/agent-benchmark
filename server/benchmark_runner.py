@@ -167,22 +167,29 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
 
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
 
-        # Extract final result for summary
+        # Determine success from agent history
+        success = False
         summary = ""
-        success = True
         try:
-            if hasattr(history, "final_result") and history.final_result:
+            # Agent is considered successful if it completed (reached 'done' action)
+            if hasattr(history, 'is_done') and history.is_done():
+                success = True
+
+            # Get summary from final result
+            if hasattr(history, 'final_result') and callable(history.final_result):
+                result = history.final_result()
+                if result:
+                    summary = str(result)[:300]
+            elif hasattr(history, 'final_result') and history.final_result:
                 summary = str(history.final_result)[:300]
-            elif hasattr(history, "extracted_content"):
-                extracted = history.extracted_content()
-                if extracted:
-                    last = extracted[-1] if isinstance(extracted, list) else extracted
-                    summary = str(last)[:300]
+
+            if not success and not summary:
+                summary = "Agent did not complete the task."
         except Exception:
             pass
 
         if not summary:
-            summary = "Agent completed the task."
+            summary = "Agent completed the task." if success else "Agent did not complete the task."
 
         state.status = "complete"
         state.success = success

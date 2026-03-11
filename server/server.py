@@ -51,9 +51,6 @@ async def health():
 
 @app.post("/benchmark/start")
 async def start_benchmark(req: StartRequest):
-    if not req.url or not req.goal:
-        raise HTTPException(status_code=400, detail="url and goal are required")
-
     run_id = str(uuid.uuid4())
     state = RunState(run_id=run_id)
     _runs[run_id] = state
