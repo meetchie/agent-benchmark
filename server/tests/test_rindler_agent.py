@@ -16,6 +16,8 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 MCPToolBridge = _mod.MCPToolBridge
 parse_tool_result = _mod.parse_tool_result
+LLMResponse = _mod.LLMResponse
+LLMClient = _mod.LLMClient
 
 
 class FakeTool:
@@ -113,3 +115,131 @@ class TestParseToolResult:
         mock_result.content = [mock_content]
         with pytest.raises(json.JSONDecodeError):
             parse_tool_result(mock_result)
+
+
+class TestLLMClient:
+
+    def _make_openai_client(self):
+        """Create an LLMClient for OpenAI without triggering the real constructor."""
+        client = LLMClient.__new__(LLMClient)
+        client.model = "gpt-4o-mini"
+        client.provider = "openai"
+        client.system_prompt = "You are a test agent."
+        return client
+
+    def _make_anthropic_client(self):
+        """Create an LLMClient for Anthropic without triggering the real constructor."""
+        client = LLMClient.__new__(LLMClient)
+        client.model = "claude-sonnet-4-6"
+        client.provider = "anthropic"
+        client.system_prompt = "You are a test agent."
+        return client
+
+    def test_openai_tool_call_parsing(self):
+        import asyncio
+
+        client = self._make_openai_client()
+
+        # Build a mock OpenAI response with a tool call
+        tool_call = MagicMock()
+        tool_call.id = "call_abc123"
+        tool_call.function.name = "browse_to_url"
+        tool_call.function.arguments = json.dumps({"url": "https://example.com"})
+
+        message = MagicMock()
+        message.tool_calls = [tool_call]
+        message.content = None
+
+        usage = MagicMock()
+        usage.prompt_tokens = 100
+        usage.completion_tokens = 20
+
+        response = MagicMock()
+        response.choices = [MagicMock(message=message)]
+        response.usage = usage
+
+        async def fake_create(**kwargs):
+            return response
+
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create = fake_create
+        client._client = mock_openai
+
+        result = asyncio.run(client.call([{"role": "user", "content": "go"}], []))
+
+        assert result.tool_name == "browse_to_url"
+        assert result.tool_args == {"url": "https://example.com"}
+        assert result.tool_call_id == "call_abc123"
+        assert result.text is None
+        assert result.tokens_input == 100
+        assert result.tokens_output == 20
+
+    def test_openai_text_response(self):
+        import asyncio
+
+        client = self._make_openai_client()
+
+        # Build a mock OpenAI response with no tool calls (text only)
+        message = MagicMock()
+        message.tool_calls = None
+        message.content = "Task completed successfully."
+
+        usage = MagicMock()
+        usage.prompt_tokens = 50
+        usage.completion_tokens = 10
+
+        response = MagicMock()
+        response.choices = [MagicMock(message=message)]
+        response.usage = usage
+
+        async def fake_create(**kwargs):
+            return response
+
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create = fake_create
+        client._client = mock_openai
+
+        result = asyncio.run(client.call([{"role": "user", "content": "done?"}], []))
+
+        assert result.tool_name is None
+        assert result.tool_args is None
+        assert result.tool_call_id is None
+        assert result.text == "Task completed successfully."
+        assert result.tokens_input == 50
+        assert result.tokens_output == 10
+
+    def test_anthropic_tool_call_parsing(self):
+        import asyncio
+
+        client = self._make_anthropic_client()
+
+        # Build a mock Anthropic response with a tool_use block
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.id = "toolu_xyz"
+        tool_block.name = "click_element"
+        tool_block.input = {"selector": "#submit-button"}
+
+        usage = MagicMock()
+        usage.input_tokens = 200
+        usage.output_tokens = 30
+
+        response = MagicMock()
+        response.content = [tool_block]
+        response.usage = usage
+
+        async def fake_create(**kwargs):
+            return response
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.messages.create = fake_create
+        client._client = mock_anthropic
+
+        result = asyncio.run(client.call([{"role": "user", "content": "click submit"}], []))
+
+        assert result.tool_name == "click_element"
+        assert result.tool_args == {"selector": "#submit-button"}
+        assert result.tool_call_id == "toolu_xyz"
+        assert result.text is None
+        assert result.tokens_input == 200
+        assert result.tokens_output == 30

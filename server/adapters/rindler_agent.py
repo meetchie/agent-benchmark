@@ -140,3 +140,96 @@ def truncate(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n... [truncated, use get_page_state for full tree]"
+
+
+# ---------------------------------------------------------------------------
+# LLM Client
+# ---------------------------------------------------------------------------
+
+class LLMClient:
+    """Provider-agnostic wrapper for LLM tool-calling APIs."""
+
+    def __init__(self, model_name: str, system_prompt: str):
+        self.model = model_name
+        self.system_prompt = system_prompt
+
+        if model_name.startswith("gpt"):
+            self.provider = "openai"
+            from openai import AsyncOpenAI
+            self._client = AsyncOpenAI()
+        elif model_name.startswith("claude"):
+            self.provider = "anthropic"
+            from anthropic import AsyncAnthropic
+            model_map = {"claude-sonnet": "claude-sonnet-4-6"}
+            self.model = model_map.get(model_name, model_name)
+            self._client = AsyncAnthropic()
+        else:
+            raise ValueError(f"Unknown model prefix: {model_name}. Use gpt-* or claude-*")
+
+    async def call(self, messages: List[dict], tools: List[dict]) -> LLMResponse:
+        if self.provider == "openai":
+            return await self._call_openai(messages, tools)
+        else:
+            return await self._call_anthropic(messages, tools)
+
+    async def _call_openai(self, messages, tools):
+        kwargs = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": self.system_prompt}] + messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["parallel_tool_calls"] = False
+
+        response = await self._client.chat.completions.create(**kwargs)
+        msg = response.choices[0].message
+        usage = response.usage
+
+        if msg.tool_calls:
+            tc = msg.tool_calls[0]
+            return LLMResponse(
+                tool_name=tc.function.name,
+                tool_args=json.loads(tc.function.arguments),
+                tool_call_id=tc.id,
+                text=None,
+                tokens_input=usage.prompt_tokens,
+                tokens_output=usage.completion_tokens,
+            )
+        return LLMResponse(
+            tool_name=None, tool_args=None, tool_call_id=None,
+            text=msg.content,
+            tokens_input=usage.prompt_tokens,
+            tokens_output=usage.completion_tokens,
+        )
+
+    async def _call_anthropic(self, messages, tools):
+        kwargs = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "system": self.system_prompt,
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        response = await self._client.messages.create(**kwargs)
+        usage = response.usage
+
+        for block in response.content:
+            if block.type == "tool_use":
+                return LLMResponse(
+                    tool_name=block.name,
+                    tool_args=block.input,
+                    tool_call_id=block.id,
+                    text=None,
+                    tokens_input=usage.input_tokens,
+                    tokens_output=usage.output_tokens,
+                )
+
+        text_parts = [b.text for b in response.content if b.type == "text"]
+        return LLMResponse(
+            tool_name=None, tool_args=None, tool_call_id=None,
+            text="\n".join(text_parts) if text_parts else None,
+            tokens_input=usage.input_tokens,
+            tokens_output=usage.output_tokens,
+        )
