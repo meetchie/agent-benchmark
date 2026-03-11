@@ -1,4 +1,4 @@
-name = "rindler"
+name = "rindler-shipt-demo"
 pages_build_output_dir = "./dist"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
