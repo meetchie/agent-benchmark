@@ -1,280 +1,117 @@
-# Clean Room - Telemetric Agent Testing
+# Rindler Arena
 
-This directory contains a clean-room implementation for testing and comparing different browser automation agents with unified telemetry tracking.
+## What this is
 
-## Overview
+Rindler Arena is a CLI-based telemetric agent testing environment that benchmarks browser automation AI agents against real-world web scenarios. It runs a suite of predefined tasks — spanning e-commerce, food delivery, travel, and tech — against multiple agent backends, then uses an LLM judge (GPT-4o-mini) to evaluate success. Results and full logs are written to `arena_logs/` for later analysis and comparison.
 
-The clean-room provides adapters for four browser automation frameworks:
+---
 
-| Agent | Provider | Description |
-|-------|----------|-------------|
-| **BROWSERUSE** | Browserbase | browser-use library with hook-based telemetry |
-| **STEEL** | Steel.dev | LangChain orchestration with Playwright control |
-| **SKYVERN** | Skyvern.com | Cloud AI service with polling telemetry |
-| **STAGEHAND** | Browserbase | AI browser automation with natural language |
+## Prerequisites
 
-All agents share the unified `TelemetricWrapper` for consistent logging, cost tracking, and loop detection.
+- Python 3.11
+- [Playwright](https://playwright.dev/python/) with Chromium
+- API keys for the agents you intend to run (see [Environment Variables](#environment-variables))
+
+---
 
 ## Quick Start
 
 ```bash
-# 1. Set up environment
-cd clean-room
-cp .env.example .env  # Then edit with your API keys
+cd packages/clean-room
 
-# 2. Check setup status
-python setup_agents.py
+python -m venv .venv
+source .venv/bin/activate
 
-# 3. Run the arena test runner
+pip install -e .
+
+playwright install chromium
+
+cp .env.example .env   # fill in the required keys
+
 python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
-python arena.py --agent STEEL --scenario google_search
-python arena.py --agent SKYVERN --scenario amazon_search
-python arena.py --agent STAGEHAND --scenario hacker_news_browse
-
-# List available scenarios
-python arena.py --list-scenarios
-python arena.py --list-scenarios --tag e-commerce
 ```
 
-## Directory Structure
-
-```
-clean-room/
-├── adapters/                    # Agent adapter implementations
-│   ├── __init__.py              # Package exports
-│   ├── browseruse_agent.py      # BrowserUse + Browserbase
-│   ├── steel_agent.py           # Steel + LangChain
-│   ├── skyvern_agent.py         # Skyvern cloud API
-│   └── stagehand_agent.py       # Stagehand + Browserbase
-├── scenarios/                   # Test scenario definitions
-│   ├── __init__.py              # Package exports
-│   └── definitions.py           # Scenario definitions
-├── arena_logs/                  # Run logs and telemetry output
-├── arena.py                     # Unified agent test runner
-├── check_skyvern_billing.py     # Skyvern billing/status checker
-├── setup_agents.py              # Dependency checker script
-├── close_sessions.py            # Browserbase session cleanup utility
-├── telemetric_agent.py          # Backwards compatibility shim
-├── SETUP.md                     # Detailed setup instructions
-├── README.md                    # This file
-├── pyproject.toml               # Python dependencies
-└── .env                         # API keys (not in git)
-```
+---
 
 ## Environment Variables
 
-Create a `.env` file with the following:
+Copy `.env.example` to `.env` and populate the values for the agents you need.
+
+| Variable | Required for |
+|---|---|
+| `OPENAI_API_KEY` | All agents (LLM judge + BrowserUse/Steel reasoning) |
+| `BROWSERBASE_API_KEY` | BrowserUse, Stagehand |
+| `BROWSERBASE_PROJECT_ID` | BrowserUse, Stagehand |
+| `BROWSERBASE_ORG_ID` | BrowserUse, Stagehand |
+| `STEEL_API_KEY` | Steel |
+| `SKYVERN_API_KEY` | Skyvern |
+
+---
+
+## CLI Usage
 
 ```bash
-# Required for all agents
-OPENAI_API_KEY=your_openai_api_key
-
-# For BROWSERUSE and STAGEHAND
-BROWSERBASE_API_KEY=your_browserbase_api_key
-BROWSERBASE_PROJECT_ID=your_browserbase_project_id
-
-# For STEEL
-STEEL_API_KEY=your_steel_api_key
-
-# For SKYVERN
-SKYVERN_API_KEY=your_skyvern_api_key
-```
-
-## Running Tests
-
-### Arena Test Runner
-
-The arena runs test scenarios against any agent:
-
-```bash
-# Test specific agent with a scenario
+# Run a specific agent against a specific scenario
 python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
-python arena.py --agent STEEL --scenario google_search
-python arena.py --agent SKYVERN --scenario opentable_reservation
-python arena.py --agent STAGEHAND --scenario hacker_news_browse
+
+# List all available agents
+python arena.py --list-agents
 
 # List all available scenarios
 python arena.py --list-scenarios
 
-# Filter scenarios by tag
-python arena.py --list-scenarios --tag e-commerce
-python arena.py --list-scenarios --tag food-delivery
+# Run with a custom goal (overrides scenario default)
+python arena.py --agent STEEL --scenario amazon_search --goal "Search for a standing desk under $300"
 
-# Custom goal (without using a predefined scenario)
-python arena.py --agent STEEL --goal "Go to google.com and search for cats" --url https://google.com
+# Run Skyvern in no-wait mode (fire-and-forget, don't poll for result)
+python arena.py --agent SKYVERN --scenario instacart_checkout --no-wait
 ```
 
-### Skyvern (Cloud-Based)
+---
 
-Skyvern runs in the cloud and requires special handling since tasks can take 15-30+ minutes.
+## Supported Agents
 
-#### Fire-and-Forget Mode
+| Agent key | Browser backend | LLM / SDK |
+|---|---|---|
+| `BROWSERUSE` | Browserbase (cloud) | GPT-4o via browser-use |
+| `STEEL` | Steel (cloud) | GPT-4o via LangChain |
+| `SKYVERN` | Skyvern cloud API | Skyvern-managed |
+| `STAGEHAND` | Browserbase (cloud) | Stagehand SDK |
 
-```bash
-python arena.py --agent SKYVERN --scenario shipt_add_to_cart --no-wait
-```
+---
 
-This submits the task and returns immediately with:
-- Task ID and watch URL
-- Commands to check status later
+## Scenarios
 
-#### Wait Mode (Default - Polls Until Complete)
+The arena ships with 20 predefined scenarios across four categories:
 
-```bash
-python arena.py --agent SKYVERN --scenario shipt_add_to_cart
-```
+- **E-commerce** — Amazon, Walmart, Target, Shipt, Instacart
+- **Food delivery** — DoorDash, Uber Eats, Grubhub
+- **Travel** — Expedia, Google Flights, Airbnb
+- **Tech / misc** — GitHub, LinkedIn, and others
 
-Polls Skyvern every 5 seconds until completion or timeout.
+Scenario definitions (IDs, URLs, goals, and success criteria) live in [`scenarios/definitions.py`](scenarios/definitions.py).
 
-#### Check Status & Billing Later
+---
 
-```bash
-# Quick status check
-python check_skyvern_billing.py <task_id> --status-only
+## How It Works
 
-# Full billing summary with step breakdown
-python check_skyvern_billing.py <task_id>
+1. The CLI resolves the requested agent and scenario.
+2. The agent launches a browser session (local Playwright or a cloud provider) and attempts to complete the scenario goal.
+3. On completion, a GPT-4o-mini judge reviews the agent's action trace and final page state to produce a pass/fail verdict with a confidence score.
+4. Results and full logs are written to `arena_logs/<timestamp>/`.
 
-# JSON output
-python check_skyvern_billing.py <task_id> --json
-```
+---
 
-#### Billing Information
+## Known Issues
 
-Skyvern charges ~$0.05 per step. The billing tool fetches:
-- All tasks belonging to a run
-- Step count per task
-- Estimated total cost
+**`telemetric_logger.py` is missing.** Only a stale `.pyc` bytecode file exists in `__pycache__`. The source file must be restored before the package will work on a fresh checkout. Without it, any import of `telemetric_logger` will fail at runtime.
 
-Example output:
-```
-============================================================
-  SKYVERN RUN SUMMARY
-============================================================
-  Run ID:     tsk_v2_REDACTED
-  Status:     completed
+---
 
-  BILLING BREAKDOWN
-  --------------------------------------------------------
-  Total tasks:  7
-  Total steps:  27
-  Cost/step:    $0.05
+## Tech Stack
 
-  💰 ESTIMATED COST: $1.35
-
-  PER-TASK BREAKDOWN
-  --------------------------------------------------------
-   1. ✓ tsk_REDACTED...
-      3 steps | $0.15 | completed
-   ...
-============================================================
-```
-
-## Telemetry Output
-
-Each run produces:
-- Console output with step-by-step progress
-- Log file in `arena_logs/` with full telemetry
-- Token usage and cost breakdown
-
-Example summary:
-```
-============================================================
-  FINAL SUMMARY
-============================================================
-  Lane:        BROWSERUSE
-  Run ID:      abc123...
-  Trace ID:    def456...
-  Duration:    45.32s
-  Steps:       12
-  Success:     True
-
-  TOKEN BURN
-  ----------
-  Input:       15,432 tokens
-  Output:      2,891 tokens
-  Total:       18,323 tokens
-
-  COST
-  ----
-  Total:       $0.1205
-============================================================
-```
-
-## Utilities
-
-### Check Setup
-
-```bash
-python setup_agents.py
-```
-
-### Close Browserbase Sessions
-
-```bash
-# List active sessions
-python close_sessions.py
-
-# Close all sessions
-python close_sessions.py --close-all
-
-# Close specific session
-python close_sessions.py --close <session_id>
-```
-
-### Skyvern Billing Checker
-
-Check billing and status for any Skyvern task (works retroactively):
-
-```bash
-# Full billing summary
-python check_skyvern_billing.py tsk_v2_REDACTED
-
-# Quick status only
-python check_skyvern_billing.py tsk_v2_REDACTED --status-only
-
-# JSON output for scripting
-python check_skyvern_billing.py tsk_v2_REDACTED --json
-```
-
-You can also check by workflow run ID (wr_xxx format):
-```bash
-python check_skyvern_billing.py wr_REDACTED
-```
-
-## Documentation
-
-- [SETUP.md](./SETUP.md) - Detailed setup instructions for each agent
-- [steel-dev/steel-browser](https://github.com/steel-dev/steel-browser) - Steel reference
-- [skyvern-ai/skyvern](https://github.com/skyvern-ai/skyvern) - Skyvern reference
-- [browserbase/stagehand](https://github.com/browserbase/stagehand) - Stagehand reference
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      arena.py                            │
-│                (Agent Test Runner)                       │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┬───────────────┐
-        │               │               │               │
-        ▼               ▼               ▼               ▼
-┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-│  BROWSERUSE   │ │    STEEL      │ │   SKYVERN     │ │  STAGEHAND    │
-│   Adapter     │ │   Adapter     │ │   Adapter     │ │   Adapter     │
-└───────┬───────┘ └───────┬───────┘ └───────┬───────┘ └───────┬───────┘
-        │               │               │               │
-        └───────────────┴───────────────┴───────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────┐
-│                 TelemetricWrapper                        │
-│        (Unified logging, cost tracking, hashing)         │
-└─────────────────────────────────────────────────────────┘
-```
-
-## License
-
-Part of the Rindler-MVP project.
-
+- Python 3.11
+- [browser-use](https://github.com/browser-use/browser-use)
+- [Playwright](https://playwright.dev/python/)
+- [LangChain](https://python.langchain.com/)
+- aiohttp
