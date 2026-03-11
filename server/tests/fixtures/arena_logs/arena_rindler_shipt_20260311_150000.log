@@ -1,0 +1,23 @@
+Agent: RINDLER
+Scenario: shipt_add_to_cart
+Run ID: 77777777-7777-7777-7777-777777777777
+Trace ID: 88888888-8888-8888-8888-888888888888
+Goal: Go to shipt.com and add bananas to cart
+Start URL: https://shipt.com
+Duration: 60.00s
+Agent Reported Success: True
+Token Burn: 900 (800 in / 100 out)
+Cost: $0.0100
+
+--- JUDGE EVALUATION ---
+Judge Verdict: ERROR
+Judge Reason: Judge encountered an internal error during evaluation.
+--- END JUDGE EVALUATION ---
+
+Telemetry Events:
+[
+  {"trace_id": "88888888", "run_id": "77777777", "lane": "RINDLER", "step_index": 1, "event_type": "step_start"},
+  {"trace_id": "88888888", "run_id": "77777777", "lane": "RINDLER", "step_index": 1, "event_type": "step_end", "duration_ms": 12000, "tokens_input": 400, "tokens_output": 50},
+  {"trace_id": "88888888", "run_id": "77777777", "lane": "RINDLER", "step_index": 2, "event_type": "step_start"},
+  {"trace_id": "88888888", "run_id": "77777777", "lane": "RINDLER", "step_index": 2, "event_type": "step_end", "duration_ms": 8000, "tokens_input": 400, "tokens_output": 50}
+]

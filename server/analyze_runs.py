@@ -74,7 +74,7 @@ def parse_log_file(path: Path) -> dict:
                 pass
 
     # Count steps from telemetry events
-    tel_match = re.search(r"Telemetry Events:\s*\n(\[.+\])", text, re.DOTALL)
+    tel_match = re.search(r"Telemetry Events:\s*\n(\[.*?\])", text, re.DOTALL)
     if tel_match:
         try:
             events = json.loads(tel_match.group(1))

@@ -74,6 +74,15 @@ class TestParseLogFile:
         assert result["judge_verdict"] is None
         tmp_path.unlink()
 
+    def test_parse_judge_error_verdict(self):
+        """Judge Verdict: ERROR should be parsed correctly from fixture."""
+        log_path = FIXTURE_DIR / "arena_rindler_shipt_20260311_150000.log"
+        result = parse_log_file(log_path)
+        assert result["agent"] == "RINDLER"
+        assert result["judge_verdict"] == "ERROR"
+        assert result["success"] is True
+        assert result["steps"] == 2
+
 
 class TestParseTimestamp:
 
@@ -136,6 +145,36 @@ class TestAggregateRuns:
         row = table[0]
         assert row["runs"] == 2
         assert row["judge_pass_rate"] == pytest.approx(1.0)  # 1/1 (None excluded)
+
+
+class TestFiltering:
+
+    def _parse_all_fixtures(self):
+        """Parse all fixture files into run dicts."""
+        runs = []
+        for path in sorted(FIXTURE_DIR.glob("arena_*.log")):
+            runs.append(parse_log_file(path))
+        return runs
+
+    def test_filter_by_agent(self):
+        runs = self._parse_all_fixtures()
+        filtered = [r for r in runs if r["agent"].upper() in {"RINDLER"}]
+        assert all(r["agent"] == "RINDLER" for r in filtered)
+        assert len(filtered) >= 2  # At least the 3 RINDLER fixtures
+
+    def test_filter_by_scenario(self):
+        runs = self._parse_all_fixtures()
+        filtered = [r for r in runs if r["scenario"] == "amazon_search"]
+        assert len(filtered) == 1
+        assert filtered[0]["agent"] == "RINDLER"
+
+    def test_filter_by_since_date(self):
+        runs = self._parse_all_fixtures()
+        since = datetime(2026, 3, 11, 13, 30, 0)
+        filtered = [r for r in runs if r["timestamp"] and r["timestamp"] >= since]
+        # Only arena_rindler_amazon_20260311_140000 and arena_rindler_shipt_20260311_150000 are after 13:30
+        assert all(r["timestamp"] >= since for r in filtered)
+        assert len(filtered) == 2
 
 
 class TestFormatTable:
