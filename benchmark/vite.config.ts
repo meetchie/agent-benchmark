@@ -7,4 +7,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
   },
+  server: {
+    proxy: {
+      // Rewrite Cloudflare function paths to Python container paths for local dev
+      "/api/benchmark/status": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: (path) =>
+          path.replace("/api/benchmark/status", "/benchmark/status"),
+      },
+      "/api/benchmark/run": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: () => "/benchmark/start",
+      },
+    },
+  },
 });
