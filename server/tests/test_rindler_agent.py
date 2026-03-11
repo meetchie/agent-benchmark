@@ -4,7 +4,7 @@ import json
 import sys
 import importlib.util
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import directly from the module file to avoid triggering adapters/__init__.py
 # which loads other adapters with heavy external dependencies.
@@ -316,3 +316,161 @@ class TestRindlerHelpers:
         agent.llm_name = "unknown-model"
         cost = agent._compute_cost(1_000_000, 1_000_000)
         assert abs(cost - 0.75) < 0.001  # falls back to gpt-4o-mini rates
+
+
+# ---------------------------------------------------------------------------
+# Integration test
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestRindlerIntegration:
+
+    async def test_full_action_loop(self, monkeypatch):
+        monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
+        monkeypatch.setenv("RINDLER_EMAIL", "test@test.com")
+        monkeypatch.setenv("RINDLER_PASSWORD", "pass123")
+        monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+
+        # Create agent bypassing __init__ (BaseAgent == object in test context)
+        agent = object.__new__(RindlerTelemetricAgent)
+        agent.run_id = "r1"
+        agent.goal = "Click the button"
+        agent.lane = "RINDLER"
+        agent.server_url = "http://localhost:8080"
+        agent.email = "test@test.com"
+        agent.password = "pass123"
+        agent.llm_name = "gpt-4o-mini"
+        agent.max_steps = 25
+        agent._token = None
+        agent._session_id = None
+        agent.trace_id = "test-trace"
+        agent.telemetry_events = []
+        agent._current_step_index = 0
+        agent._current_action_type = None
+
+        # Stub telemetry methods that would come from BaseAgent
+        agent.print_run_header = lambda *a, **kw: None
+
+        def mock_log_step_start(action_type=None, action_data=None):
+            agent._current_step_index += 1
+            agent._current_action_type = action_type
+
+        def mock_log_step_end(tokens_input=None, tokens_output=None, observation=None):
+            event = {
+                "event_type": "step_end",
+                "action_type": agent._current_action_type,
+                "tokens_input": tokens_input,
+                "tokens_output": tokens_output,
+            }
+            agent.telemetry_events.append(event)
+            return event
+
+        agent.log_step_start = mock_log_step_start
+        agent.log_step_end = mock_log_step_end
+
+        # Mock _login to skip HTTP
+        async def mock_login():
+            return "jwt-test-token"
+
+        agent._login = mock_login
+
+        # Build mock MCP client
+        mock_mcp_client = MagicMock()
+        mock_mcp_client.initialize = AsyncMock()
+
+        browse_tool = FakeTool(
+            "browse_to_url", "Navigate",
+            {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+        )
+        click_tool = FakeTool(
+            "click_element", "Click",
+            {"type": "object", "properties": {"selector": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["selector", "session_id"]},
+        )
+        mock_list_result = MagicMock()
+        mock_list_result.tools = [browse_tool, click_tool]
+        mock_mcp_client.list_tools = AsyncMock(return_value=mock_list_result)
+
+        def make_result(data):
+            r = MagicMock()
+            c = MagicMock()
+            c.text = json.dumps(data)
+            r.content = [c]
+            r.isError = False
+            return r
+
+        # call_tool is called 3 times:
+        #   1) browse_to_url  (initial page load before the loop)
+        #   2) click_element  (step 0 in the loop)
+        #   3) close_session  (finally block)
+        call_results = [
+            make_result({"session_id": "s1", "accessibility_tree": "<tree>button 'Submit'</tree>", "page_url": "https://example.com", "page_title": "Test"}),
+            make_result({"session_id": "s1", "accessibility_tree": "<tree>text 'Success!'</tree>", "success": True, "strategy_used": "css"}),
+            make_result({"success": True}),  # close_session
+        ]
+        mock_mcp_client.call_tool = AsyncMock(side_effect=call_results)
+
+        # Mock LLM responses: click_element then done
+        llm_responses = [
+            LLMResponse(
+                tool_name="click_element",
+                tool_args={"session_id": "s1", "selector": "#submit"},
+                tool_call_id="call_1",
+                text=None,
+                tokens_input=500,
+                tokens_output=50,
+            ),
+            LLMResponse(
+                tool_name="done",
+                tool_args={"success": True, "message": "Clicked submit"},
+                tool_call_id="call_2",
+                text=None,
+                tokens_input=600,
+                tokens_output=30,
+            ),
+        ]
+
+        mock_llm = MagicMock()
+        mock_llm.provider = "openai"
+        mock_llm.call = AsyncMock(side_effect=llm_responses)
+
+        # Async context managers for sse_client and ClientSession
+        class MockSSEContext:
+            async def __aenter__(self):
+                return (MagicMock(), MagicMock())
+
+            async def __aexit__(self, *args):
+                pass
+
+        class MockClientSessionContext:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return mock_mcp_client
+
+            async def __aexit__(self, *args):
+                pass
+
+        import mcp
+        import mcp.client.sse
+
+        with patch.object(_mod, "LLMClient", return_value=mock_llm):
+            with patch.object(mcp.client.sse, "sse_client", return_value=MockSSEContext()):
+                with patch.object(mcp, "ClientSession", MockClientSessionContext):
+                    result = await agent.run(start_url="https://example.com")
+
+        assert result["success"] is True
+        assert result["message"] == "Clicked submit"
+        assert result["steps"] == 2
+
+        # Telemetry: one step_end for click_element (done exits the loop early, before log)
+        step_ends = [e for e in agent.telemetry_events if e.get("event_type") == "step_end"]
+        assert len(step_ends) == 1
+        assert step_ends[0]["action_type"] == "click_element"
+
+        # close_session must have been called in the finally block
+        close_calls = [
+            c for c in mock_mcp_client.call_tool.call_args_list
+            if c[0][0] == "close_session"
+        ]
+        assert len(close_calls) == 1
