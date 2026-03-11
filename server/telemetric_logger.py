@@ -21,10 +21,10 @@ class TelemetryEvent:
     event_type: str  # "step_start", "step_end", "artifact"
     timestamp: datetime
     duration_ms: Optional[float] = None
-    tokens_input: Optional[int] = None
-    tokens_output: Optional[int] = None
-    cost_usd: Optional[float] = None
-    action_type: Optional[str] = None
+    tokens_input: int = 0
+    tokens_output: int = 0
+    cost_usd: float = 0.0
+    action_type: Optional[str] = None  # Set on step_start only; None on step_end
     action_data: Any = None
     observation_hash: Optional[str] = None
 
@@ -55,8 +55,8 @@ class TelemetricWrapper:
         )
 
     def log_step_end(self, step_index: int,
-                     tokens_input: Optional[int] = None,
-                     tokens_output: Optional[int] = None,
+                     tokens_input: int = 0,
+                     tokens_output: int = 0,
                      observation: Any = None) -> TelemetryEvent:
         """Record the end of a step. Computes duration from step_start and observation hash."""
         now = datetime.now()

@@ -35,16 +35,16 @@ class TestTelemetryEvent:
         assert event.event_type == "step_start"
         assert event.timestamp == now
 
-    def test_default_optional_fields_are_none(self):
+    def test_default_optional_fields(self):
         event = TelemetryEvent(
             trace_id="t", run_id="r", lane="L",
             step_index=0, event_type="step_start",
             timestamp=datetime.now(),
         )
         assert event.duration_ms is None
-        assert event.tokens_input is None
-        assert event.tokens_output is None
-        assert event.cost_usd is None
+        assert event.tokens_input == 0
+        assert event.tokens_output == 0
+        assert event.cost_usd == 0.0
         assert event.action_type is None
         assert event.action_data is None
         assert event.observation_hash is None
@@ -129,7 +129,7 @@ class TestTelemetricWrapper:
         assert event.tokens_output == 20
         assert event.duration_ms is not None
         assert event.duration_ms >= 0
-        assert event.cost_usd is None  # cost_usd is not computed by the wrapper
+        assert event.cost_usd == 0.0  # cost_usd is not computed by the wrapper
 
     def test_duration_ms_computed_from_start(self):
         wrapper = TelemetricWrapper(trace_id="t1", run_id="r1", lane="RINDLER")
