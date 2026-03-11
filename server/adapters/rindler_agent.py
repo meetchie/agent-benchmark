@@ -134,11 +134,21 @@ class MCPToolBridge:
 # ---------------------------------------------------------------------------
 
 def parse_tool_result(result) -> dict:
-    """Extract JSON dict from MCP CallToolResult."""
+    """Extract JSON dict from MCP CallToolResult.
+
+    Handles isError flag and non-JSON responses gracefully so the LLM
+    can attempt recovery instead of the agent crashing.
+    """
+    if getattr(result, "isError", False):
+        text = result.content[0].text if result.content else "unknown error"
+        return {"error": text}
     if not result.content:
         return {"error": "empty response"}
     text = result.content[0].text
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"error": "non-JSON response", "raw": text[:500]}
 
 
 def truncate(text: str, max_chars: int) -> str:
@@ -310,6 +320,27 @@ class RindlerTelemetricAgent(BaseAgent):
         rates = COST_RATES.get(self.llm_name, COST_RATES["gpt-4o-mini"])
         return (tokens_input / 1_000_000) * rates["input"] + (tokens_output / 1_000_000) * rates["output"]
 
+    async def _call_tool_with_retry(self, client, tool_name: str, tool_args: dict) -> dict:
+        """Call an MCP tool, retrying once on 401 after re-login."""
+        args = MCPToolBridge.inject_auth_token(tool_args, self._token)
+        raw = await client.call_tool(tool_name, args)
+        parsed = parse_tool_result(raw)
+        if self._is_auth_error(parsed):
+            self._token = await self._login()
+            args = MCPToolBridge.inject_auth_token(tool_args, self._token)
+            raw = await client.call_tool(tool_name, args)
+            parsed = parse_tool_result(raw)
+        return parsed
+
+    @staticmethod
+    def _is_auth_error(parsed: dict) -> bool:
+        """Check if a parsed tool result indicates an authentication failure."""
+        error = parsed.get("error", "")
+        if isinstance(error, str):
+            lower = error.lower()
+            return "401" in lower or "unauthorized" in lower or "token expired" in lower
+        return False
+
     async def run(self, start_url=None, **kwargs):
         from mcp.client.sse import sse_client
         from mcp import ClientSession
@@ -318,6 +349,9 @@ class RindlerTelemetricAgent(BaseAgent):
         self._token = await self._login()
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
 
+        # TODO: SSE reconnection — if the SSE connection drops mid-run,
+        # re-establish sse_client and ClientSession, then resume the action loop.
+        # For now, a dropped connection will raise and terminate the run.
         async with sse_client(self.server_url + "/mcp/") as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
@@ -325,8 +359,7 @@ class RindlerTelemetricAgent(BaseAgent):
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
-                raw = await client.call_tool("browse_to_url", MCPToolBridge.inject_auth_token({"url": start_url}, self._token))
-                parsed = parse_tool_result(raw)
+                parsed = await self._call_tool_with_retry(client, "browse_to_url", {"url": start_url})
                 self._session_id = parsed.get("session_id")
                 messages = self._build_initial_messages(llm.provider, parsed.get("accessibility_tree", ""))
 
@@ -337,9 +370,7 @@ class RindlerTelemetricAgent(BaseAgent):
                             return self._build_result(llm_response.tool_args or {}, step + 1)
                         if llm_response.tool_name:
                             self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
-                            tool_args = MCPToolBridge.inject_auth_token(llm_response.tool_args, self._token)
-                            raw = await client.call_tool(llm_response.tool_name, tool_args)
-                            parsed = parse_tool_result(raw)
+                            parsed = await self._call_tool_with_retry(client, llm_response.tool_name, llm_response.tool_args)
                             event_dict = self.log_step_end(
                                 tokens_input=llm_response.tokens_input,
                                 tokens_output=llm_response.tokens_output,
