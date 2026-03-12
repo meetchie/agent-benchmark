@@ -124,6 +124,8 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
     Uses a local Playwright browser (no Browserbase required).
     Requires OPENAI_API_KEY in environment.
     """
+    # Deferred import: keeps the server startable even if browser_use is not installed,
+    # and avoids import-time side effects (Playwright browser launch).
     from browser_use import Agent
     from browser_use.llm.models import get_llm_by_name
 

@@ -8,6 +8,9 @@ export default defineConfig({
     outDir: "dist",
   },
   server: {
+    // Local dev: Vite proxies API calls directly to the Python FastAPI container (http://localhost:8000).
+    // This bypasses the Cloudflare Functions (functions/api/benchmark/) which are used in production only.
+    // Reason: wrangler v3.114.17 conflicts when wrangler.toml has pages_build_output_dir set + proxy command.
     proxy: {
       // Rewrite Cloudflare function paths to Python container paths for local dev
       "/api/benchmark/status": {

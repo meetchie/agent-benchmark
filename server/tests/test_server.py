@@ -2,8 +2,16 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
 from server import app
+import server as server_module
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clear_runs():
+    server_module._runs.clear()
+    yield
+    server_module._runs.clear()
 
 
 def test_health():
@@ -44,3 +52,17 @@ def test_start_missing_fields():
 def test_start_invalid_url():
     resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
     assert resp.status_code == 422
+
+
+def test_status_running():
+    """Status of a just-started run should be 'running' before background task completes."""
+    import server as server_module
+    from benchmark_runner import RunState
+
+    run_id = "test-running-id"
+    state = RunState(run_id=run_id, status="running")
+    server_module._runs[run_id] = state
+
+    resp = client.get(f"/benchmark/status/{run_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "running"

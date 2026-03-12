@@ -1,9 +1,5 @@
 import type { SummaryData } from "../lib/types";
-
-function formatMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
+import { formatMs } from "../lib/utils";
 
 interface SummaryCardProps {
   data: SummaryData;

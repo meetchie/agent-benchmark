@@ -1,10 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { StepRecord } from "../lib/types";
-
-function formatMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
+import { formatMs } from "../lib/utils";
 
 interface StepLogProps {
   steps: StepRecord[];
@@ -30,7 +26,12 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
       </div>
       <div className="max-h-64 overflow-y-auto border-2 border-slate-200 bg-white">
         {steps.length === 0 && !isRunning ? (
-          <p className="p-3 text-xs text-slate-400">Steps will appear here during the run.</p>
+          <p className="text-sm text-slate-400 text-center py-8">Steps will appear here during the run.</p>
+        ) : steps.length === 0 ? (
+          <div className="flex items-center gap-2 py-6 px-4 text-sm text-slate-500">
+            <div className="h-3 w-3 rounded-full bg-indigo-500 animate-pulse" />
+            <span>Starting agent…</span>
+          </div>
         ) : (
           <div className="divide-y divide-slate-100">
             {steps.map((step, i) => {
