@@ -52,14 +52,12 @@ register_scenario(Scenario(
     tags=["e-commerce", "grocery", "cart"],
     goal="""Go to shipt.com.
 
-First, you need to set a delivery address before you can search for products.
-Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
-Wait for the autocomplete dropdown and click the first suggestion.
-
-Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+1. Click "Start shopping" or "Get started" to enter the shopping experience.
+2. Set delivery address: Look for the address/location element in the top navigation bar. Click it to open the address entry, then enter: 1 Main St, Springfield, IL 62701. Select the matching autocomplete suggestion.
+3. Search for "Organic Bananas" using the search bar and add the first result to your cart. You may need to click on the product card first, then use the add-to-cart or "+" button.
 
 IMPORTANT - How to verify success:
-After clicking the add-to-cart button, look for ANY of these success indicators:
+After adding to cart, look for ANY of these success indicators:
 1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
 2. The cart icon in the top-right shows a number badge (like "1")
 3. A toast/notification appears saying the item was added
@@ -73,7 +71,7 @@ register_scenario(Scenario(
     tags=["agentic-flow", "logic-test", "dirty-data"],
     goal="""Go to shipt.com.
 
-1. **Setup:** Enter delivery address: 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
+1. **Setup:** Click "Start shopping" or "Get started" to enter the shopping experience. Then find the address/location element in the top navigation bar, click it, and enter: 1 Main St, Springfield, IL 62701. Select the matching autocomplete suggestion.
 
 2. **Task - Precision Search:**
    - Search for "Granny Smith Apples".
@@ -461,6 +459,188 @@ Report the top 5 stories on the front page with:
 1. Title
 2. Points/score
 3. Number of comments
+"""
+))
+
+
+# -----------------------------------------------------------------------------
+# Multi-Step Form / Modal Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="costco_add_to_cart",
+    description="Search for a product on Costco and add to cart",
+    start_url="https://www.costco.com",
+    tags=["e-commerce", "cart", "warehouse"],
+    goal="""Go to costco.com.
+
+1. Search for "Kirkland Signature Olive Oil" using the search bar.
+2. From the search results, click on the first relevant product.
+3. On the product page, click "Add to Cart".
+4. If a modal or popup appears (e.g., warranty offer, membership prompt), dismiss it or click "No Thanks" / "Continue".
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart icon in the header shows an updated item count
+2. A confirmation modal says "Added to Cart" or similar
+3. The button changes to "Added" or shows a checkmark
+4. You are redirected to the cart page showing the item
+"""
+))
+
+register_scenario(Scenario(
+    name="bestbuy_add_to_cart",
+    description="Search for electronics on Best Buy and add to cart",
+    start_url="https://www.bestbuy.com",
+    tags=["e-commerce", "electronics", "cart"],
+    goal="""Go to bestbuy.com.
+
+1. Search for "USB-C cable" using the search bar.
+2. From the search results, click on the first product that is available for shipping (not "Sold Out").
+3. On the product page, click "Add to Cart".
+4. If a popup appears offering accessories or protection plans, dismiss it.
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A green "Added to Cart" confirmation appears
+2. The cart icon in the header updates with a count
+3. A slide-out cart panel shows the item
+4. A "Go to Cart" button appears
+"""
+))
+
+register_scenario(Scenario(
+    name="walgreens_add_to_cart",
+    description="Find a product on Walgreens and add to cart",
+    start_url="https://www.walgreens.com",
+    tags=["e-commerce", "pharmacy", "cart"],
+    goal="""Go to walgreens.com.
+
+1. Search for "Advil 50 count" using the search bar.
+2. From the results, click on the first Advil Ibuprofen product (tablets or caplets).
+3. On the product page, click "Add to Cart" or the cart/bag button.
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. The cart icon shows an updated count
+2. A "View Cart" or confirmation message appears
+3. The product shows "In Cart" status
+"""
+))
+
+
+# -----------------------------------------------------------------------------
+# Quantity / Size Selection Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="nike_add_to_cart",
+    description="Find shoes on Nike, select size, and add to cart",
+    start_url="https://www.nike.com",
+    tags=["e-commerce", "apparel", "cart", "size-selection"],
+    goal="""Go to nike.com.
+
+1. Search for "Air Force 1" using the search bar.
+2. Click on the first Men's shoe result.
+3. On the product page:
+   - Select size "10" (US Men's)
+   - Click "Add to Bag"
+
+IMPORTANT - How to verify success:
+After clicking "Add to Bag", look for ANY of these success indicators:
+1. A slide-out cart panel shows the shoe with size 10
+2. The bag icon in the header shows an item count
+3. A confirmation message appears
+4. A "View Bag" or "Checkout" button becomes visible
+"""
+))
+
+register_scenario(Scenario(
+    name="uniqlo_add_to_cart",
+    description="Find clothing on Uniqlo, select size and color, add to cart",
+    start_url="https://www.uniqlo.com/us/en/",
+    tags=["e-commerce", "apparel", "cart", "size-selection"],
+    goal="""Go to uniqlo.com.
+
+1. Search for "Airism T-Shirt" using the search bar.
+2. Click on the first Men's t-shirt result.
+3. On the product page:
+   - Select color: any available color
+   - Select size: "M" (Medium)
+   - Click "Add to Cart" or "Add to Bag"
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart confirmation slide-out or modal appears
+2. The cart icon in the header updates with a count
+3. A "View Cart" or "Checkout" button appears
+"""
+))
+
+
+# -----------------------------------------------------------------------------
+# Multi-Step Navigation Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="home_depot_store_pickup",
+    description="Find a product on Home Depot and check store pickup availability",
+    start_url="https://www.homedepot.com",
+    tags=["e-commerce", "store-locator", "availability"],
+    goal="""Go to homedepot.com.
+
+1. Search for "Phillips screwdriver set" using the search bar.
+2. Click on the first relevant product from the results.
+3. On the product page, look for store pickup availability.
+4. If prompted, enter ZIP code: 94403 to check local store availability.
+5. Report whether the item is available for pickup, and at which store.
+
+IMPORTANT - How to verify success:
+Look for ANY of these indicators:
+1. A store name appears with "Available" or "In Stock" status
+2. A "Free Pickup" badge is shown
+3. Store pickup details are displayed with a specific store location
+"""
+))
+
+register_scenario(Scenario(
+    name="zillow_home_search",
+    description="Search for homes on Zillow with filters",
+    start_url="https://www.zillow.com",
+    tags=["real-estate", "search", "filters"],
+    goal="""Go to zillow.com.
+
+1. Search for homes in "San Mateo, CA" using the search bar.
+2. Apply filters:
+   - For Sale
+   - Price: Max $1,500,000
+   - Bedrooms: 3+
+3. Wait for results to load.
+
+Report the first 3 listings with:
+1. Address
+2. Price
+3. Number of bedrooms and bathrooms
+4. Square footage (if shown)
+"""
+))
+
+register_scenario(Scenario(
+    name="linkedin_job_search",
+    description="Search for jobs on LinkedIn",
+    start_url="https://www.linkedin.com/jobs",
+    tags=["jobs", "search", "professional"],
+    goal="""Go to linkedin.com/jobs.
+
+1. Search for "Software Engineer" in the job search field.
+2. Set location to "San Francisco Bay Area".
+3. Apply filter: "Past week" for date posted (if available).
+
+Report the first 3 job listings with:
+1. Job title
+2. Company name
+3. Location
+4. Whether it's Remote, Hybrid, or On-site (if shown)
 """
 ))
 

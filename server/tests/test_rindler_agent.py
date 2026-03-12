@@ -77,20 +77,6 @@ class TestMCPToolBridge:
         assert tools[0]["name"] == "done"
         assert "success" in tools[0]["input_schema"]["properties"]
 
-    def test_inject_auth_token(self):
-        args = {"url": "https://example.com", "session_id": "abc"}
-        result = MCPToolBridge.inject_auth_token(args, "my-jwt-token")
-        assert result["url"] == "https://example.com"
-        assert result["_meta"]["authorization"] == "Bearer my-jwt-token"
-        # Original should not be mutated
-        assert "_meta" not in args
-
-    def test_inject_auth_token_preserves_existing_meta(self):
-        args = {"url": "https://example.com", "_meta": {"other": "value"}}
-        result = MCPToolBridge.inject_auth_token(args, "tok")
-        assert result["_meta"]["authorization"] == "Bearer tok"
-        assert result["_meta"]["other"] == "value"
-
 
 class TestParseToolResult:
 
@@ -274,22 +260,38 @@ class TestRindlerHelpers:
         agent = object.__new__(RindlerTelemetricAgent)
         agent.goal = "Buy bananas"
         agent.llm_name = "gpt-4o-mini"
+        agent.server_url = "http://localhost:8080"
+        agent._code_verifier = None
+        agent._refresh_token = None
+        agent._callback_port = 9999
         return agent
 
     def test_build_initial_messages_openai(self):
         agent = self._make_agent()
-        msgs = agent._build_initial_messages("openai", "<tree>button 'Add'</tree>")
+        browse_result = {
+            "session_id": "s1",
+            "page_title": "Test Page",
+            "page_url": "https://example.com",
+            "accessibility_tree": "<tree>button 'Add'</tree>",
+        }
+        msgs = agent._build_initial_messages("openai", browse_result)
         assert len(msgs) == 1
         assert msgs[0]["role"] == "user"
         assert "Buy bananas" in msgs[0]["content"]
         assert "button 'Add'" in msgs[0]["content"]
+        assert "s1" in msgs[0]["content"]
 
     def test_build_initial_messages_truncates(self):
         agent = self._make_agent()
-        long_tree = "x" * 5000
-        msgs = agent._build_initial_messages("openai", long_tree)
+        browse_result = {
+            "session_id": "s1",
+            "page_title": "Test",
+            "page_url": "https://example.com",
+            "accessibility_tree": "x" * 10000,
+        }
+        msgs = agent._build_initial_messages("openai", browse_result)
         assert "truncated" in msgs[0]["content"]
-        assert len(msgs[0]["content"]) < 5000
+        assert len(msgs[0]["content"]) < 10000
 
     def test_append_tool_exchange_openai(self):
         agent = self._make_agent()
@@ -338,17 +340,26 @@ class TestRindlerHelpers:
         cost = agent._compute_cost(1_000_000, 1_000_000)
         assert abs(cost - 0.75) < 0.001  # falls back to gpt-4o-mini rates
 
-    def test_is_auth_error_401(self):
-        assert RindlerTelemetricAgent._is_auth_error({"error": "401 Unauthorized"}) is True
+    @pytest.mark.asyncio
+    async def test_full_oauth_flow(self):
+        """Test the full _authenticate() flow: discover → register → authorize → exchange."""
+        agent = self._make_agent()
+        agent._discover = AsyncMock(return_value={
+            "registration_endpoint": "http://localhost:8080/auth/register-client",
+            "authorization_endpoint": "http://localhost:8080/auth/authorize",
+            "token_endpoint": "http://localhost:8080/auth/token",
+        })
+        agent._register = AsyncMock(return_value="dyn_test123")
+        agent._authorize = AsyncMock(return_value="auth-code-abc")
+        agent._exchange = AsyncMock(return_value="eyJ.access.token")
 
-    def test_is_auth_error_token_expired(self):
-        assert RindlerTelemetricAgent._is_auth_error({"error": "Token expired"}) is True
+        token = await agent._authenticate()
 
-    def test_is_auth_error_not_auth(self):
-        assert RindlerTelemetricAgent._is_auth_error({"error": "element not found"}) is False
-
-    def test_is_auth_error_no_error_key(self):
-        assert RindlerTelemetricAgent._is_auth_error({"success": True}) is False
+        assert token == "eyJ.access.token"
+        agent._discover.assert_called_once()
+        agent._register.assert_called_once()
+        agent._authorize.assert_called_once()
+        agent._exchange.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +371,6 @@ class TestRindlerIntegration:
 
     async def test_full_action_loop(self, monkeypatch):
         monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
-        monkeypatch.setenv("RINDLER_EMAIL", "test@test.com")
-        monkeypatch.setenv("RINDLER_PASSWORD", "pass123")
         monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
         # Create agent bypassing __init__ (BaseAgent == object in test context)
@@ -370,12 +379,13 @@ class TestRindlerIntegration:
         agent.goal = "Click the button"
         agent.lane = "RINDLER"
         agent.server_url = "http://localhost:8080"
-        agent.email = "test@test.com"
-        agent.password = "pass123"
         agent.llm_name = "gpt-4o-mini"
         agent.max_steps = 25
         agent._token = None
         agent._session_id = None
+        agent._code_verifier = None
+        agent._refresh_token = None
+        agent._callback_port = 9999
         agent.trace_id = "test-trace"
         agent.telemetry_events = []
         agent._current_step_index = 0
@@ -401,11 +411,8 @@ class TestRindlerIntegration:
         agent.log_step_start = mock_log_step_start
         agent.log_step_end = mock_log_step_end
 
-        # Mock _login to skip HTTP
-        async def mock_login():
-            return "jwt-test-token"
-
-        agent._login = mock_login
+        # Mock _authenticate to skip HTTP
+        agent._authenticate = AsyncMock(return_value="jwt-test-token")
 
         # Build mock MCP client
         mock_mcp_client = MagicMock()
@@ -508,108 +515,3 @@ class TestRindlerIntegration:
         ]
         assert len(close_calls) == 1
 
-    async def test_401_retry_re_logins(self, monkeypatch):
-        """When a tool call returns a 401 error, the agent should re-login and retry."""
-        monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
-        monkeypatch.setenv("RINDLER_EMAIL", "test@test.com")
-        monkeypatch.setenv("RINDLER_PASSWORD", "pass123")
-        monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
-
-        agent = object.__new__(RindlerTelemetricAgent)
-        agent.run_id = "r2"
-        agent.goal = "Click button"
-        agent.lane = "RINDLER"
-        agent.server_url = "http://localhost:8080"
-        agent.email = "test@test.com"
-        agent.password = "pass123"
-        agent.llm_name = "gpt-4o-mini"
-        agent.max_steps = 25
-        agent._token = None
-        agent._session_id = None
-        agent.trace_id = "test-trace"
-        agent.telemetry_events = []
-        agent._current_step_index = 0
-        agent._current_action_type = None
-
-        agent.print_run_header = lambda *a, **kw: None
-        def mock_log_step_start(action_type=None, action_data=None):
-            agent._current_step_index += 1
-            agent._current_action_type = action_type
-        def mock_log_step_end(tokens_input=None, tokens_output=None, observation=None):
-            event = {"event_type": "step_end", "action_type": agent._current_action_type,
-                     "tokens_input": tokens_input, "tokens_output": tokens_output}
-            agent.telemetry_events.append(event)
-            return event
-        agent.log_step_start = mock_log_step_start
-        agent.log_step_end = mock_log_step_end
-
-        login_count = 0
-        async def mock_login():
-            nonlocal login_count
-            login_count += 1
-            return f"jwt-token-{login_count}"
-        agent._login = mock_login
-
-        mock_mcp_client = MagicMock()
-        mock_mcp_client.initialize = AsyncMock()
-
-        browse_tool = FakeTool(
-            "browse_to_url", "Navigate",
-            {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
-        )
-        mock_list_result = MagicMock()
-        mock_list_result.tools = [browse_tool]
-        mock_mcp_client.list_tools = AsyncMock(return_value=mock_list_result)
-
-        def make_result(data, is_error=False):
-            r = MagicMock()
-            c = MagicMock()
-            c.text = json.dumps(data) if isinstance(data, dict) else data
-            r.content = [c]
-            r.isError = is_error
-            return r
-
-        # browse_to_url: first returns 401 error, retry succeeds
-        call_results = [
-            make_result({"error": "401 Unauthorized"}, is_error=True),  # 401 on browse
-            make_result({"session_id": "s1", "accessibility_tree": "<tree/>", "page_url": "https://example.com", "page_title": "Test"}),  # retry succeeds
-            make_result({"success": True}),  # close_session
-        ]
-        mock_mcp_client.call_tool = AsyncMock(side_effect=call_results)
-
-        # LLM immediately says done
-        llm_responses = [
-            LLMResponse(tool_name="done", tool_args={"success": True, "message": "Done"},
-                        tool_call_id="call_1", text=None, tokens_input=100, tokens_output=10),
-        ]
-        mock_llm = MagicMock()
-        mock_llm.provider = "openai"
-        mock_llm.call = AsyncMock(side_effect=llm_responses)
-
-        class MockSSEContext:
-            async def __aenter__(self):
-                return (MagicMock(), MagicMock())
-            async def __aexit__(self, *args):
-                pass
-
-        class MockClientSessionContext:
-            def __init__(self, *args, **kwargs):
-                pass
-            async def __aenter__(self):
-                return mock_mcp_client
-            async def __aexit__(self, *args):
-                pass
-
-        import mcp
-        import mcp.client.sse
-
-        with patch.object(_mod, "LLMClient", return_value=mock_llm):
-            with patch.object(mcp.client.sse, "sse_client", return_value=MockSSEContext()):
-                with patch.object(mcp, "ClientSession", MockClientSessionContext):
-                    result = await agent.run(start_url="https://example.com")
-
-        assert result["success"] is True
-        # Login was called twice: initial + retry after 401
-        assert login_count == 2
-        # browse_to_url was called twice (401 then success), plus close_session
-        assert mock_mcp_client.call_tool.call_count == 3

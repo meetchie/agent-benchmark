@@ -17,6 +17,7 @@ from browserbase import Browserbase
 from browserbase._exceptions import RateLimitError
 
 from .base_agent import BaseAgent
+from constants import DEFAULT_COST_INPUT, DEFAULT_COST_OUTPUT
 
 
 # Patterns that indicate the agent failed even if no exception was thrown
@@ -160,9 +161,6 @@ class BrowserUseTelemetricAgent(BaseAgent):
         result = {"success": False, "message": "", "steps": 0, "history": None, "judge_result": None, 
                   "errors_detected": [], "final_extraction": None}
         
-        # Capture stdout/stderr to detect failure patterns
-        captured_output: List[str] = []
-        
         try:
             history = await agent.run(
                 on_step_start=on_step_start,
@@ -265,9 +263,8 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 event['tokens_input'] = tokens_per_step_input + extra_in
                 event['tokens_output'] = tokens_per_step_output + extra_out
                 
-                # Calculate cost ($5/M in, $15/M out)
-                input_cost = (event['tokens_input'] / 1_000_000) * 5.00
-                output_cost = (event['tokens_output'] / 1_000_000) * 15.00
+                input_cost = (event['tokens_input'] / 1_000_000) * DEFAULT_COST_INPUT
+                output_cost = (event['tokens_output'] / 1_000_000) * DEFAULT_COST_OUTPUT
                 event['cost_usd'] = input_cost + output_cost
                 
                 step_count += 1

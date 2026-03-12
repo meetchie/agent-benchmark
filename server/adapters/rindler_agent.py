@@ -40,14 +40,10 @@ DONE_TOOL_SCHEMA = {
     "required": ["success", "message"],
 }
 
-MAX_TREE_CHARS = 4000
-MAX_RESULT_CHARS = 8000
+MAX_TREE_CHARS = 8000
+MAX_RESULT_CHARS = 12000
 
-COST_RATES = {
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "claude-sonnet": {"input": 3.00, "output": 15.00},
-}
+from constants import COST_RATES
 
 
 # ---------------------------------------------------------------------------
@@ -119,14 +115,6 @@ class MCPToolBridge:
             }]
         return tools
 
-    @staticmethod
-    def inject_auth_token(tool_args: dict, token: str) -> dict:
-        """Return a copy of tool_args with _meta.authorization injected."""
-        result = dict(tool_args)
-        meta = dict(result.get("_meta", {}))
-        meta["authorization"] = f"Bearer {token}"
-        result["_meta"] = meta
-        return result
 
 
 # ---------------------------------------------------------------------------
@@ -263,27 +251,156 @@ class RindlerTelemetricAgent(BaseAgent):
 
     def __init__(self, run_id: str, goal: str, lane: str = "RINDLER", **kwargs):
         super().__init__(run_id=run_id, goal=goal, lane=lane)
-        self.server_url = os.environ["RINDLER_SERVER_URL"]
-        self.email = os.environ["RINDLER_EMAIL"]
-        self.password = os.environ["RINDLER_PASSWORD"]
+        self.server_url = os.environ.get("RINDLER_SERVER_URL", "http://localhost:8080")
         self.llm_name = kwargs.get("llm", "gpt-4o-mini")
         self.max_steps = kwargs.get("max_steps", 25)
         self._token = None
         self._session_id = None
+        self._code_verifier = None
+        self._refresh_token = None
+        self._callback_port = self._find_free_port()
 
-    async def _login(self) -> str:
-        url = f"{self.server_url}/auth/login"
+    @staticmethod
+    def _find_free_port() -> int:
+        """Find a free port for the OAuth callback server."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    async def _authenticate(self) -> str:
+        """Run full OAuth 2.1 flow: discover → register → authorize → exchange."""
+        print("  🔐 OAuth 2.1 authentication starting...")
+
+        print("     ↳ Discovering OAuth endpoints...", end=" ", flush=True)
+        metadata = await self._discover()
+        print("✓")
+
+        print("     ↳ Registering dynamic client...", end=" ", flush=True)
+        client_id = await self._register(metadata["registration_endpoint"])
+        print(f"✓ ({client_id[:12]}...)")
+
+        print("     ↳ Authorizing (PKCE)...", end=" ", flush=True)
+        auth_code = await self._authorize(
+            metadata["authorization_endpoint"], client_id
+        )
+        print("✓")
+
+        print("     ↳ Exchanging code for token...", end=" ", flush=True)
+        access_token = await self._exchange(
+            metadata["token_endpoint"], auth_code, client_id
+        )
+        print("✓")
+        print("  🔐 Authentication complete.\n")
+        return access_token
+
+    async def _discover(self) -> dict:
+        """Fetch OAuth metadata from well-known endpoints."""
         async with aiohttp.ClientSession() as http:
-            async with http.post(url, json={"email": self.email, "password": self.password}) as resp:
+            async with http.get(
+                f"{self.server_url}/.well-known/oauth-protected-resource"
+            ) as resp:
                 if resp.status != 200:
-                    body = await resp.text()
-                    raise RuntimeError(f"Login failed ({resp.status}): {body}")
-                data = await resp.json()
-                return data["token"]
+                    raise RuntimeError(
+                        f"OAuth discovery failed ({resp.status}). Is the Rindler server running at {self.server_url}?"
+                    )
+                resource_meta = await resp.json()
 
-    def _build_initial_messages(self, provider: str, accessibility_tree: str) -> list:
-        tree = truncate(accessibility_tree, MAX_TREE_CHARS)
-        content = f"Goal: {self.goal}\n\nCurrent page:\n{tree}"
+            as_url = resource_meta["authorization_servers"][0]
+            async with http.get(
+                f"{as_url}/.well-known/oauth-authorization-server"
+            ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(
+                        f"OAuth AS metadata fetch failed ({resp.status}) from {as_url}"
+                    )
+                return await resp.json()
+
+    async def _register(self, registration_endpoint: str) -> str:
+        """Register as a dynamic OAuth client. Returns client_id."""
+        async with aiohttp.ClientSession() as http:
+            async with http.post(
+                registration_endpoint,
+                json={
+                    "client_name": "arena-rindler-agent",
+                    "redirect_uris": [f"http://127.0.0.1:{self._callback_port}/callback"],
+                    "grant_types": ["authorization_code"],
+                },
+            ) as resp:
+                data = await resp.json()
+                if resp.status != 201:
+                    error = data.get("error_description", data.get("error", str(data)))
+                    raise RuntimeError(f"Client registration failed ({resp.status}): {error}")
+                return data["client_id"]
+
+    async def _authorize(self, authorization_endpoint: str, client_id: str) -> str:
+        """Run authorization code flow with PKCE. Returns auth code via redirect interception."""
+        import base64
+        import hashlib
+        import secrets
+        from urllib.parse import urlparse, parse_qs
+
+        self._code_verifier = secrets.token_urlsafe(32)
+        challenge_bytes = hashlib.sha256(self._code_verifier.encode()).digest()
+        code_challenge = (
+            base64.urlsafe_b64encode(challenge_bytes).rstrip(b"=").decode()
+        )
+
+        state = secrets.token_urlsafe(16)
+
+        params = {
+            "client_id": client_id,
+            "redirect_uri": f"http://127.0.0.1:{self._callback_port}/callback",
+            "response_type": "code",
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "state": state,
+        }
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                authorization_endpoint,
+                params=params,
+                allow_redirects=False,
+            ) as resp:
+                if resp.status != 302:
+                    raise RuntimeError(
+                        f"Expected 302 redirect from authorize, got {resp.status}"
+                    )
+                location = resp.headers.get("Location", "")
+                parsed = urlparse(location)
+                query = parse_qs(parsed.query)
+                received_state = query.get("state", [None])[0]
+                if received_state != state:
+                    raise RuntimeError("OAuth state mismatch — possible CSRF")
+                return query["code"][0]
+
+    async def _exchange(self, token_endpoint: str, auth_code: str, client_id: str) -> str:
+        """Exchange authorization code for access token."""
+        async with aiohttp.ClientSession() as http:
+            async with http.post(
+                token_endpoint,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": auth_code,
+                    "code_verifier": self._code_verifier,
+                    "client_id": client_id,
+                },
+            ) as resp:
+                data = await resp.json()
+                if resp.status != 200:
+                    error = data.get("error_description", data.get("error", str(data)))
+                    raise RuntimeError(f"Token exchange failed ({resp.status}): {error}")
+                self._refresh_token = data.get("refresh_token")
+                return data["access_token"]
+
+    def _build_initial_messages(self, provider: str, browse_result: dict) -> list:
+        tree = truncate(browse_result.get("accessibility_tree", ""), MAX_TREE_CHARS)
+        result_summary = json.dumps({
+            "session_id": browse_result.get("session_id"),
+            "page_title": browse_result.get("page_title"),
+            "page_url": browse_result.get("page_url"),
+        })
+        content = f"Goal: {self.goal}\n\nbrowse_to_url result:\n{result_summary}\n\nAccessibility tree:\n{tree}"
         return [{"role": "user", "content": content}]
 
     def _append_tool_exchange(self, provider: str, messages: list, llm_resp: LLMResponse, parsed_result: dict) -> list:
@@ -320,71 +437,103 @@ class RindlerTelemetricAgent(BaseAgent):
         rates = COST_RATES.get(self.llm_name, COST_RATES["gpt-4o-mini"])
         return (tokens_input / 1_000_000) * rates["input"] + (tokens_output / 1_000_000) * rates["output"]
 
-    async def _call_tool_with_retry(self, client, tool_name: str, tool_args: dict) -> dict:
-        """Call an MCP tool, retrying once on 401 after re-login."""
-        args = MCPToolBridge.inject_auth_token(tool_args, self._token)
-        raw = await client.call_tool(tool_name, args)
-        parsed = parse_tool_result(raw)
-        if self._is_auth_error(parsed):
-            self._token = await self._login()
-            args = MCPToolBridge.inject_auth_token(tool_args, self._token)
-            raw = await client.call_tool(tool_name, args)
-            parsed = parse_tool_result(raw)
-        return parsed
-
-    @staticmethod
-    def _is_auth_error(parsed: dict) -> bool:
-        """Check if a parsed tool result indicates an authentication failure."""
-        error = parsed.get("error", "")
-        if isinstance(error, str):
-            lower = error.lower()
-            return "401" in lower or "unauthorized" in lower or "token expired" in lower
-        return False
+    async def _call_tool(self, client, tool_name: str, tool_args: dict) -> dict:
+        """Call an MCP tool. Auth is at the SSE transport level."""
+        raw = await client.call_tool(tool_name, tool_args)
+        return parse_tool_result(raw)
 
     async def run(self, start_url=None, **kwargs):
         from mcp.client.sse import sse_client
         from mcp import ClientSession
 
         self.print_run_header(start_url)
-        self._token = await self._login()
+        self._token = await self._authenticate()
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
+        print(f"  🤖 LLM: {llm.model} ({llm.provider})")
 
         # TODO: SSE reconnection — if the SSE connection drops mid-run,
         # re-establish sse_client and ClientSession, then resume the action loop.
         # For now, a dropped connection will raise and terminate the run.
-        async with sse_client(self.server_url + "/mcp/") as (read, write):
+        headers = {"Authorization": f"Bearer {self._token}"}
+        print(f"  🔌 Connecting to MCP server at {self.server_url}...", flush=True)
+        async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
+                tool_names = [t.name for t in mcp_tools]
+                print(f"  📦 {len(mcp_tools)} MCP tools: {', '.join(tool_names)}")
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
-                parsed = await self._call_tool_with_retry(client, "browse_to_url", {"url": start_url})
+                print(f"\n  ▶ browse_to_url → {start_url}", flush=True)
+                parsed = await self._call_tool(client, "browse_to_url", {"url": start_url})
                 self._session_id = parsed.get("session_id")
-                messages = self._build_initial_messages(llm.provider, parsed.get("accessibility_tree", ""))
+                page_title = parsed.get("page_title", "")
+                page_url = parsed.get("page_url", "")
+                tree_len = len(parsed.get("accessibility_tree", ""))
+                print(f"    session={self._session_id}  title=\"{page_title}\"  tree={tree_len} chars")
+                if "error" in parsed:
+                    print(f"    ⚠️  Error: {parsed['error']}")
+                messages = self._build_initial_messages(llm.provider, parsed)
 
+                print(f"\n  🏃 Action loop (max {self.max_steps} steps)")
+                print(f"  {'─' * 54}")
                 try:
                     for step in range(self.max_steps):
+                        print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
                         llm_response = await llm.call(messages, llm_tools)
                         if llm_response.tool_name == "done":
-                            return self._build_result(llm_response.tool_args or {}, step + 1)
+                            done_args = llm_response.tool_args or {}
+                            icon = "✅" if done_args.get("success") else "❌"
+                            print(f"→ done {icon}")
+                            print(f"    {done_args.get('message', '')}")
+                            return self._build_result(done_args, step + 1)
                         if llm_response.tool_name:
+                            # Show tool call with full selector visibility
+                            tool_args = llm_response.tool_args or {}
+                            selector = tool_args.get("selector", "")
+                            if selector:
+                                other_args = {k: v for k, v in tool_args.items() if k not in ("selector", "session_id", "fallbacks")}
+                                extras = f"  {other_args}" if other_args else ""
+                                fallbacks = tool_args.get("fallbacks", [])
+                                fb_str = f"  fallbacks={fallbacks}" if fallbacks else ""
+                                print(f"→ {llm_response.tool_name}")
+                                print(f"    selector: {selector}{extras}{fb_str}")
+                            else:
+                                args_preview = json.dumps(tool_args, default=str)
+                                if len(args_preview) > 120:
+                                    args_preview = args_preview[:117] + "..."
+                                print(f"→ {llm_response.tool_name}({args_preview})")
                             self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
-                            parsed = await self._call_tool_with_retry(client, llm_response.tool_name, llm_response.tool_args)
+                            parsed = await self._call_tool(client, llm_response.tool_name, llm_response.tool_args)
                             event_dict = self.log_step_end(
                                 tokens_input=llm_response.tokens_input,
                                 tokens_output=llm_response.tokens_output,
                                 observation={"tool_result": parsed},
                             )
-                            event_dict["cost_usd"] = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            cost = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            event_dict["cost_usd"] = cost
+                            # Show result summary
+                            if "error" in parsed:
+                                print(f"    ⚠️  Error: {parsed['error']}")
+                            else:
+                                result_preview = json.dumps(parsed, default=str)
+                                if len(result_preview) > 120:
+                                    result_preview = result_preview[:117] + "..."
+                                print(f"    ← {result_preview}")
+                            print(f"    tokens: {llm_response.tokens_input:,}in/{llm_response.tokens_output:,}out  cost: ${cost:.4f}")
                             messages = self._append_tool_exchange(llm.provider, messages, llm_response, parsed)
                         else:
+                            text_preview = (llm_response.text or "")[:120]
+                            print(f"→ [text] {text_preview}")
                             messages.append({"role": "assistant", "content": llm_response.text})
                 finally:
                     if self._session_id:
+                        print(f"\n  🧹 Closing session {self._session_id}...", end=" ", flush=True)
                         try:
-                            await client.call_tool("close_session", MCPToolBridge.inject_auth_token({"session_id": self._session_id}, self._token))
+                            await client.call_tool("close_session", {"session_id": self._session_id})
+                            print("✓")
                         except Exception:
-                            pass
+                            print("(failed, ignoring)")
 
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)

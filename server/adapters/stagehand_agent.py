@@ -88,6 +88,79 @@ class StagehandTelemetricAgent(BaseAgent):
         
         return steps if steps else [goal]
     
+    async def _execute(self, start_url: Optional[str], max_steps: int) -> Dict[str, Any]:
+        """Core execution logic, called under asyncio.wait_for timeout."""
+        from stagehand import Stagehand
+
+        result = {"success": False, "message": "", "steps": 0}
+
+        self._stagehand = Stagehand(
+            env="BROWSERBASE",
+            api_key=self._browserbase_api_key,
+            project_id=self._browserbase_project_id,
+            model_api_key=self._model_api_key,
+            model_name="gpt-4o",
+        )
+
+        await self._stagehand.init()
+
+        self._session_id = getattr(self._stagehand, 'session_id', None) or \
+                           getattr(self._stagehand, 'browserbase_session_id', None)
+
+        if self._session_id:
+            if self._browserbase_org_id and self._browserbase_project_id:
+                session_url = f"https://www.browserbase.com/sessions/{self._session_id}"
+            else:
+                session_url = f"https://www.browserbase.com/sessions/{self._session_id}"
+            self.log_artifact("session_replay", session_url)
+            print(f"Session ID: {self._session_id}")
+            print(f"Session URL: {session_url}")
+
+        page = self._stagehand.page
+
+        if start_url:
+            await page.goto(start_url)
+            self.log_step(
+                action_type="navigate",
+                action_data={"url": start_url},
+                observation={"success": True, "url": start_url}
+            )
+            print(f"Navigated to: {start_url}")
+
+        await asyncio.sleep(2)
+
+        steps_taken = 0
+        goal_parts = self._parse_goal_into_steps(self.goal)
+
+        for step_instruction in goal_parts:
+            if steps_taken >= max_steps:
+                result["message"] = f"Max steps ({max_steps}) reached"
+                break
+
+            try:
+                print(f"\n--- Executing: {step_instruction[:100]}...")
+                act_result = await page.act(step_instruction)
+                steps_taken += 1
+                self.log_step(
+                    action_type="act",
+                    action_data={"instruction": step_instruction[:200]},
+                    observation={"success": True, "result": str(act_result)[:200] if act_result else "completed"}
+                )
+                await asyncio.sleep(1)
+            except Exception as step_error:
+                print(f"Step failed: {step_error}")
+                self.log_step(
+                    action_type="act",
+                    action_data={"instruction": step_instruction[:200]},
+                    observation={"success": False, "error": str(step_error)[:200]}
+                )
+                continue
+
+        result["success"] = steps_taken > 0
+        result["message"] = f"Completed {steps_taken} steps"
+        result["steps"] = steps_taken
+        return result
+
     async def run(
         self,
         start_url: Optional[str] = None,
@@ -97,18 +170,16 @@ class StagehandTelemetricAgent(BaseAgent):
     ) -> Dict[str, Any]:
         """
         Run the Stagehand agent asynchronously.
-        
+
         Args:
             start_url: URL to start at
             timeout: Maximum seconds to wait for completion (default: 300.0)
             max_steps: Maximum number of agent steps (default: 30)
             **kwargs: Additional arguments (unused)
-            
+
         Returns:
             Dictionary with run results and telemetry
         """
-        from stagehand import Stagehand
-        
         if not self._browserbase_api_key:
             raise ValueError("BROWSERBASE_API_KEY not found in environment variables")
         if not self._model_api_key:
@@ -118,83 +189,12 @@ class StagehandTelemetricAgent(BaseAgent):
         
         start_time = datetime.now()
         result = {"success": False, "message": "", "steps": 0}
-        
+
         try:
-            # Initialize Stagehand with Browserbase
-            self._stagehand = Stagehand(
-                env="BROWSERBASE",
-                api_key=self._browserbase_api_key,
-                project_id=self._browserbase_project_id,
-                model_api_key=self._model_api_key,
-                model_name="gpt-4o",
+            result = await asyncio.wait_for(
+                self._execute(start_url, max_steps),
+                timeout=timeout,
             )
-            
-            await self._stagehand.init()
-            
-            # Get session ID for replay URL
-            self._session_id = getattr(self._stagehand, 'session_id', None) or \
-                               getattr(self._stagehand, 'browserbase_session_id', None)
-            
-            if self._session_id:
-                if self._browserbase_org_id and self._browserbase_project_id:
-                    session_url = f"https://www.browserbase.com/sessions/{self._session_id}"
-                else:
-                    session_url = f"https://www.browserbase.com/sessions/{self._session_id}"
-                
-                self.log_artifact("session_replay", session_url)
-                print(f"Session ID: {self._session_id}")
-                print(f"Session URL: {session_url}")
-            
-            page = self._stagehand.page
-            
-            # Navigate to start URL if provided
-            if start_url:
-                await page.goto(start_url)
-                self.log_step(
-                    action_type="navigate",
-                    action_data={"url": start_url},
-                    observation={"success": True, "url": start_url}
-                )
-                print(f"Navigated to: {start_url}")
-            
-            await asyncio.sleep(2)
-            
-            # Execute steps
-            steps_taken = 0
-            goal_parts = self._parse_goal_into_steps(self.goal)
-            
-            for step_instruction in goal_parts:
-                if steps_taken >= max_steps:
-                    result["message"] = f"Max steps ({max_steps}) reached"
-                    break
-                
-                try:
-                    print(f"\n--- Executing: {step_instruction[:100]}...")
-                    
-                    act_result = await page.act(step_instruction)
-                    steps_taken += 1
-                    
-                    self.log_step(
-                        action_type="act",
-                        action_data={"instruction": step_instruction[:200]},
-                        observation={"success": True, "result": str(act_result)[:200] if act_result else "completed"}
-                    )
-                    
-                    await asyncio.sleep(1)
-                    
-                except Exception as step_error:
-                    print(f"Step failed: {step_error}")
-                    self.log_step(
-                        action_type="act",
-                        action_data={"instruction": step_instruction[:200]},
-                        observation={"success": False, "error": str(step_error)[:200]}
-                    )
-                    continue
-            
-            result["success"] = steps_taken > 0
-            result["message"] = f"Completed {steps_taken} steps"
-            result["steps"] = steps_taken
-            
         except asyncio.TimeoutError:
             result["message"] = f"Timeout after {timeout} seconds"
             result["success"] = False
@@ -218,7 +218,3 @@ class StagehandTelemetricAgent(BaseAgent):
         
         return result
     
-    # Alias for backwards compatibility
-    async def arun(self, start_url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        """Alias for run() for backwards compatibility."""
-        return await self.run(start_url=start_url, **kwargs)
