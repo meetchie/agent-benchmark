@@ -274,6 +274,10 @@ class TestRindlerHelpers:
         agent = object.__new__(RindlerTelemetricAgent)
         agent.goal = "Buy bananas"
         agent.llm_name = "gpt-4o-mini"
+        agent.server_url = "http://localhost:8080"
+        agent._code_verifier = None
+        agent._refresh_token = None
+        agent._callback_port = 9999
         return agent
 
     def test_build_initial_messages_openai(self):
@@ -350,6 +354,27 @@ class TestRindlerHelpers:
     def test_is_auth_error_no_error_key(self):
         assert RindlerTelemetricAgent._is_auth_error({"success": True}) is False
 
+    @pytest.mark.asyncio
+    async def test_full_oauth_flow(self):
+        """Test the full _authenticate() flow: discover → register → authorize → exchange."""
+        agent = self._make_agent()
+        agent._discover = AsyncMock(return_value={
+            "registration_endpoint": "http://localhost:8080/auth/register-client",
+            "authorization_endpoint": "http://localhost:8080/auth/authorize",
+            "token_endpoint": "http://localhost:8080/auth/token",
+        })
+        agent._register = AsyncMock(return_value="dyn_test123")
+        agent._authorize = AsyncMock(return_value="auth-code-abc")
+        agent._exchange = AsyncMock(return_value="eyJ.access.token")
+
+        token = await agent._authenticate()
+
+        assert token == "eyJ.access.token"
+        agent._discover.assert_called_once()
+        agent._register.assert_called_once()
+        agent._authorize.assert_called_once()
+        agent._exchange.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Integration test
@@ -361,7 +386,7 @@ class TestRindlerIntegration:
     async def test_full_action_loop(self, monkeypatch):
         monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
         monkeypatch.setenv("RINDLER_EMAIL", "test@test.com")
-        monkeypatch.setenv("RINDLER_PASSWORD", "pass123")
+        # RINDLER_PASSWORD removed — server uses email-only auth
         monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
         # Create agent bypassing __init__ (BaseAgent == object in test context)
@@ -371,7 +396,7 @@ class TestRindlerIntegration:
         agent.lane = "RINDLER"
         agent.server_url = "http://localhost:8080"
         agent.email = "test@test.com"
-        agent.password = "pass123"
+        # password field removed — server uses email-only auth
         agent.llm_name = "gpt-4o-mini"
         agent.max_steps = 25
         agent._token = None
@@ -512,7 +537,7 @@ class TestRindlerIntegration:
         """When a tool call returns a 401 error, the agent should re-login and retry."""
         monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
         monkeypatch.setenv("RINDLER_EMAIL", "test@test.com")
-        monkeypatch.setenv("RINDLER_PASSWORD", "pass123")
+        # RINDLER_PASSWORD removed — server uses email-only auth
         monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
         agent = object.__new__(RindlerTelemetricAgent)
@@ -521,7 +546,7 @@ class TestRindlerIntegration:
         agent.lane = "RINDLER"
         agent.server_url = "http://localhost:8080"
         agent.email = "test@test.com"
-        agent.password = "pass123"
+        # password field removed — server uses email-only auth
         agent.llm_name = "gpt-4o-mini"
         agent.max_steps = 25
         agent._token = None

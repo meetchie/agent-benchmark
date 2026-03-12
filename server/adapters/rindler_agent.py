@@ -115,14 +115,6 @@ class MCPToolBridge:
             }]
         return tools
 
-    @staticmethod
-    def inject_auth_token(tool_args: dict, token: str) -> dict:
-        """Return a copy of tool_args with _meta.authorization injected."""
-        result = dict(tool_args)
-        meta = dict(result.get("_meta", {}))
-        meta["authorization"] = f"Bearer {token}"
-        result["_meta"] = meta
-        return result
 
 
 # ---------------------------------------------------------------------------
@@ -259,23 +251,119 @@ class RindlerTelemetricAgent(BaseAgent):
 
     def __init__(self, run_id: str, goal: str, lane: str = "RINDLER", **kwargs):
         super().__init__(run_id=run_id, goal=goal, lane=lane)
-        self.server_url = os.environ["RINDLER_SERVER_URL"]
-        self.email = os.environ["RINDLER_EMAIL"]
-        self.password = os.environ["RINDLER_PASSWORD"]
+        self.server_url = os.environ.get("RINDLER_SERVER_URL", "http://localhost:8080")
         self.llm_name = kwargs.get("llm", "gpt-4o-mini")
         self.max_steps = kwargs.get("max_steps", 25)
         self._token = None
         self._session_id = None
+        self._code_verifier = None
+        self._refresh_token = None
+        self._callback_port = self._find_free_port()
 
-    async def _login(self) -> str:
-        url = f"{self.server_url}/auth/login"
+    @staticmethod
+    def _find_free_port() -> int:
+        """Find a free port for the OAuth callback server."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    async def _authenticate(self) -> str:
+        """Run full OAuth 2.1 flow: discover → register → authorize → exchange."""
+        metadata = await self._discover()
+        client_id = await self._register(metadata["registration_endpoint"])
+        auth_code = await self._authorize(
+            metadata["authorization_endpoint"], client_id
+        )
+        access_token = await self._exchange(
+            metadata["token_endpoint"], auth_code, client_id
+        )
+        return access_token
+
+    async def _discover(self) -> dict:
+        """Fetch OAuth metadata from well-known endpoints."""
         async with aiohttp.ClientSession() as http:
-            async with http.post(url, json={"email": self.email, "password": self.password}) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise RuntimeError(f"Login failed ({resp.status}): {body}")
+            async with http.get(
+                f"{self.server_url}/.well-known/oauth-protected-resource"
+            ) as resp:
+                resource_meta = await resp.json()
+
+            as_url = resource_meta["authorization_servers"][0]
+            async with http.get(
+                f"{as_url}/.well-known/oauth-authorization-server"
+            ) as resp:
+                return await resp.json()
+
+    async def _register(self, registration_endpoint: str) -> str:
+        """Register as a dynamic OAuth client. Returns client_id."""
+        async with aiohttp.ClientSession() as http:
+            async with http.post(
+                registration_endpoint,
+                json={
+                    "client_name": "arena-rindler-agent",
+                    "redirect_uris": [f"http://127.0.0.1:{self._callback_port}/callback"],
+                    "grant_types": ["authorization_code"],
+                },
+            ) as resp:
                 data = await resp.json()
-                return data["token"]
+                return data["client_id"]
+
+    async def _authorize(self, authorization_endpoint: str, client_id: str) -> str:
+        """Run authorization code flow with PKCE. Returns auth code via redirect interception."""
+        import base64
+        import hashlib
+        import secrets
+        from urllib.parse import urlparse, parse_qs
+
+        self._code_verifier = secrets.token_urlsafe(32)
+        challenge_bytes = hashlib.sha256(self._code_verifier.encode()).digest()
+        code_challenge = (
+            base64.urlsafe_b64encode(challenge_bytes).rstrip(b"=").decode()
+        )
+
+        state = secrets.token_urlsafe(16)
+
+        params = {
+            "client_id": client_id,
+            "redirect_uri": f"http://127.0.0.1:{self._callback_port}/callback",
+            "response_type": "code",
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "state": state,
+        }
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                authorization_endpoint,
+                params=params,
+                allow_redirects=False,
+            ) as resp:
+                if resp.status != 302:
+                    raise RuntimeError(
+                        f"Expected 302 redirect from authorize, got {resp.status}"
+                    )
+                location = resp.headers.get("Location", "")
+                parsed = urlparse(location)
+                query = parse_qs(parsed.query)
+                received_state = query.get("state", [None])[0]
+                if received_state != state:
+                    raise RuntimeError("OAuth state mismatch — possible CSRF")
+                return query["code"][0]
+
+    async def _exchange(self, token_endpoint: str, auth_code: str, client_id: str) -> str:
+        """Exchange authorization code for access token."""
+        async with aiohttp.ClientSession() as http:
+            async with http.post(
+                token_endpoint,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": auth_code,
+                    "code_verifier": self._code_verifier,
+                    "client_id": client_id,
+                },
+            ) as resp:
+                data = await resp.json()
+                self._refresh_token = data.get("refresh_token")
+                return data["access_token"]
 
     def _build_initial_messages(self, provider: str, accessibility_tree: str) -> list:
         tree = truncate(accessibility_tree, MAX_TREE_CHARS)
@@ -316,46 +404,31 @@ class RindlerTelemetricAgent(BaseAgent):
         rates = COST_RATES.get(self.llm_name, COST_RATES["gpt-4o-mini"])
         return (tokens_input / 1_000_000) * rates["input"] + (tokens_output / 1_000_000) * rates["output"]
 
-    async def _call_tool_with_retry(self, client, tool_name: str, tool_args: dict) -> dict:
-        """Call an MCP tool, retrying once on 401 after re-login."""
-        args = MCPToolBridge.inject_auth_token(tool_args, self._token)
-        raw = await client.call_tool(tool_name, args)
-        parsed = parse_tool_result(raw)
-        if self._is_auth_error(parsed):
-            self._token = await self._login()
-            args = MCPToolBridge.inject_auth_token(tool_args, self._token)
-            raw = await client.call_tool(tool_name, args)
-            parsed = parse_tool_result(raw)
-        return parsed
-
-    @staticmethod
-    def _is_auth_error(parsed: dict) -> bool:
-        """Check if a parsed tool result indicates an authentication failure."""
-        error = parsed.get("error", "")
-        if isinstance(error, str):
-            lower = error.lower()
-            return "401" in lower or "unauthorized" in lower or "token expired" in lower
-        return False
+    async def _call_tool(self, client, tool_name: str, tool_args: dict) -> dict:
+        """Call an MCP tool. Auth is at the SSE transport level."""
+        raw = await client.call_tool(tool_name, tool_args)
+        return parse_tool_result(raw)
 
     async def run(self, start_url=None, **kwargs):
         from mcp.client.sse import sse_client
         from mcp import ClientSession
 
         self.print_run_header(start_url)
-        self._token = await self._login()
+        self._token = await self._authenticate()
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
 
         # TODO: SSE reconnection — if the SSE connection drops mid-run,
         # re-establish sse_client and ClientSession, then resume the action loop.
         # For now, a dropped connection will raise and terminate the run.
-        async with sse_client(self.server_url + "/mcp/") as (read, write):
+        headers = {"Authorization": f"Bearer {self._token}"}
+        async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
-                parsed = await self._call_tool_with_retry(client, "browse_to_url", {"url": start_url})
+                parsed = await self._call_tool(client, "browse_to_url", {"url": start_url})
                 self._session_id = parsed.get("session_id")
                 messages = self._build_initial_messages(llm.provider, parsed.get("accessibility_tree", ""))
 
@@ -366,7 +439,7 @@ class RindlerTelemetricAgent(BaseAgent):
                             return self._build_result(llm_response.tool_args or {}, step + 1)
                         if llm_response.tool_name:
                             self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
-                            parsed = await self._call_tool_with_retry(client, llm_response.tool_name, llm_response.tool_args)
+                            parsed = await self._call_tool(client, llm_response.tool_name, llm_response.tool_args)
                             event_dict = self.log_step_end(
                                 tokens_input=llm_response.tokens_input,
                                 tokens_output=llm_response.tokens_output,
@@ -379,7 +452,7 @@ class RindlerTelemetricAgent(BaseAgent):
                 finally:
                     if self._session_id:
                         try:
-                            await client.call_tool("close_session", MCPToolBridge.inject_auth_token({"session_id": self._session_id}, self._token))
+                            await client.call_tool("close_session", {"session_id": self._session_id})
                         except Exception:
                             pass
 
