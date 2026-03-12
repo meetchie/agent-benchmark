@@ -9,6 +9,7 @@ import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -95,7 +96,6 @@ def _format_action(agent) -> str:
             else:
                 return f"{action_type.replace('_', ' ').capitalize()}"
     except Exception as e:
-        import logging
         logging.debug(f"_format_action failed: {e}")
     return "Processing..."
 
@@ -113,7 +113,6 @@ async def _take_screenshot(agent) -> Optional[str]:
         img_bytes = await page.screenshot(type="jpeg", quality=80, full_page=False)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
     except Exception as e:
-        import logging
         logging.debug(f"_take_screenshot failed: {e}")
         return None
 
@@ -198,7 +197,6 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
                 summary = str(history.final_result)[:300]
 
         except Exception as e:
-            import logging
             logging.debug(f"Success determination failed: {e}")
 
         if not summary:

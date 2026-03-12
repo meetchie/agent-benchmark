@@ -21,7 +21,7 @@ from benchmark_runner import RunState, run_benchmark
 
 
 # In-memory run state store
-_runs: dict[str, RunState] = {}
+_runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev sessions only
 
 
 @asynccontextmanager

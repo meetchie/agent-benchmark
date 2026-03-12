@@ -32,11 +32,6 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -53,3 +48,4 @@ dev = [
 
 [tool.pytest.ini_options]
 addopts = "-p no:launch_ros -p no:launch_testing -p no:launch_testing_ros -p no:ament_flake8 -p no:ament_xmllint -p no:ament_copyright -p no:ament_pep257 -p no:ament_lint"
+asyncio_mode = "auto"
