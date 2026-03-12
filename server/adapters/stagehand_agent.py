@@ -218,7 +218,3 @@ class StagehandTelemetricAgent(BaseAgent):
         
         return result
     
-    # Alias for backwards compatibility
-    async def arun(self, start_url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        """Alias for run() for backwards compatibility."""
-        return await self.run(start_url=start_url, **kwargs)

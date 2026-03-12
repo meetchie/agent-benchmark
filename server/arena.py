@@ -634,7 +634,8 @@ Examples:
         try:
             from adapters import SkyvernTelemetricAgent
             print("\n  Fetching Skyvern billing data...")
-            skyvern_billing = SkyvernTelemetricAgent.get_run_billing(
+            skyvern_billing = await asyncio.to_thread(
+                SkyvernTelemetricAgent.get_run_billing,
                 agent._task_id,
                 verbose=False
             )
@@ -642,9 +643,14 @@ Examples:
             print(f"  (Could not fetch Skyvern billing: {e})")
     
     # Run LLM judge to evaluate success
-    print("\n  🧑‍⚖️  Running judge evaluation...")
-    judge_result = run_judge(scenario, result, agent.telemetry_events)
-    print(f"  Judge verdict: {judge_result.get('verdict', 'N/A')}")
+    judge_result = {}
+    try:
+        print("\n  🧑‍⚖️  Running judge evaluation...")
+        judge_result = run_judge(scenario, result, agent.telemetry_events)
+        print(f"  Judge verdict: {judge_result.get('verdict', 'N/A')}")
+    except Exception as judge_err:
+        print(f"  ⚠️  Judge evaluation failed: {judge_err}")
+        judge_result = {"verdict": "error", "error": str(judge_err)}
     
     # Print summary and save log
     totals = print_summary(agent, result, elapsed, scenario, skyvern_billing, judge_result)
