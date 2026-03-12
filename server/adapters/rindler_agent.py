@@ -40,8 +40,8 @@ DONE_TOOL_SCHEMA = {
     "required": ["success", "message"],
 }
 
-MAX_TREE_CHARS = 4000
-MAX_RESULT_CHARS = 8000
+MAX_TREE_CHARS = 8000
+MAX_RESULT_CHARS = 12000
 
 from constants import COST_RATES
 
@@ -270,14 +270,28 @@ class RindlerTelemetricAgent(BaseAgent):
 
     async def _authenticate(self) -> str:
         """Run full OAuth 2.1 flow: discover → register → authorize → exchange."""
+        print("  🔐 OAuth 2.1 authentication starting...")
+
+        print("     ↳ Discovering OAuth endpoints...", end=" ", flush=True)
         metadata = await self._discover()
+        print("✓")
+
+        print("     ↳ Registering dynamic client...", end=" ", flush=True)
         client_id = await self._register(metadata["registration_endpoint"])
+        print(f"✓ ({client_id[:12]}...)")
+
+        print("     ↳ Authorizing (PKCE)...", end=" ", flush=True)
         auth_code = await self._authorize(
             metadata["authorization_endpoint"], client_id
         )
+        print("✓")
+
+        print("     ↳ Exchanging code for token...", end=" ", flush=True)
         access_token = await self._exchange(
             metadata["token_endpoint"], auth_code, client_id
         )
+        print("✓")
+        print("  🔐 Authentication complete.\n")
         return access_token
 
     async def _discover(self) -> dict:
@@ -286,12 +300,20 @@ class RindlerTelemetricAgent(BaseAgent):
             async with http.get(
                 f"{self.server_url}/.well-known/oauth-protected-resource"
             ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(
+                        f"OAuth discovery failed ({resp.status}). Is the Rindler server running at {self.server_url}?"
+                    )
                 resource_meta = await resp.json()
 
             as_url = resource_meta["authorization_servers"][0]
             async with http.get(
                 f"{as_url}/.well-known/oauth-authorization-server"
             ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(
+                        f"OAuth AS metadata fetch failed ({resp.status}) from {as_url}"
+                    )
                 return await resp.json()
 
     async def _register(self, registration_endpoint: str) -> str:
@@ -306,6 +328,9 @@ class RindlerTelemetricAgent(BaseAgent):
                 },
             ) as resp:
                 data = await resp.json()
+                if resp.status != 201:
+                    error = data.get("error_description", data.get("error", str(data)))
+                    raise RuntimeError(f"Client registration failed ({resp.status}): {error}")
                 return data["client_id"]
 
     async def _authorize(self, authorization_endpoint: str, client_id: str) -> str:
@@ -362,12 +387,20 @@ class RindlerTelemetricAgent(BaseAgent):
                 },
             ) as resp:
                 data = await resp.json()
+                if resp.status != 200:
+                    error = data.get("error_description", data.get("error", str(data)))
+                    raise RuntimeError(f"Token exchange failed ({resp.status}): {error}")
                 self._refresh_token = data.get("refresh_token")
                 return data["access_token"]
 
-    def _build_initial_messages(self, provider: str, accessibility_tree: str) -> list:
-        tree = truncate(accessibility_tree, MAX_TREE_CHARS)
-        content = f"Goal: {self.goal}\n\nCurrent page:\n{tree}"
+    def _build_initial_messages(self, provider: str, browse_result: dict) -> list:
+        tree = truncate(browse_result.get("accessibility_tree", ""), MAX_TREE_CHARS)
+        result_summary = json.dumps({
+            "session_id": browse_result.get("session_id"),
+            "page_title": browse_result.get("page_title"),
+            "page_url": browse_result.get("page_url"),
+        })
+        content = f"Goal: {self.goal}\n\nbrowse_to_url result:\n{result_summary}\n\nAccessibility tree:\n{tree}"
         return [{"role": "user", "content": content}]
 
     def _append_tool_exchange(self, provider: str, messages: list, llm_resp: LLMResponse, parsed_result: dict) -> list:
@@ -416,28 +449,61 @@ class RindlerTelemetricAgent(BaseAgent):
         self.print_run_header(start_url)
         self._token = await self._authenticate()
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
+        print(f"  🤖 LLM: {llm.model} ({llm.provider})")
 
         # TODO: SSE reconnection — if the SSE connection drops mid-run,
         # re-establish sse_client and ClientSession, then resume the action loop.
         # For now, a dropped connection will raise and terminate the run.
         headers = {"Authorization": f"Bearer {self._token}"}
+        print(f"  🔌 Connecting to MCP server at {self.server_url}...", flush=True)
         async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
+                tool_names = [t.name for t in mcp_tools]
+                print(f"  📦 {len(mcp_tools)} MCP tools: {', '.join(tool_names)}")
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
+                print(f"\n  ▶ browse_to_url → {start_url}", flush=True)
                 parsed = await self._call_tool(client, "browse_to_url", {"url": start_url})
                 self._session_id = parsed.get("session_id")
-                messages = self._build_initial_messages(llm.provider, parsed.get("accessibility_tree", ""))
+                page_title = parsed.get("page_title", "")
+                page_url = parsed.get("page_url", "")
+                tree_len = len(parsed.get("accessibility_tree", ""))
+                print(f"    session={self._session_id}  title=\"{page_title}\"  tree={tree_len} chars")
+                if "error" in parsed:
+                    print(f"    ⚠️  Error: {parsed['error']}")
+                messages = self._build_initial_messages(llm.provider, parsed)
 
+                print(f"\n  🏃 Action loop (max {self.max_steps} steps)")
+                print(f"  {'─' * 54}")
                 try:
                     for step in range(self.max_steps):
+                        print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
                         llm_response = await llm.call(messages, llm_tools)
                         if llm_response.tool_name == "done":
-                            return self._build_result(llm_response.tool_args or {}, step + 1)
+                            done_args = llm_response.tool_args or {}
+                            icon = "✅" if done_args.get("success") else "❌"
+                            print(f"→ done {icon}")
+                            print(f"    {done_args.get('message', '')}")
+                            return self._build_result(done_args, step + 1)
                         if llm_response.tool_name:
+                            # Show tool call with full selector visibility
+                            tool_args = llm_response.tool_args or {}
+                            selector = tool_args.get("selector", "")
+                            if selector:
+                                other_args = {k: v for k, v in tool_args.items() if k not in ("selector", "session_id", "fallbacks")}
+                                extras = f"  {other_args}" if other_args else ""
+                                fallbacks = tool_args.get("fallbacks", [])
+                                fb_str = f"  fallbacks={fallbacks}" if fallbacks else ""
+                                print(f"→ {llm_response.tool_name}")
+                                print(f"    selector: {selector}{extras}{fb_str}")
+                            else:
+                                args_preview = json.dumps(tool_args, default=str)
+                                if len(args_preview) > 120:
+                                    args_preview = args_preview[:117] + "..."
+                                print(f"→ {llm_response.tool_name}({args_preview})")
                             self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
                             parsed = await self._call_tool(client, llm_response.tool_name, llm_response.tool_args)
                             event_dict = self.log_step_end(
@@ -445,15 +511,29 @@ class RindlerTelemetricAgent(BaseAgent):
                                 tokens_output=llm_response.tokens_output,
                                 observation={"tool_result": parsed},
                             )
-                            event_dict["cost_usd"] = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            cost = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            event_dict["cost_usd"] = cost
+                            # Show result summary
+                            if "error" in parsed:
+                                print(f"    ⚠️  Error: {parsed['error']}")
+                            else:
+                                result_preview = json.dumps(parsed, default=str)
+                                if len(result_preview) > 120:
+                                    result_preview = result_preview[:117] + "..."
+                                print(f"    ← {result_preview}")
+                            print(f"    tokens: {llm_response.tokens_input:,}in/{llm_response.tokens_output:,}out  cost: ${cost:.4f}")
                             messages = self._append_tool_exchange(llm.provider, messages, llm_response, parsed)
                         else:
+                            text_preview = (llm_response.text or "")[:120]
+                            print(f"→ [text] {text_preview}")
                             messages.append({"role": "assistant", "content": llm_response.text})
                 finally:
                     if self._session_id:
+                        print(f"\n  🧹 Closing session {self._session_id}...", end=" ", flush=True)
                         try:
                             await client.call_tool("close_session", {"session_id": self._session_id})
+                            print("✓")
                         except Exception:
-                            pass
+                            print("(failed, ignoring)")
 
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)

@@ -268,18 +268,30 @@ class TestRindlerHelpers:
 
     def test_build_initial_messages_openai(self):
         agent = self._make_agent()
-        msgs = agent._build_initial_messages("openai", "<tree>button 'Add'</tree>")
+        browse_result = {
+            "session_id": "s1",
+            "page_title": "Test Page",
+            "page_url": "https://example.com",
+            "accessibility_tree": "<tree>button 'Add'</tree>",
+        }
+        msgs = agent._build_initial_messages("openai", browse_result)
         assert len(msgs) == 1
         assert msgs[0]["role"] == "user"
         assert "Buy bananas" in msgs[0]["content"]
         assert "button 'Add'" in msgs[0]["content"]
+        assert "s1" in msgs[0]["content"]
 
     def test_build_initial_messages_truncates(self):
         agent = self._make_agent()
-        long_tree = "x" * 5000
-        msgs = agent._build_initial_messages("openai", long_tree)
+        browse_result = {
+            "session_id": "s1",
+            "page_title": "Test",
+            "page_url": "https://example.com",
+            "accessibility_tree": "x" * 10000,
+        }
+        msgs = agent._build_initial_messages("openai", browse_result)
         assert "truncated" in msgs[0]["content"]
-        assert len(msgs[0]["content"]) < 5000
+        assert len(msgs[0]["content"]) < 10000
 
     def test_append_tool_exchange_openai(self):
         agent = self._make_agent()
