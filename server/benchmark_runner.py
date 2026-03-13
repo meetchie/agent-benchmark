@@ -1,8 +1,8 @@
 """
-Benchmark Runner - Runs BrowserUse agent with live step tracking and screenshots.
+Benchmark Runner - Thin UI harness around arena's BrowserUseTelemetricAgent.
 
-Manages in-memory run state, captures screenshots after each agent action,
-and provides step descriptions for the benchmark UI.
+Coordinates agent execution and LLM judge evaluation, feeding live screenshots
+and step descriptions to the benchmark UI via RunState polling.
 """
 
 import base64
@@ -11,12 +11,20 @@ from datetime import datetime
 from typing import Optional
 import logging
 import os
+import sys
 
 from dotenv import load_dotenv
 
-# Load env (OPENAI_API_KEY needed for LLM)
+# Load env
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
+
+# Ensure clean-room root is on path for adapter imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from adapters.browseruse_agent import BrowserUseTelemetricAgent
+from scenarios import create_custom_scenario
+from arena import run_judge
 
 
 @dataclass
@@ -106,9 +114,7 @@ async def _take_screenshot(agent) -> Optional[str]:
     Caps width at 1280px, JPEG quality 80 — ~50-150 KB per screenshot.
     """
     try:
-        # browser_use exposes the page via agent.browser_context
         page = await agent.browser_context.get_current_page()
-        # Set viewport to max 1280px wide before capturing
         await page.set_viewport_size({"width": 1280, "height": 800})
         img_bytes = await page.screenshot(type="jpeg", quality=80, full_page=False)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
@@ -117,96 +123,114 @@ async def _take_screenshot(agent) -> Optional[str]:
         return None
 
 
+class _BenchmarkAgent(BrowserUseTelemetricAgent):
+    """Thin subclass that adds screenshot capture for the benchmark UI.
+
+    Wraps the parent's step callbacks to also capture screenshots and
+    update RunState for live polling.
+    """
+
+    def __init__(self, state: RunState, **kwargs):
+        super().__init__(**kwargs)
+        self._bench_state = state
+        self._step_start_time = datetime.now()
+
+    async def run(self, start_url: Optional[str] = None, **kwargs) -> dict:
+        """Override to inject screenshot capture into step callbacks."""
+        import browser_use
+        import adapters.browseruse_agent as ba_mod
+
+        _OriginalAgent = ba_mod.Agent
+        bench_state = self._bench_state
+        step_start_ref = [datetime.now()]
+
+        class _ScreenshotAgent(_OriginalAgent):
+            """Intercepts browser-use Agent to add screenshot capture."""
+
+            async def run(inner_self, **run_kwargs):
+                original_on_step_start = run_kwargs.get("on_step_start")
+                original_on_step_end = run_kwargs.get("on_step_end")
+
+                async def wrapped_on_step_start(agent):
+                    step_start_ref[0] = datetime.now()
+                    if original_on_step_start:
+                        await original_on_step_start(agent)
+
+                async def wrapped_on_step_end(agent):
+                    if original_on_step_end:
+                        await original_on_step_end(agent)
+
+                    # Capture screenshot and description for UI
+                    elapsed_ms = int((datetime.now() - step_start_ref[0]).total_seconds() * 1000)
+                    description = _format_action(agent)
+                    screenshot_b64 = await _take_screenshot(agent)
+
+                    bench_state.steps.append(StepRecord(
+                        step=len(bench_state.steps) + 1,
+                        description=description,
+                        elapsed_ms=elapsed_ms,
+                        screenshot_b64=screenshot_b64,
+                    ))
+
+                run_kwargs["on_step_start"] = wrapped_on_step_start
+                run_kwargs["on_step_end"] = wrapped_on_step_end
+
+                return await super().run(**run_kwargs)
+
+        # Patch Agent in both places it's imported
+        ba_mod.Agent = _ScreenshotAgent
+        try:
+            result = await super().run(start_url=start_url, **kwargs)
+        finally:
+            ba_mod.Agent = _OriginalAgent
+
+        return result
+
+
 async def run_benchmark(state: RunState, url: str, goal: str) -> None:
     """
-    Run a BrowserUse agent for the benchmark and update state with each step.
+    Run a benchmark using arena's BrowserUseTelemetricAgent + LLM judge.
 
-    Uses a local Playwright browser (no Browserbase required).
-    Requires OPENAI_API_KEY in environment.
+    Creates the agent, captures live screenshots for the UI, then evaluates
+    with the LLM judge for a reliable pass/fail verdict.
     """
-    # Deferred import: keeps the server startable even if browser_use is not installed,
-    # and avoids import-time side effects (Playwright browser launch).
-    from browser_use import Agent
-    from browser_use.llm.models import get_llm_by_name
-
-    step_start_time: datetime = datetime.now()
     overall_start = datetime.now()
 
-    async def on_step_start(agent):
-        nonlocal step_start_time
-        step_start_time = datetime.now()
+    # Prepend target URL to the goal
+    full_goal = f"Go to {url}\n\n{goal}"
 
-    async def on_step_end(agent):
-        elapsed_ms = int((datetime.now() - step_start_time).total_seconds() * 1000)
-        description = _format_action(agent)
-        screenshot_b64 = await _take_screenshot(agent)
-
-        state.steps.append(
-            StepRecord(
-                step=len(state.steps) + 1,
-                description=description,
-                elapsed_ms=elapsed_ms,
-                screenshot_b64=screenshot_b64,
-            )
-        )
+    # Create arena agent with live screenshot support
+    agent = _BenchmarkAgent(
+        state=state,
+        run_id=state.run_id,
+        goal=full_goal,
+        lane="BENCHMARK",
+    )
 
     try:
-        llm = get_llm_by_name("openai_gpt-4o")
-
-        # Prepend the target URL to the goal so the agent navigates there first
-        full_goal = f"Go to {url}\n\n{goal}"
-
-        agent = Agent(
-            task=full_goal,
-            llm=llm,
-            # No Browserbase keys → uses local Playwright browser
-        )
-
-        history = await agent.run(
-            on_step_start=on_step_start,
-            on_step_end=on_step_end,
-        )
+        result = await agent.run()
 
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
 
-        # Determine success from agent's self-report at run end
-        success = False
-        summary = ""
-        try:
-            # Try is_successful() first (available in some browser_use versions)
-            if hasattr(history, 'is_successful') and callable(history.is_successful):
-                success = bool(history.is_successful())
-            else:
-                # Fall back: inspect the done action's success field
-                actions = history.model_actions() if hasattr(history, 'model_actions') else []
-                for action in reversed(actions):
-                    if isinstance(action, dict) and 'done' in action:
-                        done_data = action['done']
-                        if isinstance(done_data, dict):
-                            success = bool(done_data.get('success', False))
-                        break
-                    elif hasattr(action, 'done') and action.done is not None:
-                        done_action = action.done
-                        success = bool(getattr(done_action, 'success', False))
-                        break
+        # Run LLM judge for reliable pass/fail
+        scenario = create_custom_scenario(
+            goal=full_goal,
+            start_url=url,
+            name=f"benchmark-{state.run_id[:8]}",
+        )
 
-            # Get summary from final result
-            if hasattr(history, 'final_result') and callable(history.final_result):
-                result = history.final_result()
-                if result:
-                    summary = str(result)[:300]
-            elif hasattr(history, 'final_result') and history.final_result:
-                summary = str(history.final_result)[:300]
+        judge_result = run_judge(
+            scenario=scenario,
+            result=result,
+            telemetry_events=agent.telemetry_events,
+        )
 
-        except Exception as e:
-            logging.debug(f"Success determination failed: {e}")
-
-        if not summary:
-            summary = "Agent completed the task." if success else "Agent did not complete the task."
+        verdict = judge_result.get("verdict", "ERROR")
+        reason = judge_result.get("reason", "No reason provided")
 
         state.status = "complete"
-        state.success = success
-        state.summary = summary
+        state.success = verdict == "PASS"
+        state.summary = reason
         state.total_ms = total_ms
 
     except Exception as e:

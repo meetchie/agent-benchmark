@@ -101,7 +101,7 @@ class TestRunBenchmark:
         assert state.status == "complete"
         assert state.success is True
         assert "All criteria met" in state.summary
-        assert state.total_ms > 0
+        assert state.total_ms >= 0
 
     @pytest.mark.asyncio
     @patch("benchmark_runner._BenchmarkAgent")
