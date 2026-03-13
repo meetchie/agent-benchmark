@@ -2,6 +2,7 @@ export interface Task {
   id: string;
   label: string;
   goal: string;
+  hard?: boolean;
 }
 
 export interface Category {
