@@ -89,14 +89,15 @@ def _format_action(agent) -> str:
             if action_type == "go_to_url":
                 url = action_data.get("url", "") if isinstance(action_data, dict) else str(action_data)
                 return f"Navigating to {url[:60]}"
-            elif action_type in ("click_element", "click"):
+            elif action_type == "click":
                 return "Clicking element"
             elif action_type in ("input_text", "type"):
                 text = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
                 return f"Typing: {str(text)[:40]}"
             elif action_type == "scroll":
                 return "Scrolling page"
-            elif action_type == "extract_content":
+            elif action_type in ("extract_content",):
+                # extract_content kept for backward compatibility with old telemetry data
                 return "Extracting page content"
             elif action_type == "done":
                 result = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)

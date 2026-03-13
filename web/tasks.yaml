@@ -16,6 +16,7 @@ categories:
           Verify success by checking that the cart icon shows a count or an "In cart" indicator appears.
       - id: add_three_produce
         label: "Add 3 distinct produce items to cart"
+        hard: true
         goal: |
           Set delivery address to 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
           Browse the produce section and add 3 distinct items to cart.
@@ -26,6 +27,7 @@ categories:
     tasks:
       - id: pizza_order
         label: "Order half-and-half pizza with sides"
+        hard: true
         goal: |
           Order a large pizza that is half cheese, half pepperoni.
           Also add a large Diet Coke and garlic bread twists (or closest available side).
@@ -83,6 +85,7 @@ categories:
           Report the contact email address or phone number found on the page.
       - id: proceed_to_checkout
         label: "Add item to cart and proceed to checkout"
+        hard: true
         goal: |
           Find any product and add it to cart.
           Proceed to checkout (do NOT complete the purchase — stop at the checkout page).

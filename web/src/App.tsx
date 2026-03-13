@@ -13,7 +13,8 @@ import { StepLog } from "./components/StepLog";
 import { SummaryCard } from "./components/SummaryCard";
 
 const CATEGORIES: Category[] = tasksData.categories;
-const MAX_POLLS = 180;
+const MAX_POLLS_DEFAULT = 300;
+const MAX_POLLS_HARD = 600;
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
@@ -44,17 +45,19 @@ export default function App() {
   }, []);
 
   const startPolling = useCallback(
-    (runId: string) => {
+    (runId: string, hard: boolean) => {
       pollCountRef.current = 0;
       retriesRef.current = 0;
+      const maxPolls = hard ? MAX_POLLS_HARD : MAX_POLLS_DEFAULT;
+      const timeoutMin = hard ? 10 : 5;
 
       pollRef.current = setInterval(async () => {
         pollCountRef.current++;
 
-        if (pollCountRef.current > MAX_POLLS) {
+        if (pollCountRef.current > maxPolls) {
           stopPolling();
           setRunStatus("error");
-          setErrorMsg("Timed out after 3 minutes.");
+          setErrorMsg(`Timed out after ${timeoutMin} minutes.`);
           return;
         }
 
@@ -110,7 +113,7 @@ export default function App() {
 
     try {
       const { run_id } = await startBenchmark(url, selectedTask.goal);
-      startPolling(run_id);
+      startPolling(run_id, selectedTask.hard ?? false);
     } catch (e) {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");

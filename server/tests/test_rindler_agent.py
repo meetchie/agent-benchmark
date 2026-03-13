@@ -225,8 +225,8 @@ class TestLLMClient:
         tool_block = MagicMock()
         tool_block.type = "tool_use"
         tool_block.id = "toolu_xyz"
-        tool_block.name = "click_element"
-        tool_block.input = {"selector": "#submit-button"}
+        tool_block.name = "click"
+        tool_block.input = {"ref": 3}
 
         usage = MagicMock()
         usage.input_tokens = 200
@@ -245,8 +245,8 @@ class TestLLMClient:
 
         result = asyncio.run(client.call([{"role": "user", "content": "click submit"}], []))
 
-        assert result.tool_name == "click_element"
-        assert result.tool_args == {"selector": "#submit-button"}
+        assert result.tool_name == "click"
+        assert result.tool_args == {"ref": 3}
         assert result.tool_call_id == "toolu_xyz"
         assert result.text is None
         assert result.tokens_input == 200
@@ -308,7 +308,7 @@ class TestRindlerHelpers:
 
     def test_append_tool_exchange_anthropic(self):
         agent = self._make_agent()
-        resp = LLMResponse(tool_name="click_element", tool_args={"session_id": "s1", "selector": "#btn"},
+        resp = LLMResponse(tool_name="click", tool_args={"session_id": "s1", "ref": 3},
                           tool_call_id="toolu_456", text=None, tokens_input=200, tokens_output=50)
         parsed = {"session_id": "s1", "success": True}
         msgs = [{"role": "user", "content": "goal"}]
@@ -423,8 +423,8 @@ class TestRindlerIntegration:
             {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
         )
         click_tool = FakeTool(
-            "click_element", "Click",
-            {"type": "object", "properties": {"selector": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["selector", "session_id"]},
+            "click", "Click",
+            {"type": "object", "properties": {"ref": {"type": "integer"}, "session_id": {"type": "string"}}, "required": ["ref", "session_id"]},
         )
         mock_list_result = MagicMock()
         mock_list_result.tools = [browse_tool, click_tool]
@@ -440,7 +440,7 @@ class TestRindlerIntegration:
 
         # call_tool is called 3 times:
         #   1) browse_to_url  (initial page load before the loop)
-        #   2) click_element  (step 0 in the loop)
+        #   2) click  (step 0 in the loop)
         #   3) close_session  (finally block)
         call_results = [
             make_result({"session_id": "s1", "accessibility_tree": "<tree>button 'Submit'</tree>", "page_url": "https://example.com", "page_title": "Test"}),
@@ -449,11 +449,11 @@ class TestRindlerIntegration:
         ]
         mock_mcp_client.call_tool = AsyncMock(side_effect=call_results)
 
-        # Mock LLM responses: click_element then done
+        # Mock LLM responses: click then done
         llm_responses = [
             LLMResponse(
-                tool_name="click_element",
-                tool_args={"session_id": "s1", "selector": "#submit"},
+                tool_name="click",
+                tool_args={"session_id": "s1", "ref": 5},
                 tool_call_id="call_1",
                 text=None,
                 tokens_input=500,
@@ -503,10 +503,10 @@ class TestRindlerIntegration:
         assert result["message"] == "Clicked submit"
         assert result["steps"] == 2
 
-        # Telemetry: one step_end for click_element (done exits the loop early, before log)
+        # Telemetry: one step_end for click (done exits the loop early, before log)
         step_ends = [e for e in agent.telemetry_events if e.get("event_type") == "step_end"]
         assert len(step_ends) == 1
-        assert step_ends[0]["action_type"] == "click_element"
+        assert step_ends[0]["action_type"] == "click"
 
         # close_session must have been called in the finally block
         close_calls = [

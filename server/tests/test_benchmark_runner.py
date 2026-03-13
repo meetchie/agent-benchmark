@@ -66,7 +66,7 @@ class TestRunBenchmark:
         """Verify run_benchmark wires agent + judge and updates RunState."""
         mock_instance = MagicMock()
         mock_instance.telemetry_events = [
-            {"event_type": "step_start", "action_type": "click_element", "step_index": 1}
+            {"event_type": "step_start", "action_type": "click", "step_index": 1}
         ]
         mock_instance.run = AsyncMock(return_value={
             "success": True,

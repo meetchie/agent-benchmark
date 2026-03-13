@@ -489,16 +489,13 @@ class RindlerTelemetricAgent(BaseAgent):
                             print(f"    {done_args.get('message', '')}")
                             return self._build_result(done_args, step + 1)
                         if llm_response.tool_name:
-                            # Show tool call with full selector visibility
                             tool_args = llm_response.tool_args or {}
-                            selector = tool_args.get("selector", "")
-                            if selector:
-                                other_args = {k: v for k, v in tool_args.items() if k not in ("selector", "session_id", "fallbacks")}
+                            ref = tool_args.get("ref")
+                            if ref is not None:
+                                other_args = {k: v for k, v in tool_args.items() if k not in ("ref", "session_id")}
                                 extras = f"  {other_args}" if other_args else ""
-                                fallbacks = tool_args.get("fallbacks", [])
-                                fb_str = f"  fallbacks={fallbacks}" if fallbacks else ""
                                 print(f"→ {llm_response.tool_name}")
-                                print(f"    selector: {selector}{extras}{fb_str}")
+                                print(f"    ref: {ref}{extras}")
                             else:
                                 args_preview = json.dumps(tool_args, default=str)
                                 if len(args_preview) > 120:
