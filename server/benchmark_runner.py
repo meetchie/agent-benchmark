@@ -109,24 +109,21 @@ def _format_action(agent) -> str:
 
 
 async def _take_screenshot(agent) -> Optional[str]:
-    """Capture a JPEG screenshot from the current browser page.
+    """Capture a JPEG screenshot via BrowserSession.take_screenshot().
 
-    Caps width at 1280px, JPEG quality 80 — ~50-150 KB per screenshot.
-    Supports both browser_session (current browser-use) and browser_context (legacy).
+    Uses browser-use's CDP-based screenshot (not Playwright Page.screenshot).
+    JPEG quality 80 — ~50-150 KB per screenshot.
     """
     try:
-        # Current browser-use API: agent.browser_session
         if hasattr(agent, "browser_session") and agent.browser_session:
-            page = await agent.browser_session.get_current_page()
-        elif hasattr(agent, "browser_context") and agent.browser_context:
-            page = await agent.browser_context.get_current_page()
+            img_bytes = await agent.browser_session.take_screenshot(
+                format="jpeg", quality=80, full_page=False,
+            )
         else:
             return None
-        await page.set_viewport_size({"width": 1280, "height": 800})
-        img_bytes = await page.screenshot(type="jpeg", quality=80, full_page=False)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
     except Exception as e:
-        logging.debug(f"_take_screenshot failed: {e}")
+        logging.warning(f"_take_screenshot failed: {type(e).__name__}: {e}")
         return None
 
 
