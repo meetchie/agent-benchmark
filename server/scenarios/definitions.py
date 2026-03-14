@@ -48,13 +48,12 @@ def register_scenario(scenario: Scenario) -> Scenario:
 register_scenario(Scenario(
     name="shipt_add_to_cart",
     description="Set delivery address, search for product, add to cart on Shipt",
-    start_url="https://shipt.com",
+    start_url="https://shipt.com/delivery",
     tags=["e-commerce", "grocery", "cart"],
-    goal="""Go to shipt.com.
+    goal="""Go to shipt.com/delivery.
 
-1. Click "Start shopping" or "Get started" to enter the shopping experience.
-2. Set delivery address: Look for the address/location element in the top navigation bar. Click it to open the address entry, then enter: 1 Main St, Springfield, IL 62701. Select the matching autocomplete suggestion.
-3. Search for "Organic Bananas" using the search bar and add the first result to your cart. You may need to click on the product card first, then use the add-to-cart or "+" button.
+1. Set delivery address: Enter 1 Main St, Springfield, IL 62701 in the address field. Select the matching autocomplete suggestion, then click "Start shopping" or "Shop this store".
+2. Search for "Organic Bananas" using the search bar and add the first result to your cart. You may need to click on the product card first, then use the add-to-cart or "+" button.
 
 IMPORTANT - How to verify success:
 After adding to cart, look for ANY of these success indicators:
@@ -67,11 +66,11 @@ After adding to cart, look for ANY of these success indicators:
 register_scenario(Scenario(
     name="shipt_complex_cart_validation",
     description="Complex multi-item order with strict attribute and quantity logic",
-    start_url="https://shipt.com",
+    start_url="https://shipt.com/delivery",
     tags=["agentic-flow", "logic-test", "dirty-data"],
-    goal="""Go to shipt.com.
+    goal="""Go to shipt.com/delivery.
 
-1. **Setup:** Click "Start shopping" or "Get started" to enter the shopping experience. Then find the address/location element in the top navigation bar, click it, and enter: 1 Main St, Springfield, IL 62701. Select the matching autocomplete suggestion.
+1. **Setup:** Enter the delivery address: 1 Main St, Springfield, IL 62701 in the address field. Select the matching autocomplete suggestion, then click "Start shopping" or "Shop this store" to enter the shopping experience.
 
 2. **Task - Precision Search:**
    - Search for "Granny Smith Apples".
