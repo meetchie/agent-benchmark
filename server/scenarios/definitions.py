@@ -52,7 +52,7 @@ register_scenario(Scenario(
     tags=["e-commerce", "grocery", "cart"],
     goal="""Go to shipt.com/delivery.
 
-1. Set delivery address: Enter 1 Main St, Springfield, IL 62701 in the address field. Select the matching autocomplete suggestion, then click "Start shopping" or "Shop this store".
+1. Set the delivery address to 1 Main St, Springfield, IL 62701. Then click "Start shopping" or "Shop this store".
 2. Search for "Organic Bananas" using the search bar and add the first result to your cart. You may need to click on the product card first, then use the add-to-cart or "+" button.
 
 IMPORTANT - How to verify success:
@@ -70,7 +70,7 @@ register_scenario(Scenario(
     tags=["agentic-flow", "logic-test", "dirty-data"],
     goal="""Go to shipt.com/delivery.
 
-1. **Setup:** Enter the delivery address: 1 Main St, Springfield, IL 62701 in the address field. Select the matching autocomplete suggestion, then click "Start shopping" or "Shop this store" to enter the shopping experience.
+1. **Setup:** Set the delivery address to 1 Main St, Springfield, IL 62701. Then click "Start shopping" or "Shop this store" to enter the shopping experience.
 
 2. **Task - Precision Search:**
    - Search for "Granny Smith Apples".
