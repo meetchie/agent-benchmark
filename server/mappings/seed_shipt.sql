@@ -472,3 +472,99 @@ ON CONFLICT (id) DO UPDATE SET
   definition = EXCLUDED.definition,
   version = schemas.version + 1;
 
+-- 4. Semantic terminal site config for Shipt
+-- Note: selectors are placeholders — update with actual Shipt selectors during site mapping.
+INSERT INTO site_configs (site_id, domain, config, version) VALUES (
+    'ae3c7e30-1e14-5a53-8f78-471b1367e022',
+    'shipt.com',
+    '{
+        "site_id": "shipt",
+        "domain": "shipt.com",
+        "screens": {
+            "landing": {
+                "url_pattern": "shipt\\.com/$",
+                "parent_screen": null,
+                "extraction": {},
+                "available_actions": ["search_products", "view_cart", "update_address", "checkout"]
+            },
+            "search_results": {
+                "url_pattern": "shipt\\.com/shop/search",
+                "parent_screen": "landing",
+                "extraction": {
+                    "results": {
+                        "container": "[data-testid=''product-grid'']",
+                        "item": "[data-testid=''product-card'']",
+                        "fields": {
+                            "name": ".product-name",
+                            "price": ".product-price"
+                        },
+                        "validation": {"min_results": 0}
+                    }
+                },
+                "available_actions": ["add_to_cart", "view_product", "next_page", "prev_page", "go_back"]
+            },
+            "product_detail": {
+                "url_pattern": "shipt\\.com/shop/product",
+                "parent_screen": "search_results",
+                "extraction": {},
+                "available_actions": ["add_to_cart", "go_back"]
+            },
+            "cart": {
+                "url_pattern": "shipt\\.com/cart",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["remove_from_cart", "update_quantity", "go_back"]
+            },
+            "address": {
+                "url_pattern": "shipt\\.com/delivery",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["set_address", "go_back"]
+            },
+            "checkout": {
+                "url_pattern": "shipt\\.com/checkout",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["select_delivery_window", "apply_promo", "place_order", "go_back"]
+            },
+            "order_confirmation": {
+                "url_pattern": "shipt\\.com/order-confirmation",
+                "parent_screen": null,
+                "extraction": {},
+                "available_actions": []
+            }
+        },
+        "actions": {
+            "search_products": {
+                "params": {"query": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click", "selector": "[data-testid=''search-input'']"},
+                    {"action": "type", "selector": "[data-testid=''search-input'']", "value": "{{query}}"},
+                    {"action": "click", "selector": "[data-testid=''search-submit'']"},
+                    {"action": "wait", "strategy": "network_idle"}
+                ],
+                "target_screen": "search_results"
+            },
+            "update_address": {
+                "steps": [
+                    {"action": "navigate", "url": "https://www.shipt.com/delivery"}
+                ],
+                "target_screen": "address"
+            }
+        },
+        "context_extractors": {
+            "cart": {
+                "steps": [
+                    {"action": "extract", "selector": "[data-testid=''cart-count'']", "field": "items"},
+                    {"action": "extract", "selector": "[data-testid=''cart-total'']", "field": "total"}
+                ]
+            },
+            "address": {
+                "steps": [
+                    {"action": "extract", "selector": "[data-testid=''delivery-address'']", "field": "address"}
+                ]
+            }
+        }
+    }'::jsonb,
+    1
+) ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version, updated_at = NOW();
