@@ -48,53 +48,48 @@ def register_scenario(scenario: Scenario) -> Scenario:
 register_scenario(Scenario(
     name="shipt_add_to_cart",
     description="Set delivery address, search for product, add to cart on Shipt",
-    start_url="https://shipt.com/delivery",
+    start_url="https://shipt.com",
     tags=["e-commerce", "grocery", "cart"],
-    goal="""Go to shipt.com/delivery.
+    goal="""You are shopping on Shipt using Rindler's semantic commerce tools.
 
-1. Set the delivery address to 1 Main St, Springfield, IL 62701. Then click "Start shopping" or "Shop this store".
-2. Search for "Organic Bananas" using the search bar and add the first result to your cart. You may need to click on the product card first, then use the add-to-cart or "+" button.
+1. Start a session on shipt.com using start_session.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address or set_address.
+3. Search for "Organic Bananas" using search_products.
+4. Add the first result to your cart using add_to_cart.
+5. Verify the cart has the item by calling view_cart.
 
-IMPORTANT - How to verify success:
-After adding to cart, look for ANY of these success indicators:
-1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
-2. The cart icon in the top-right shows a number badge (like "1")
-3. A toast/notification appears saying the item was added
-"""
+Report the cart contents when done."""
 ))
 
 register_scenario(Scenario(
     name="shipt_complex_cart_validation",
     description="Complex multi-item order with strict attribute and quantity logic",
-    start_url="https://shipt.com/delivery",
+    start_url="https://shipt.com",
     tags=["agentic-flow", "logic-test", "dirty-data"],
-    goal="""Go to shipt.com/delivery.
+    goal="""You are shopping on Shipt using Rindler's semantic commerce tools.
 
-1. **Setup:** Set the delivery address to 1 Main St, Springfield, IL 62701. Then click "Start shopping" or "Shop this store" to enter the shopping experience.
+1. Start a session on shipt.com using start_session.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address.
 
-2. **Task - Precision Search:**
-   - Search for "Granny Smith Apples".
-   - CRITICAL: Do NOT add the first result blindly. Find a loose individual apple (not a pre-bagged item) and add exactly **6 individual apples**.
-   - Note: If the site uses "lbs" instead of count, estimate 0.5 lbs per apple and add 3 lbs.
+3. Search for "Granny Smith Apples" using search_products.
+   - Find a loose individual apple (not pre-bagged) and add exactly 6 individual apples (or ~3 lbs if sold by weight).
 
-3. **Task - Ambiguity Resolution:**
-   - Search for "Milk".
-   - Find a "Gallon of Whole Milk" that is explicitly **NOT Organic**.
+4. Search for "Milk" using search_products.
+   - Find a gallon of Whole Milk that is NOT Organic.
    - Add 1 to cart.
 
-4. **Task - Cross-Category Search:**
-   - Search for "Advil" (Brand search).
-   - Verify the result is actually "Ibuprofen" and represents a "Tablet" or "Caplet" form (avoid liquid gels if possible).
-   - Add the smallest pack size available (e.g., 20 or 50 count).
+5. Search for "Advil" using search_products.
+   - Verify the result is Ibuprofen in tablet/caplet form (avoid liquid gels).
+   - Add the smallest pack size available.
 
-5. **Verification:**
-   - Go to checkout/cart view.
-   - Verify that the Apple count is 6 (or ~3lbs).
-   - Verify the Milk is strictly "Whole" and standard (not organic).
-   - Verify the total cart item count is 3 unique products.
+6. Call view_cart to verify:
+   - Cart contains 3 unique products
+   - Apple count is 6 (or ~3 lbs)
+   - Milk is Whole and NOT Organic
+   - Advil is in tablet/caplet form
 """,
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. Cart contains exactly 3 UNIQUE products (not 3 total items, but 3 different products)
+1. Cart contains exactly 3 UNIQUE products
 2. Cart contains Granny Smith Apples - either 6 individual apples OR approximately 3 lbs
 3. Cart contains a gallon of WHOLE milk that is NOT organic
 4. Cart contains Advil (Ibuprofen) in tablet or caplet form (smallest available pack size)
@@ -102,8 +97,7 @@ register_scenario(Scenario(
 The task FAILS if:
 - Any of the 3 products are missing from the cart
 - The milk is organic
-- The apple quantity is wrong (not 6 / not ~3lbs)
-- The agent hit rate limits and could not complete verification
+- The apple quantity is wrong
 - The cart verification shows fewer than 3 distinct products"""
 ))
 
