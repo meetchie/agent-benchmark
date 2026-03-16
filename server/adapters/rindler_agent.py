@@ -21,15 +21,23 @@ except ImportError:
 # Constants
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are a web automation agent. You interact with websites by calling tools.
-After each tool call, you receive the page's accessibility tree showing all
-visible elements. Use this to decide your next action.
+SYSTEM_PROMPT = """You are a commerce automation agent. You interact with shopping sites through Rindler's semantic tools — you do NOT have access to raw HTML, CSS selectors, or page elements.
+
+Every tool response returns structured JSON with:
+- "screen": which screen you're on (e.g., "landing", "search_results", "cart")
+- "context": persistent state (cart contents, delivery address)
+- "data": screen-specific information (product lists, cart items, etc.)
+- "available_actions": actions valid on the current screen
+- "global_actions": actions always available
+
+RULES:
+- Call start_session(url) first to begin. It returns a session_id you must pass to all subsequent calls.
+- Only call actions listed in available_actions or global_actions.
+- Item IDs for add_to_cart, view_product, etc. come from the data field.
+- Do NOT try to construct URLs, CSS selectors, or reference page elements.
 
 When you have completed the goal (or determined it cannot be completed),
-call the "done" tool with {success: true/false, message: "explanation"}.
-
-Be efficient — prefer site-specific tools (like shipt_fill_address) over
-manual element selection when available."""
+call the "done" tool with {success: true/false, message: "explanation"}."""
 
 DONE_TOOL_SCHEMA = {
     "type": "object",
@@ -140,10 +148,9 @@ def parse_tool_result(result) -> dict:
 
 
 def truncate(text: str, max_chars: int) -> str:
-    """Truncate text with an informative suffix."""
     if len(text) <= max_chars:
         return text
-    return text[:max_chars] + "\n... [truncated, use get_page_state for full tree]"
+    return text[:max_chars] + "\n... [truncated]"
 
 
 # ---------------------------------------------------------------------------
@@ -393,14 +400,21 @@ class RindlerTelemetricAgent(BaseAgent):
                 self._refresh_token = data.get("refresh_token")
                 return data["access_token"]
 
-    def _build_initial_messages(self, provider: str, browse_result: dict) -> list:
-        tree = truncate(browse_result.get("accessibility_tree", ""), MAX_TREE_CHARS)
-        result_summary = json.dumps({
-            "session_id": browse_result.get("session_id"),
-            "page_title": browse_result.get("page_title"),
-            "page_url": browse_result.get("page_url"),
-        })
-        content = f"Goal: {self.goal}\n\nbrowse_to_url result:\n{result_summary}\n\nAccessibility tree:\n{tree}"
+    def _build_initial_messages(self, provider: str, start_result: dict) -> list:
+        session_id = start_result.get("data", {}).get("session_id", "")
+        screen = start_result.get("screen", "unknown")
+        context = json.dumps(start_result.get("context", {}), indent=2)
+        available = start_result.get("available_actions", [])
+        global_actions = start_result.get("global_actions", [])
+
+        content = (
+            f"Goal: {self.goal}\n\n"
+            f"Session started. session_id: {session_id}\n"
+            f"Screen: {screen}\n"
+            f"Context: {context}\n"
+            f"Available actions: {', '.join(available)}\n"
+            f"Global actions: {', '.join(global_actions)}"
+        )
         return [{"role": "user", "content": content}]
 
     def _append_tool_exchange(self, provider: str, messages: list, llm_resp: LLMResponse, parsed_result: dict) -> list:
@@ -442,7 +456,47 @@ class RindlerTelemetricAgent(BaseAgent):
         raw = await client.call_tool(tool_name, tool_args)
         return parse_tool_result(raw)
 
+    def _print_terminal_state(self, parsed: dict):
+        """Print a rich summary of a terminal response."""
+        screen = parsed.get("screen", "")
+        if screen:
+            print(f"    📍 Screen: {screen}")
+
+        ctx = parsed.get("context", {})
+        if ctx:
+            cart = ctx.get("cart")
+            address = ctx.get("address")
+            if cart:
+                items = cart.get("items", "?")
+                total = cart.get("total", "?")
+                print(f"    🛒 Cart: {items} items ({total})")
+            if address:
+                addr_str = address if isinstance(address, str) else json.dumps(address)
+                print(f"    📫 Address: {addr_str}")
+
+        data = parsed.get("data")
+        if data and isinstance(data, dict):
+            # Show session_id if present (from start_session)
+            if "session_id" in data:
+                pass  # Already shown above
+            # Show search results summary
+            results = data.get("results")
+            if results and isinstance(results, list):
+                print(f"    📋 {len(results)} results:")
+                for r in results[:5]:  # Show first 5
+                    name = r.get("name", "?")
+                    price = r.get("price", "")
+                    item_id = r.get("id", "")
+                    print(f"       [{item_id}] {name} — {price}")
+                if len(results) > 5:
+                    print(f"       ... and {len(results) - 5} more")
+
+        available = parsed.get("available_actions", [])
+        if available:
+            print(f"    ▸ Actions: {', '.join(available)}")
+
     async def run(self, start_url=None, **kwargs):
+        import time
         from mcp.client.sse import sse_client
         from mcp import ClientSession
 
@@ -451,9 +505,6 @@ class RindlerTelemetricAgent(BaseAgent):
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
         print(f"  🤖 LLM: {llm.model} ({llm.provider})")
 
-        # TODO: SSE reconnection — if the SSE connection drops mid-run,
-        # re-establish sse_client and ClientSession, then resume the action loop.
-        # For now, a dropped connection will raise and terminate the run.
         headers = {"Authorization": f"Bearer {self._token}"}
         print(f"  🔌 Connecting to MCP server at {self.server_url}...", flush=True)
         async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
@@ -461,76 +512,86 @@ class RindlerTelemetricAgent(BaseAgent):
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
                 tool_names = [t.name for t in mcp_tools]
-                print(f"  📦 {len(mcp_tools)} MCP tools: {', '.join(tool_names)}")
+                print(f"  📦 {len(mcp_tools)} MCP tools: {', '.join(sorted(tool_names))}")
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
-                print(f"\n  ▶ browse_to_url → {start_url}", flush=True)
-                parsed = await self._call_tool(client, "browse_to_url", {"url": start_url})
-                self._session_id = parsed.get("session_id")
-                page_title = parsed.get("page_title", "")
-                page_url = parsed.get("page_url", "")
-                tree_len = len(parsed.get("accessibility_tree", ""))
-                print(f"    session={self._session_id}  title=\"{page_title}\"  tree={tree_len} chars")
+                # Start session
+                print(f"\n  ▶ start_session → {start_url}", flush=True)
+                t0 = time.monotonic()
+                parsed = await self._call_tool(client, "start_session", {"url": start_url})
+                elapsed = time.monotonic() - t0
+                self._session_id = parsed.get("data", {}).get("session_id", "")
+                screen = parsed.get("screen", "unknown")
+                print(f"    session={self._session_id}  screen={screen}  ({elapsed:.1f}s)")
                 if "error" in parsed:
                     print(f"    ⚠️  Error: {parsed['error']}")
+                self._print_terminal_state(parsed)
                 messages = self._build_initial_messages(llm.provider, parsed)
 
                 print(f"\n  🏃 Action loop (max {self.max_steps} steps)")
-                print(f"  {'─' * 54}")
+                print(f"  {'─' * 60}")
+                cumulative_cost = 0.0
                 try:
                     for step in range(self.max_steps):
                         print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
                         llm_response = await llm.call(messages, llm_tools)
+
                         if llm_response.tool_name == "done":
                             done_args = llm_response.tool_args or {}
                             icon = "✅" if done_args.get("success") else "❌"
                             print(f"→ done {icon}")
                             print(f"    {done_args.get('message', '')}")
+                            print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
                             return self._build_result(done_args, step + 1)
+
                         if llm_response.tool_name:
                             tool_args = llm_response.tool_args or {}
-                            ref = tool_args.get("ref")
-                            if ref is not None:
-                                other_args = {k: v for k, v in tool_args.items() if k not in ("ref", "session_id")}
-                                extras = f"  {other_args}" if other_args else ""
-                                print(f"→ {llm_response.tool_name}")
-                                print(f"    ref: {ref}{extras}")
+
+                            # Auto-inject session_id
+                            if self._session_id and "session_id" not in tool_args and llm_response.tool_name != "start_session":
+                                tool_args["session_id"] = self._session_id
+
+                            # Display tool call
+                            display_args = {k: v for k, v in tool_args.items() if k != "session_id"}
+                            if display_args:
+                                print(f"→ {llm_response.tool_name}({json.dumps(display_args, default=str)})")
                             else:
-                                args_preview = json.dumps(tool_args, default=str)
-                                if len(args_preview) > 120:
-                                    args_preview = args_preview[:117] + "..."
-                                print(f"→ {llm_response.tool_name}({args_preview})")
-                            self.log_step_start(action_type=llm_response.tool_name, action_data=llm_response.tool_args)
-                            parsed = await self._call_tool(client, llm_response.tool_name, llm_response.tool_args)
+                                print(f"→ {llm_response.tool_name}()")
+
+                            self.log_step_start(action_type=llm_response.tool_name, action_data=tool_args)
+                            t0 = time.monotonic()
+                            parsed = await self._call_tool(client, llm_response.tool_name, tool_args)
+                            elapsed = time.monotonic() - t0
+
                             event_dict = self.log_step_end(
                                 tokens_input=llm_response.tokens_input,
                                 tokens_output=llm_response.tokens_output,
                                 observation={"tool_result": parsed},
                             )
                             cost = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
+                            cumulative_cost += cost
                             event_dict["cost_usd"] = cost
-                            # Show result summary
+
+                            # Rich result display
                             if "error" in parsed:
-                                print(f"    ⚠️  Error: {parsed['error']}")
+                                err = parsed["error"]
+                                if isinstance(err, dict):
+                                    print(f"    ⚠️  [{err.get('code', 'error')}] {err.get('message', '')}")
+                                else:
+                                    print(f"    ⚠️  {err}")
                             else:
-                                result_preview = json.dumps(parsed, default=str)
-                                if len(result_preview) > 120:
-                                    result_preview = result_preview[:117] + "..."
-                                print(f"    ← {result_preview}")
-                            print(f"    tokens: {llm_response.tokens_input:,}in/{llm_response.tokens_output:,}out  cost: ${cost:.4f}")
+                                self._print_terminal_state(parsed)
+
+                            print(f"    ⏱  {elapsed:.1f}s | tokens: {llm_response.tokens_input:,}in/{llm_response.tokens_output:,}out | cost: ${cost:.4f} (total: ${cumulative_cost:.4f})")
+
                             messages = self._append_tool_exchange(llm.provider, messages, llm_response, parsed)
                         else:
-                            text_preview = (llm_response.text or "")[:120]
-                            print(f"→ [text] {text_preview}")
+                            text_preview = (llm_response.text or "")[:200]
+                            print(f"→ [thinking] {text_preview}")
                             messages.append({"role": "assistant", "content": llm_response.text})
                 finally:
-                    if self._session_id:
-                        print(f"\n  🧹 Closing session {self._session_id}...", end=" ", flush=True)
-                        try:
-                            await client.call_tool("close_session", {"session_id": self._session_id})
-                            print("✓")
-                        except Exception:
-                            print("(failed, ignoring)")
+                    pass  # Sessions auto-expire; no close_session needed
 
+        print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)

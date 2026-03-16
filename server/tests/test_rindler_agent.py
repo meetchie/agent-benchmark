@@ -33,15 +33,15 @@ class TestMCPToolBridge:
 
     def _sample_tool(self):
         return FakeTool(
-            name="browse_to_url",
-            description="Navigate a browser to a URL",
+            name="search_products",
+            description="Search for products by keyword",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "The URL"},
-                    "session_id": {"type": "string", "description": "Session ID"},
+                    "session_id": {"type": "string"},
+                    "query": {"type": "string"},
                 },
-                "required": ["url"],
+                "required": ["query"],
             },
         )
 
@@ -50,19 +50,19 @@ class TestMCPToolBridge:
         assert len(tools) == 1
         t = tools[0]
         assert t["type"] == "function"
-        assert t["function"]["name"] == "browse_to_url"
-        assert t["function"]["description"] == "Navigate a browser to a URL"
+        assert t["function"]["name"] == "search_products"
+        assert t["function"]["description"] == "Search for products by keyword"
         assert t["function"]["parameters"]["type"] == "object"
-        assert "url" in t["function"]["parameters"]["properties"]
+        assert "query" in t["function"]["parameters"]["properties"]
 
     def test_to_anthropic_format(self):
         tools = MCPToolBridge.mcp_tools_to_llm_tools([self._sample_tool()], "anthropic")
         assert len(tools) == 1
         t = tools[0]
-        assert t["name"] == "browse_to_url"
-        assert t["description"] == "Navigate a browser to a URL"
+        assert t["name"] == "search_products"
+        assert t["description"] == "Search for products by keyword"
         assert t["input_schema"]["type"] == "object"
-        assert "url" in t["input_schema"]["properties"]
+        assert "query" in t["input_schema"]["properties"]
 
     def test_inject_done_tool_openai(self):
         tools = MCPToolBridge.inject_done_tool([], "openai")
@@ -151,7 +151,7 @@ class TestLLMClient:
         # Build a mock OpenAI response with a tool call
         tool_call = MagicMock()
         tool_call.id = "call_abc123"
-        tool_call.function.name = "browse_to_url"
+        tool_call.function.name = "search_products"
         tool_call.function.arguments = json.dumps({"url": "https://example.com"})
 
         message = MagicMock()
@@ -175,7 +175,7 @@ class TestLLMClient:
 
         result = asyncio.run(client.call([{"role": "user", "content": "go"}], []))
 
-        assert result.tool_name == "browse_to_url"
+        assert result.tool_name == "search_products"
         assert result.tool_args == {"url": "https://example.com"}
         assert result.tool_call_id == "call_abc123"
         assert result.text is None
@@ -268,36 +268,38 @@ class TestRindlerHelpers:
 
     def test_build_initial_messages_openai(self):
         agent = self._make_agent()
-        browse_result = {
-            "session_id": "s1",
-            "page_title": "Test Page",
-            "page_url": "https://example.com",
-            "accessibility_tree": "<tree>button 'Add'</tree>",
+        start_result = {
+            "screen": "landing",
+            "context": {"cart": None, "address": None},
+            "data": {"session_id": "s1"},
+            "available_actions": ["search_products"],
+            "global_actions": ["view_cart", "checkout"],
         }
-        msgs = agent._build_initial_messages("openai", browse_result)
+        msgs = agent._build_initial_messages("openai", start_result)
         assert len(msgs) == 1
         assert msgs[0]["role"] == "user"
         assert "Buy bananas" in msgs[0]["content"]
-        assert "button 'Add'" in msgs[0]["content"]
         assert "s1" in msgs[0]["content"]
+        assert "landing" in msgs[0]["content"]
 
-    def test_build_initial_messages_truncates(self):
+    def test_build_initial_messages_includes_actions(self):
         agent = self._make_agent()
-        browse_result = {
-            "session_id": "s1",
-            "page_title": "Test",
-            "page_url": "https://example.com",
-            "accessibility_tree": "x" * 10000,
+        start_result = {
+            "screen": "landing",
+            "context": {},
+            "data": {"session_id": "s1"},
+            "available_actions": ["search_products", "view_cart"],
+            "global_actions": ["checkout"],
         }
-        msgs = agent._build_initial_messages("openai", browse_result)
-        assert "truncated" in msgs[0]["content"]
-        assert len(msgs[0]["content"]) < 10000
+        msgs = agent._build_initial_messages("openai", start_result)
+        assert "search_products" in msgs[0]["content"]
+        assert "view_cart" in msgs[0]["content"]
 
     def test_append_tool_exchange_openai(self):
         agent = self._make_agent()
-        resp = LLMResponse(tool_name="browse_to_url", tool_args={"url": "https://example.com"},
+        resp = LLMResponse(tool_name="search_products", tool_args={"session_id": "s1", "query": "bananas"},
                           tool_call_id="call_123", text=None, tokens_input=100, tokens_output=25)
-        parsed = {"session_id": "s1", "accessibility_tree": "<tree/>"}
+        parsed = {"screen": "search_results", "data": {"results": []}}
         msgs = [{"role": "user", "content": "goal"}]
         result = agent._append_tool_exchange("openai", msgs, resp, parsed)
         assert len(result) == 3
@@ -308,9 +310,9 @@ class TestRindlerHelpers:
 
     def test_append_tool_exchange_anthropic(self):
         agent = self._make_agent()
-        resp = LLMResponse(tool_name="click", tool_args={"session_id": "s1", "ref": 3},
+        resp = LLMResponse(tool_name="add_to_cart", tool_args={"session_id": "s1", "item": 1},
                           tool_call_id="toolu_456", text=None, tokens_input=200, tokens_output=50)
-        parsed = {"session_id": "s1", "success": True}
+        parsed = {"screen": "search_results", "context": {"cart": {"items": 1}}}
         msgs = [{"role": "user", "content": "goal"}]
         result = agent._append_tool_exchange("anthropic", msgs, resp, parsed)
         assert len(result) == 3
@@ -373,10 +375,9 @@ class TestRindlerIntegration:
         monkeypatch.setenv("RINDLER_SERVER_URL", "http://localhost:8080")
         monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
-        # Create agent bypassing __init__ (BaseAgent == object in test context)
         agent = object.__new__(RindlerTelemetricAgent)
         agent.run_id = "r1"
-        agent.goal = "Click the button"
+        agent.goal = "Search for bananas"
         agent.lane = "RINDLER"
         agent.server_url = "http://localhost:8080"
         agent.llm_name = "gpt-4o-mini"
@@ -391,7 +392,6 @@ class TestRindlerIntegration:
         agent._current_step_index = 0
         agent._current_action_type = None
 
-        # Stub telemetry methods that would come from BaseAgent
         agent.print_run_header = lambda *a, **kw: None
 
         def mock_log_step_start(action_type=None, action_data=None):
@@ -411,23 +411,21 @@ class TestRindlerIntegration:
         agent.log_step_start = mock_log_step_start
         agent.log_step_end = mock_log_step_end
 
-        # Mock _authenticate to skip HTTP
         agent._authenticate = AsyncMock(return_value="jwt-test-token")
 
-        # Build mock MCP client
         mock_mcp_client = MagicMock()
         mock_mcp_client.initialize = AsyncMock()
 
-        browse_tool = FakeTool(
-            "browse_to_url", "Navigate",
+        start_tool = FakeTool(
+            "start_session", "Start a session",
             {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
         )
-        click_tool = FakeTool(
-            "click", "Click",
-            {"type": "object", "properties": {"ref": {"type": "integer"}, "session_id": {"type": "string"}}, "required": ["ref", "session_id"]},
+        search_tool = FakeTool(
+            "search_products", "Search products",
+            {"type": "object", "properties": {"session_id": {"type": "string"}, "query": {"type": "string"}}, "required": ["query"]},
         )
         mock_list_result = MagicMock()
-        mock_list_result.tools = [browse_tool, click_tool]
+        mock_list_result.tools = [start_tool, search_tool]
         mock_mcp_client.list_tools = AsyncMock(return_value=mock_list_result)
 
         def make_result(data):
@@ -438,22 +436,30 @@ class TestRindlerIntegration:
             r.isError = False
             return r
 
-        # call_tool is called 3 times:
-        #   1) browse_to_url  (initial page load before the loop)
-        #   2) click  (step 0 in the loop)
-        #   3) close_session  (finally block)
         call_results = [
-            make_result({"session_id": "s1", "accessibility_tree": "<tree>button 'Submit'</tree>", "page_url": "https://example.com", "page_title": "Test"}),
-            make_result({"session_id": "s1", "accessibility_tree": "<tree>text 'Success!'</tree>", "success": True, "strategy_used": "css"}),
-            make_result({"success": True}),  # close_session
+            # start_session
+            make_result({
+                "screen": "landing",
+                "context": {"cart": None, "address": None},
+                "data": {"session_id": "s1"},
+                "available_actions": ["search_products"],
+                "global_actions": ["view_cart", "checkout"],
+            }),
+            # search_products (from LLM)
+            make_result({
+                "screen": "search_results",
+                "context": {"cart": {"items": 0, "total": "$0.00"}, "address": None},
+                "data": {"query": "bananas", "results": [{"id": 1, "name": "Organic Bananas", "price": "$1.29"}]},
+                "available_actions": ["add_to_cart", "go_back"],
+                "global_actions": ["view_cart", "checkout"],
+            }),
         ]
         mock_mcp_client.call_tool = AsyncMock(side_effect=call_results)
 
-        # Mock LLM responses: click then done
         llm_responses = [
             LLMResponse(
-                tool_name="click",
-                tool_args={"session_id": "s1", "ref": 5},
+                tool_name="search_products",
+                tool_args={"query": "bananas"},
                 tool_call_id="call_1",
                 text=None,
                 tokens_input=500,
@@ -461,7 +467,7 @@ class TestRindlerIntegration:
             ),
             LLMResponse(
                 tool_name="done",
-                tool_args={"success": True, "message": "Clicked submit"},
+                tool_args={"success": True, "message": "Found bananas"},
                 tool_call_id="call_2",
                 text=None,
                 tokens_input=600,
@@ -471,23 +477,20 @@ class TestRindlerIntegration:
 
         mock_llm = MagicMock()
         mock_llm.provider = "openai"
+        mock_llm.model = "gpt-4o-mini"
         mock_llm.call = AsyncMock(side_effect=llm_responses)
 
-        # Async context managers for sse_client and ClientSession
         class MockSSEContext:
             async def __aenter__(self):
                 return (MagicMock(), MagicMock())
-
             async def __aexit__(self, *args):
                 pass
 
         class MockClientSessionContext:
             def __init__(self, *args, **kwargs):
                 pass
-
             async def __aenter__(self):
                 return mock_mcp_client
-
             async def __aexit__(self, *args):
                 pass
 
@@ -497,21 +500,25 @@ class TestRindlerIntegration:
         with patch.object(_mod, "LLMClient", return_value=mock_llm):
             with patch.object(mcp.client.sse, "sse_client", return_value=MockSSEContext()):
                 with patch.object(mcp, "ClientSession", MockClientSessionContext):
-                    result = await agent.run(start_url="https://example.com")
+                    result = await agent.run(start_url="https://shipt.com")
 
         assert result["success"] is True
-        assert result["message"] == "Clicked submit"
+        assert result["message"] == "Found bananas"
         assert result["steps"] == 2
 
-        # Telemetry: one step_end for click (done exits the loop early, before log)
+        # Telemetry: one step_end for search_products
         step_ends = [e for e in agent.telemetry_events if e.get("event_type") == "step_end"]
         assert len(step_ends) == 1
-        assert step_ends[0]["action_type"] == "click"
+        assert step_ends[0]["action_type"] == "search_products"
 
-        # close_session must have been called in the finally block
+        # No close_session calls (sessions auto-expire)
         close_calls = [
             c for c in mock_mcp_client.call_tool.call_args_list
             if c[0][0] == "close_session"
         ]
-        assert len(close_calls) == 1
+        assert len(close_calls) == 0
+
+        # session_id should have been auto-injected
+        search_call = mock_mcp_client.call_tool.call_args_list[1]
+        assert search_call[0][1].get("session_id") == "s1"
 
