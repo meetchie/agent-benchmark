@@ -516,6 +516,8 @@ class RindlerTelemetricAgent(BaseAgent):
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
+                cumulative_cost = 0.0
+
                 # Start session
                 print(f"\n  ▶ start_session → {start_url}", flush=True)
                 t0 = time.monotonic()
@@ -531,7 +533,6 @@ class RindlerTelemetricAgent(BaseAgent):
 
                 print(f"\n  🏃 Action loop (max {self.max_steps} steps)")
                 print(f"  {'─' * 60}")
-                cumulative_cost = 0.0
                 try:
                     for step in range(self.max_steps):
                         print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
