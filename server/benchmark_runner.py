@@ -133,6 +133,10 @@ class _BenchmarkAgent(BrowserUseTelemetricAgent):
 
     Wraps the parent's step callbacks to also capture screenshots and
     update RunState for live polling.
+
+    TODO: The benchmark runner currently only supports BrowserUse. It should
+    be extended to support all arena agents (Steel, Skyvern, Stagehand, Rindler)
+    so the benchmark UI can compare agents side-by-side.
     """
 
     def __init__(self, state: RunState, **kwargs):
