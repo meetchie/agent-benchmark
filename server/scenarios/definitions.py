@@ -83,7 +83,8 @@ register_scenario(Scenario(
 2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address.
 
 3. Search for "Granny Smith Apples" using search_products.
-   - Find a loose individual apple (not pre-bagged) and add exactly 6 individual apples (or ~3 lbs if sold by weight).
+   - PREFERRED: Find loose individual Granny Smith apples and add 6.
+   - ACCEPTABLE SUBSTITUTE: If loose apples are not available, a pre-bagged option totaling approximately 3 lbs (e.g., a 3lb bag) is an acceptable alternative. Do NOT give up if you only see bags — add the ~3lb bag instead.
 
 4. Search for "Milk" using search_products.
    - Find a gallon of Whole Milk that is NOT Organic.

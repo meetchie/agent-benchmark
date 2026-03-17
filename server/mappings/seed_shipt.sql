@@ -554,21 +554,33 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                     {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']",
                      "fallbacks": [
                         {"type": "css", "selector": "button[aria-label*=''Increase''][aria-label*=''{{item}}'']"},
-                        {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"},
-                        {"type": "css", "selector": "button[aria-label*=''{{item}}''] + button, button[aria-label*=''+'']"}
+                        {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"}
                      ]},
-                    {"action": "wait",   "strategy": "delay", "timeout": 1000, "optional": true},
-                    {"action": "click",  "selector": "button:has-text(''Add to cart'')", "optional": true,
+                    {"action": "wait",   "strategy": "delay", "timeout": 1500, "optional": true},
+                    {"action": "click",  "selector": "[role=''dialog''] button:has-text(''Add to cart'')", "optional": true,
                      "fallbacks": [
-                        {"type": "css", "selector": "[role=''dialog''] button:has-text(''Add to cart'')"},
+                        {"type": "css", "selector": "div[class*=''modal''] button:has-text(''Add to cart'')"},
                         {"type": "text", "selector": "Add to cart"}
+                     ]},
+                    {"action": "wait",   "strategy": "delay", "timeout": 500, "optional": true},
+                    {"action": "click",  "selector": "[role=''dialog''] button[aria-label*=''Close'']", "optional": true,
+                     "fallbacks": [
+                        {"type": "css", "selector": "[role=''dialog''] button[aria-label*=''close'']"},
+                        {"type": "css", "selector": "div[class*=''modal''] button[aria-label*=''Close'']"},
+                        {"type": "css", "selector": "button[aria-label=''Close'']"}
                      ]}
                 ],
                 "stays_on_screen": true
             },
             "view_cart": {
                 "steps": [
-                    {"action": "navigate", "url": "https://www.shipt.com/shop/cart"}
+                    {"action": "click",  "selector": "a[href*=''/cart'']",
+                     "fallbacks": [
+                        {"type": "css", "selector": "button[aria-label*=''cart''][aria-label*=''Click to view'']"},
+                        {"type": "css", "selector": "button[aria-label*=''items in cart'']"},
+                        {"type": "css", "selector": "[data-testid=''cart-icon'']"}
+                     ]},
+                    {"action": "wait",   "strategy": "network_idle"}
                 ],
                 "target_screen": "cart"
             },
@@ -619,7 +631,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         "context_extractors": {
             "cart": {
                 "steps": [
-                    {"action": "extract", "selector": "button[aria-label*=''cart''][aria-label*=''Click to view'']", "field": "summary"}
+                    {"action": "extract", "selector": "a[href*=''/cart'']", "field": "summary"}
                 ]
             },
             "address": {

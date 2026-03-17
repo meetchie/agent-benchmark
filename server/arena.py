@@ -542,8 +542,8 @@ Examples:
     parser.add_argument(
         "--llm",
         type=str,
-        default="gpt-4o-mini",
-        help="LLM model for RINDLER agent (e.g., gpt-4o-mini, gpt-4o, claude-sonnet)"
+        default="gpt-4o",
+        help="LLM model for RINDLER agent (e.g., gpt-4o, gpt-4o-mini, claude-sonnet)"
     )
     parser.add_argument(
         "--max-steps",
