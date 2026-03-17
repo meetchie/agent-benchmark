@@ -388,7 +388,7 @@ class SkyvernTelemetricAgent(BaseAgent):
         self.print_run_header(start_url)
         
         start_time = datetime.now()
-        result = {"success": False, "message": "", "steps": 0}
+        result = {"success": False, "message": "", "steps": 0, "final_extraction": None}
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -471,6 +471,7 @@ class SkyvernTelemetricAgent(BaseAgent):
                     if run_status.lower() in ["completed", "done", "success", "finished"]:
                         result["success"] = True
                         result["message"] = status_data.get("output") or status_data.get("extracted_information") or "Task completed"
+                        result["final_extraction"] = result["message"]
                         result["steps"] = self._logged_step_count
                         self._capture_skyvern_telemetry(status_data)
                         break
