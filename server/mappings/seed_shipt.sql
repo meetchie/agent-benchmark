@@ -562,7 +562,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "add_to_cart": {
                 "params": {"item": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''to cart'']"}
+                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']"}
                 ],
                 "stays_on_screen": true
             },
@@ -575,14 +575,14 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "view_product": {
                 "params": {"item": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "a[href*=''/shop/products/'']"}
+                    {"action": "click",  "selector": "a[aria-label*=''{{item}}''][href*=''/shop/products/'']"}
                 ],
                 "target_screen": "product_detail"
             },
             "remove_from_cart": {
                 "params": {"item": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "button[aria-label*=''Remove''][aria-label*=''from Cart'']"}
+                    {"action": "click",  "selector": "button[aria-label*=''Remove''][aria-label*=''{{item}}''][aria-label*=''from Cart'']"}
                 ],
                 "stays_on_screen": true
             },
@@ -592,7 +592,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                     "quantity": {"type": "string", "required": true}
                 },
                 "steps": [
-                    {"action": "select", "selector": "select[aria-label*=''quantity'']", "value": "{{quantity}}"}
+                    {"action": "select", "selector": "select[aria-label*=''{{item}}''][aria-label*=''quantity'']", "value": "{{quantity}}"}
                 ],
                 "stays_on_screen": true
             },
