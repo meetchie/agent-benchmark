@@ -54,9 +54,14 @@ class StagehandTelemetricAgent(BaseAgent):
     def _parse_goal_into_steps(self, goal: str) -> List[str]:
         """
         Parse a complex goal into individual action steps.
-        
+
         This is a simple heuristic parser. For complex goals,
         consider using the agent() method instead.
+
+        TODO: This line-by-line parsing is fundamentally different from how
+        other agents process goals (holistically). For complex multi-step
+        scenarios with conditional logic, Stagehand's agent() mode may be
+        needed for fair comparison.
         """
         steps = []
         lines = goal.replace('\n\n', '\n').split('\n')
@@ -92,7 +97,7 @@ class StagehandTelemetricAgent(BaseAgent):
         """Core execution logic, called under asyncio.wait_for timeout."""
         from stagehand import Stagehand
 
-        result = {"success": False, "message": "", "steps": 0}
+        result = {"success": False, "message": "", "steps": 0, "final_extraction": None}
 
         self._stagehand = Stagehand(
             env="BROWSERBASE",
@@ -130,6 +135,7 @@ class StagehandTelemetricAgent(BaseAgent):
         await asyncio.sleep(2)
 
         steps_taken = 0
+        steps_failed = 0
         goal_parts = self._parse_goal_into_steps(self.goal)
 
         for step_instruction in goal_parts:
@@ -149,6 +155,7 @@ class StagehandTelemetricAgent(BaseAgent):
                 await asyncio.sleep(1)
             except Exception as step_error:
                 print(f"Step failed: {step_error}")
+                steps_failed += 1
                 self.log_step(
                     action_type="act",
                     action_data={"instruction": step_instruction[:200]},
@@ -156,8 +163,33 @@ class StagehandTelemetricAgent(BaseAgent):
                 )
                 continue
 
-        result["success"] = steps_taken > 0
-        result["message"] = f"Completed {steps_taken} steps"
+        # Extract final page state for judge evaluation
+        try:
+            page = self._stagehand.page
+            extraction = await page.extract({
+                "instruction": f"Summarize the current page state. What is visible? If there is a cart, what is in it? Goal was: {self.goal[:200]}",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "accomplished": {"type": "boolean", "description": "Whether the goal appears to have been accomplished based on the current page state"},
+                        "summary": {"type": "string", "description": "Description of what is currently visible on the page"}
+                    },
+                    "required": ["accomplished", "summary"]
+                }
+            })
+            result["final_extraction"] = extraction.get("summary", "")
+            # Use extraction + failure tracking for success
+            if steps_failed == 0 and steps_taken > 0:
+                result["success"] = extraction.get("accomplished", False)
+            else:
+                result["success"] = False
+        except Exception as extract_err:
+            print(f"  (Final extraction failed: {extract_err})")
+            # Fallback: success only if steps taken and none failed
+            result["success"] = steps_taken > 0 and steps_failed == 0
+            result["final_extraction"] = f"Completed {steps_taken} of {len(goal_parts)} steps ({steps_failed} failed)"
+
+        result["message"] = result.get("final_extraction", f"Completed {steps_taken} steps")
         result["steps"] = steps_taken
         return result
 
