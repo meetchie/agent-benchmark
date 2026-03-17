@@ -20,8 +20,19 @@ from pydantic import BaseModel, field_validator
 from benchmark_runner import RunState, run_benchmark
 
 
-# In-memory run state store
-_runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev sessions only
+# In-memory run state store with TTL eviction
+_runs: dict[str, RunState] = {}
+_MAX_RUNS = 100
+
+
+def _evict_old_runs() -> None:
+    """Remove oldest runs when store exceeds capacity."""
+    if len(_runs) <= _MAX_RUNS:
+        return
+    # RunState has a run_id; sort by insertion order (dict preserves it in 3.7+)
+    keys = list(_runs.keys())
+    for key in keys[: len(keys) - _MAX_RUNS]:
+        _runs.pop(key, None)
 
 
 @asynccontextmanager
@@ -33,9 +44,13 @@ app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Local dev only
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -50,6 +65,13 @@ class StartRequest(BaseModel):
             raise ValueError("url must start with http:// or https://")
         return v
 
+    @field_validator("goal")
+    @classmethod
+    def goal_max_length(cls, v: str) -> str:
+        if len(v) > 5000:
+            raise ValueError("goal must be 5000 characters or fewer")
+        return v
+
 
 @app.get("/health")
 async def health():
@@ -61,6 +83,7 @@ async def start_benchmark(req: StartRequest):
     run_id = str(uuid.uuid4())
     state = RunState(run_id=run_id)
     _runs[run_id] = state
+    _evict_old_runs()
 
     # Start agent in the background — does not block this response
     asyncio.create_task(run_benchmark(state, req.url, req.goal))
@@ -72,5 +95,5 @@ async def start_benchmark(req: StartRequest):
 async def get_status(run_id: str):
     state = _runs.get(run_id)
     if not state:
-        raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        raise HTTPException(status_code=404, detail="Run not found")
     return state.to_response()

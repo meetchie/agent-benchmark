@@ -415,6 +415,7 @@ class RindlerTelemetricAgent(BaseAgent):
                     error = data.get("error_description", data.get("error", str(data)))
                     raise RuntimeError(f"Token exchange failed ({resp.status}): {error}")
                 self._refresh_token = data.get("refresh_token")
+                self._code_verifier = None  # Clear after use
                 return data["access_token"]
 
     def _build_initial_messages(self, provider: str, start_result: dict) -> list:

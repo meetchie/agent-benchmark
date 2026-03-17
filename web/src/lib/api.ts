@@ -10,16 +10,18 @@ export async function startBenchmark(
     body: JSON.stringify({ url, goal }),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to start benchmark: ${text}`);
+    throw new Error("Failed to start benchmark");
   }
   return res.json();
 }
 
 export async function pollStatus(runId: string): Promise<StatusResponse> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(runId)) {
+    throw new Error("Invalid run ID format");
+  }
   const res = await fetch(`/api/benchmark/status/${runId}`);
   if (!res.ok) {
-    throw new Error(`Status poll failed: ${res.status}`);
+    throw new Error("Status poll failed");
   }
   return res.json();
 }
