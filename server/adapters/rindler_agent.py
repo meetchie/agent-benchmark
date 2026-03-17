@@ -123,19 +123,26 @@ class MCPToolBridge:
     @staticmethod
     def inject_done_tool(tools: List[dict], provider: str) -> List[dict]:
         """Append the synthetic 'done' tool to the tool list."""
+        done_desc = (
+            "Call this ONLY when you have fully completed every part of the goal. "
+            "Do NOT call this if there are remaining items to add, quantities to update, "
+            "or steps you haven't tried yet. If a tool returns an error, try an alternative "
+            "approach (e.g. navigate to the cart first, then retry). Only report failure "
+            "after exhausting all available actions."
+        )
         if provider == "openai":
             tools = tools + [{
                 "type": "function",
                 "function": {
                     "name": "done",
-                    "description": "Call this when you have completed the goal or determined it cannot be completed.",
+                    "description": done_desc,
                     "parameters": DONE_TOOL_SCHEMA,
                 },
             }]
         else:  # anthropic
             tools = tools + [{
                 "name": "done",
-                "description": "Call this when you have completed the goal or determined it cannot be completed.",
+                "description": done_desc,
                 "input_schema": DONE_TOOL_SCHEMA,
             }]
         return tools
