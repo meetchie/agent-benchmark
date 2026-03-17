@@ -53,6 +53,23 @@ MAX_RESULT_CHARS = 12000
 
 from constants import COST_RATES
 
+# Maps semantic tool names to categories for cost analysis.
+# Downstream scripts group by category to compare agents.
+ACTION_CATEGORIES = {
+    "update_address": "address",
+    "search_products": "search",
+    "add_to_cart": "cart_add",
+    "remove_from_cart": "cart_remove",
+    "update_quantity": "cart_update",
+    "view_cart": "cart_view",
+    "view_product": "product",
+    "checkout": "checkout",
+    "go_back": "navigation",
+    "select_store": "navigation",
+    "next_page": "navigation",
+    "prev_page": "navigation",
+}
+
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -580,6 +597,10 @@ class RindlerTelemetricAgent(BaseAgent):
                             cost = self._compute_cost(llm_response.tokens_input, llm_response.tokens_output)
                             cumulative_cost += cost
                             event_dict["cost_usd"] = cost
+                            event_dict["action_category"] = ACTION_CATEGORIES.get(
+                                llm_response.tool_name, "other"
+                            )
+                            event_dict["was_error"] = bool(parsed.get("error"))
 
                             # Rich result display
                             if "error" in parsed:
