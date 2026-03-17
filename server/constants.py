@@ -7,6 +7,6 @@ COST_RATES = {
     "claude-sonnet": {"input": 3.00, "output": 15.00},
 }
 
-# Default cost rates (used when model is unknown or for BrowserUse).
-DEFAULT_COST_INPUT = 5.00   # $/M tokens
-DEFAULT_COST_OUTPUT = 15.00  # $/M tokens
+# TODO: Stagehand and Skyvern do not report token usage.
+# Cost comparisons are incomplete for these agents until their SDKs
+# expose per-step token counts.

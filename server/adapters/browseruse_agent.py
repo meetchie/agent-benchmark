@@ -17,7 +17,7 @@ from browserbase import Browserbase
 from browserbase._exceptions import RateLimitError
 
 from .base_agent import BaseAgent
-from constants import DEFAULT_COST_INPUT, DEFAULT_COST_OUTPUT
+from constants import COST_RATES
 
 
 # Patterns that indicate the agent failed even if no exception was thrown
@@ -263,8 +263,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 event['tokens_input'] = tokens_per_step_input + extra_in
                 event['tokens_output'] = tokens_per_step_output + extra_out
                 
-                input_cost = (event['tokens_input'] / 1_000_000) * DEFAULT_COST_INPUT
-                output_cost = (event['tokens_output'] / 1_000_000) * DEFAULT_COST_OUTPUT
+                rates = COST_RATES["gpt-4o"]
+                input_cost = (event['tokens_input'] / 1_000_000) * rates["input"]
+                output_cost = (event['tokens_output'] / 1_000_000) * rates["output"]
                 event['cost_usd'] = input_cost + output_cost
                 
                 step_count += 1
