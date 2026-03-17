@@ -99,6 +99,7 @@ register_scenario(Scenario(
    - Milk is Whole and NOT Organic
    - Advil is in tablet/caplet form
 
+
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. Cart contains exactly 3 UNIQUE products

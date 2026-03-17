@@ -639,5 +639,6 @@ class RindlerTelemetricAgent(BaseAgent):
             traceback.print_exc()
             return self._build_result({"success": False, "message": f"Agent error: {e}"}, 0)
 
+
         print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)
