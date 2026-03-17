@@ -404,8 +404,8 @@ class RindlerTelemetricAgent(BaseAgent):
         session_id = start_result.get("data", {}).get("session_id", "")
         screen = start_result.get("screen", "unknown")
         context = json.dumps(start_result.get("context", {}), indent=2)
-        available = start_result.get("available_actions", [])
-        global_actions = start_result.get("global_actions", [])
+        available = start_result.get("available_actions") or []
+        global_actions = start_result.get("global_actions") or []
 
         content = (
             f"Goal: {self.goal}\n\n"
@@ -507,7 +507,8 @@ class RindlerTelemetricAgent(BaseAgent):
 
         headers = {"Authorization": f"Bearer {self._token}"}
         print(f"  🔌 Connecting to MCP server at {self.server_url}...", flush=True)
-        async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
+        try:
+          async with sse_client(self.server_url + "/mcp/", headers=headers) as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
@@ -529,12 +530,18 @@ class RindlerTelemetricAgent(BaseAgent):
                 if "error" in parsed:
                     print(f"    ⚠️  Error: {parsed['error']}")
                 self._print_terminal_state(parsed)
-                messages = self._build_initial_messages(llm.provider, parsed)
-
-                print(f"\n  🏃 Action loop (max {self.max_steps} steps)")
-                print(f"  {'─' * 60}")
                 try:
-                    for step in range(self.max_steps):
+                    messages = self._build_initial_messages(llm.provider, parsed)
+                except Exception as e:
+                    print(f"\n    ❌ Failed to build initial messages: {type(e).__name__}: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    return self._build_result({"success": False, "message": f"Init error: {e}"}, 0)
+
+                print(f"\n  🏃 Action loop (max {self.max_steps} steps)", flush=True)
+                print(f"  {'─' * 60}", flush=True)
+                for step in range(self.max_steps):
+                    try:
                         print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
                         llm_response = await llm.call(messages, llm_tools)
 
@@ -591,8 +598,17 @@ class RindlerTelemetricAgent(BaseAgent):
                             text_preview = (llm_response.text or "")[:200]
                             print(f"→ [thinking] {text_preview}")
                             messages.append({"role": "assistant", "content": llm_response.text})
-                finally:
-                    pass  # Sessions auto-expire; no close_session needed
+                    except Exception as e:
+                        print(f"\n    ❌ Step {step + 1} failed: {type(e).__name__}: {e}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                        return self._build_result({"success": False, "message": f"Agent error: {e}"}, step + 1)
+
+        except Exception as e:
+            print(f"\n  ❌ Agent error: {type(e).__name__}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return self._build_result({"success": False, "message": f"Agent error: {e}"}, 0)
 
         print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)
