@@ -543,8 +543,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "search_products": {
                 "params": {"query": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "input[placeholder=''What are you looking for?'']"},
-                    {"action": "type",   "selector": "input[placeholder=''What are you looking for?'']", "value": "{{query}}", "press_enter": true},
+                    {"action": "navigate", "url": "https://www.shipt.com/shop/stores/search?query={{query}}"},
                     {"action": "wait",   "strategy": "selector_visible", "selector": "button[aria-label*=''Add 1'']", "timeout": 15000}
                 ],
                 "target_screen": "search_results"
