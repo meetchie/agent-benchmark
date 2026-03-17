@@ -488,12 +488,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "extraction": {},
                 "available_actions": ["update_address"]
             },
-            "address": {
-                "url_pattern": "shipt\\.com/delivery",
-                "parent_screen": "landing",
-                "extraction": {},
-                "available_actions": ["set_address", "go_back"]
-            },
             "shop": {
                 "url_pattern": "shipt\\.com/shop$",
                 "parent_screen": "landing",
@@ -533,20 +527,16 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         },
         "actions": {
             "update_address": {
-                "steps": [
-                    {"action": "navigate", "url": "https://www.shipt.com/delivery"}
-                ],
-                "target_screen": "address"
-            },
-            "set_address": {
                 "params": {"address": {"type": "string", "required": true}},
                 "steps": [
+                    {"action": "navigate", "url": "https://www.shipt.com/delivery"},
+                    {"action": "wait",   "strategy": "selector_visible", "selector": "#address-autocomplete-homepage-textbox", "timeout": 10000},
                     {"action": "click",  "selector": "#address-autocomplete-homepage-textbox"},
                     {"action": "type",   "selector": "#address-autocomplete-homepage-textbox", "value": "{{address}}"},
-                    {"action": "wait",   "strategy": "network_idle"},
+                    {"action": "wait",   "strategy": "selector_visible", "selector": "li[role=''option'']", "timeout": 5000},
                     {"action": "click",  "selector": "li[role=''option'']:first-child"},
                     {"action": "click",  "selector": "button[aria-label=''Find stores near you - address input'']"},
-                    {"action": "wait",   "strategy": "network_idle"}
+                    {"action": "wait",   "strategy": "selector_visible", "selector": "input[placeholder=''What are you looking for?'']", "timeout": 15000}
                 ],
                 "target_screen": "shop"
             },
@@ -555,7 +545,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {"action": "click",  "selector": "input[placeholder=''What are you looking for?'']"},
                     {"action": "type",   "selector": "input[placeholder=''What are you looking for?'']", "value": "{{query}}", "press_enter": true},
-                    {"action": "wait",   "strategy": "network_idle"}
+                    {"action": "wait",   "strategy": "selector_visible", "selector": "button[aria-label*=''Add 1'']", "timeout": 15000}
                 ],
                 "target_screen": "search_results"
             },
