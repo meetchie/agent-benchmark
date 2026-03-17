@@ -473,7 +473,8 @@ ON CONFLICT (id) DO UPDATE SET
   version = schemas.version + 1;
 
 -- 4. Semantic terminal site config for Shipt
--- Note: selectors are placeholders — update with actual Shipt selectors during site mapping.
+-- Selectors mapped from live DOM inspection (2026-03-16).
+-- Shipt has zero data-testid attrs; selectors use stable IDs, ARIA labels, and semantic queries.
 INSERT INTO site_configs (site_id, domain, config, version) VALUES (
     'ae3c7e30-1e14-5a53-8f78-471b1367e022',
     'shipt.com',
@@ -485,35 +486,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "url_pattern": "shipt\\.com/$",
                 "parent_screen": null,
                 "extraction": {},
-                "available_actions": ["search_products", "view_cart", "update_address", "checkout"]
-            },
-            "search_results": {
-                "url_pattern": "shipt\\.com/shop/search",
-                "parent_screen": "landing",
-                "extraction": {
-                    "results": {
-                        "container": "[data-testid=''product-grid'']",
-                        "item": "[data-testid=''product-card'']",
-                        "fields": {
-                            "name": ".product-name",
-                            "price": ".product-price"
-                        },
-                        "validation": {"min_results": 0}
-                    }
-                },
-                "available_actions": ["add_to_cart", "view_product", "next_page", "prev_page", "go_back"]
-            },
-            "product_detail": {
-                "url_pattern": "shipt\\.com/shop/product",
-                "parent_screen": "search_results",
-                "extraction": {},
-                "available_actions": ["add_to_cart", "go_back"]
-            },
-            "cart": {
-                "url_pattern": "shipt\\.com/cart",
-                "parent_screen": "landing",
-                "extraction": {},
-                "available_actions": ["remove_from_cart", "update_quantity", "go_back"]
+                "available_actions": ["update_address"]
             },
             "address": {
                 "url_pattern": "shipt\\.com/delivery",
@@ -521,9 +494,33 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "extraction": {},
                 "available_actions": ["set_address", "go_back"]
             },
+            "shop": {
+                "url_pattern": "shipt\\.com/shop$",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["search_products", "view_cart", "update_address", "select_store"]
+            },
+            "search_results": {
+                "url_pattern": "shipt\\.com/shop/stores/search",
+                "parent_screen": "shop",
+                "extraction": {},
+                "available_actions": ["search_products", "add_to_cart", "view_product", "view_cart", "go_back"]
+            },
+            "product_detail": {
+                "url_pattern": "shipt\\.com/shop/products/",
+                "parent_screen": "search_results",
+                "extraction": {},
+                "available_actions": ["add_to_cart", "view_cart", "go_back"]
+            },
+            "cart": {
+                "url_pattern": "shipt\\.com/shop/cart",
+                "parent_screen": "shop",
+                "extraction": {},
+                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "go_back"]
+            },
             "checkout": {
                 "url_pattern": "shipt\\.com/checkout",
-                "parent_screen": "landing",
+                "parent_screen": "cart",
                 "extraction": {},
                 "available_actions": ["select_delivery_window", "apply_promo", "place_order", "go_back"]
             },
@@ -535,33 +532,99 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             }
         },
         "actions": {
-            "search_products": {
-                "params": {"query": {"type": "string", "required": true}},
-                "steps": [
-                    {"action": "click", "selector": "[data-testid=''search-input'']"},
-                    {"action": "type", "selector": "[data-testid=''search-input'']", "value": "{{query}}"},
-                    {"action": "click", "selector": "[data-testid=''search-submit'']"},
-                    {"action": "wait", "strategy": "network_idle"}
-                ],
-                "target_screen": "search_results"
-            },
             "update_address": {
                 "steps": [
                     {"action": "navigate", "url": "https://www.shipt.com/delivery"}
                 ],
                 "target_screen": "address"
+            },
+            "set_address": {
+                "params": {"address": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "#address-autocomplete-homepage-textbox"},
+                    {"action": "type",   "selector": "#address-autocomplete-homepage-textbox", "value": "{{address}}"},
+                    {"action": "wait",   "strategy": "network_idle"},
+                    {"action": "click",  "selector": "li[role=''option'']:first-child"},
+                    {"action": "click",  "selector": "button[aria-label=''Find stores near you - address input'']"},
+                    {"action": "wait",   "strategy": "network_idle"}
+                ],
+                "target_screen": "shop"
+            },
+            "search_products": {
+                "params": {"query": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "input[placeholder=''What are you looking for?'']"},
+                    {"action": "type",   "selector": "input[placeholder=''What are you looking for?'']", "value": "{{query}}", "press_enter": true},
+                    {"action": "wait",   "strategy": "network_idle"}
+                ],
+                "target_screen": "search_results"
+            },
+            "add_to_cart": {
+                "params": {"item": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''to cart'']"}
+                ],
+                "stays_on_screen": true
+            },
+            "view_cart": {
+                "steps": [
+                    {"action": "navigate", "url": "https://www.shipt.com/shop/cart"}
+                ],
+                "target_screen": "cart"
+            },
+            "view_product": {
+                "params": {"item": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "a[href*=''/shop/products/'']"}
+                ],
+                "target_screen": "product_detail"
+            },
+            "remove_from_cart": {
+                "params": {"item": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "button[aria-label*=''Remove''][aria-label*=''from Cart'']"}
+                ],
+                "stays_on_screen": true
+            },
+            "update_quantity": {
+                "params": {
+                    "item": {"type": "string", "required": true},
+                    "quantity": {"type": "string", "required": true}
+                },
+                "steps": [
+                    {"action": "select", "selector": "select[aria-label*=''quantity'']", "value": "{{quantity}}"}
+                ],
+                "stays_on_screen": true
+            },
+            "checkout": {
+                "steps": [
+                    {"action": "click",  "selector": "a[href*=''signup?guest'']"}
+                ],
+                "target_screen": "checkout"
+            },
+            "select_store": {
+                "params": {"store": {"type": "string", "required": true}},
+                "steps": [
+                    {"action": "click",  "selector": "a[href*=''/shop/''][aria-label*=''{{store}}'']"}
+                ],
+                "target_screen": "shop"
+            },
+            "go_back": {
+                "steps": [
+                    {"action": "navigate", "url": "https://www.shipt.com/shop"}
+                ],
+                "target_screen": "shop"
             }
         },
         "context_extractors": {
             "cart": {
                 "steps": [
-                    {"action": "extract", "selector": "[data-testid=''cart-count'']", "field": "items"},
-                    {"action": "extract", "selector": "[data-testid=''cart-total'']", "field": "total"}
+                    {"action": "extract", "selector": "button[aria-label*=''cart''][aria-label*=''Click to view'']", "field": "summary"}
                 ]
             },
             "address": {
                 "steps": [
-                    {"action": "extract", "selector": "[data-testid=''delivery-address'']", "field": "address"}
+                    {"action": "extract", "selector": "button[aria-label=''Change address'']", "field": "address"}
                 ]
             }
         }
