@@ -504,13 +504,13 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "url_pattern": "shipt\\.com/shop/products/",
                 "parent_screen": "search_results",
                 "extraction": {},
-                "available_actions": ["add_to_cart", "view_cart", "go_back"]
+                "available_actions": ["add_to_cart", "view_cart", "search_products", "go_back"]
             },
             "cart": {
                 "url_pattern": "shipt\\.com/shop/cart",
                 "parent_screen": "shop",
                 "extraction": {},
-                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "go_back"]
+                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "search_products", "go_back"]
             },
             "checkout": {
                 "url_pattern": "shipt\\.com/checkout",
@@ -543,7 +543,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "search_products": {
                 "params": {"query": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "navigate", "url": "https://www.shipt.com/shop/stores/search?query={{query}}"},
+                    {"action": "navigate", "url": "https://www.shipt.com/shop/{{store_slug}}/search?query={{query}}"},
                     {"action": "wait",   "strategy": "selector_visible", "selector": "button[aria-label*=''Add 1'']", "timeout": 15000}
                 ],
                 "target_screen": "search_results"
@@ -556,6 +556,12 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         {"type": "css", "selector": "button[aria-label*=''Increase''][aria-label*=''{{item}}'']"},
                         {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"},
                         {"type": "css", "selector": "button[aria-label*=''{{item}}''] + button, button[aria-label*=''+'']"}
+                     ]},
+                    {"action": "wait",   "strategy": "delay", "timeout": 1000, "optional": true},
+                    {"action": "click",  "selector": "button:has-text(''Add to cart'')", "optional": true,
+                     "fallbacks": [
+                        {"type": "css", "selector": "[role=''dialog''] button:has-text(''Add to cart'')"},
+                        {"type": "text", "selector": "Add to cart"}
                      ]}
                 ],
                 "stays_on_screen": true
