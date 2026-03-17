@@ -551,7 +551,12 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "add_to_cart": {
                 "params": {"item": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']"}
+                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']",
+                     "fallbacks": [
+                        {"type": "css", "selector": "button[aria-label*=''Increase''][aria-label*=''{{item}}'']"},
+                        {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"},
+                        {"type": "css", "selector": "button[aria-label*=''{{item}}''] + button, button[aria-label*=''+'']"}
+                     ]}
                 ],
                 "stays_on_screen": true
             },
