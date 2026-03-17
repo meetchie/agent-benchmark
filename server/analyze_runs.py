@@ -59,6 +59,10 @@ def parse_log_file(path: Path) -> dict:
             else:
                 val = line.split("Success: ", 1)[1].strip()
             result["success"] = val.lower() in ("true", "1", "yes")
+        elif line.startswith("Status: "):
+            val = line.split("Status: ", 1)[1].strip()
+            # Fire-and-forget submissions: outcome unknown, treat as not-success
+            result["success"] = False
         elif line.startswith("Judge Verdict: "):
             result["judge_verdict"] = line.split("Judge Verdict: ", 1)[1].strip()
         elif line.startswith("Token Burn: "):

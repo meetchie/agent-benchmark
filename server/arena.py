@@ -457,6 +457,7 @@ def handle_skyvern_fire_and_forget(agent, result: Dict[str, Any], scenario: Scen
         f.write(f"Skyvern Task ID: {task_id}\n")
         f.write(f"Watch URL: {watch_url}\n")
         f.write(f"Goal: {scenario.goal}\n")
+        f.write(f"Agent Reported Success: submitted\n")
         f.write(f"Status: submitted (fire-and-forget)\n")
         f.write(f"Submitted at: {datetime.now().isoformat()}\n")
         f.write(f"\nTo get results later:\n")

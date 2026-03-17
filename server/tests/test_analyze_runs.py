@@ -84,6 +84,16 @@ class TestParseLogFile:
         assert result["steps"] == 2
 
 
+    def test_parse_skyvern_fire_and_forget_status(self):
+        """Skyvern fire-and-forget logs use 'Status:' which should be parsed."""
+        log_path = FIXTURE_DIR / "arena_skyvern_shipt_20260311_160000.log"
+        result = parse_log_file(log_path)
+        assert result["agent"] == "SKYVERN"
+        assert result["scenario"] == "shipt_add_to_cart"
+        # Fire-and-forget: task was submitted but outcome is unknown
+        assert result["success"] is False
+
+
 class TestParseTimestamp:
 
     def test_parse_from_filename(self):
@@ -172,9 +182,9 @@ class TestFiltering:
         runs = self._parse_all_fixtures()
         since = datetime(2026, 3, 11, 13, 30, 0)
         filtered = [r for r in runs if r["timestamp"] and r["timestamp"] >= since]
-        # Only arena_rindler_amazon_20260311_140000 and arena_rindler_shipt_20260311_150000 are after 13:30
+        # arena_rindler_amazon_20260311_140000, arena_rindler_shipt_20260311_150000, and arena_skyvern_shipt_20260311_160000 are after 13:30
         assert all(r["timestamp"] >= since for r in filtered)
-        assert len(filtered) == 2
+        assert len(filtered) == 3
 
 
 class TestFormatTable:
