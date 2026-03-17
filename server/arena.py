@@ -74,6 +74,15 @@ IMPORTANT RULES:
 
 Return ONLY valid JSON, no markdown formatting."""
 
+# Map agent-specific action names to common vocabulary for the judge.
+# Anything not in this map passes through as-is.
+ACTION_NORMALIZE = {
+    "llm_call": "browser_action",
+    "act": "browser_action",
+    "action": "browser_action",
+    "navigate": "navigation",
+}
+
 
 def run_judge(scenario: Scenario, result: Dict[str, Any], telemetry_events: list) -> Dict[str, Any]:
     """
@@ -112,11 +121,13 @@ Look for evidence that each action was performed and verified."""
     if errors_in_log:
         log_summary_parts.append(f"Errors detected: {'; '.join(errors_in_log)}")
     
-    # Add key events from telemetry (actions taken)
+    # Add key events from telemetry (actions taken, with normalized names)
     actions_taken = []
     for event in telemetry_events:
         if event.get('event_type') == 'step_start' and event.get('action_type'):
-            actions_taken.append(f"Step {event.get('step_index')}: {event.get('action_type')}")
+            raw_action = event.get('action_type')
+            normalized = ACTION_NORMALIZE.get(raw_action, raw_action)
+            actions_taken.append(f"Step {event.get('step_index')}: {normalized}")
     
     if actions_taken:
         # Only show first 10 and last 5 to keep context manageable
@@ -129,12 +140,19 @@ Look for evidence that each action was performed and verified."""
     log_summary = "\n".join(log_summary_parts)
     
     # Build the prompt for the judge
+    verification_section = ""
+    if scenario.verification_hint:
+        verification_section = f"""
+## VERIFICATION FOCUS
+{scenario.verification_hint}
+"""
+
     user_prompt = f"""## GOAL
 {scenario.goal}
 
 ## SUCCESS CRITERIA
 {criteria}
-
+{verification_section}
 ## AGENT LOG SUMMARY
 {log_summary}
 

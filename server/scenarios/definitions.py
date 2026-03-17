@@ -23,7 +23,8 @@ class Scenario:
     start_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     success_criteria: Optional[str] = None  # Explicit criteria for judge to evaluate
-    
+    verification_hint: Optional[str] = None  # Tells judge what to focus on in final extraction
+
     def __str__(self) -> str:
         return f"{self.name}: {self.description}"
 
