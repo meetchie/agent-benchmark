@@ -57,6 +57,7 @@ from constants import COST_RATES
 # Maps semantic tool names to categories for cost analysis.
 # Downstream scripts group by category to compare agents.
 ACTION_CATEGORIES = {
+    "start_session": "session",
     "update_address": "address",
     "search_products": "search",
     "add_to_cart": "cart_add",
@@ -65,6 +66,9 @@ ACTION_CATEGORIES = {
     "view_cart": "cart_view",
     "view_product": "product",
     "checkout": "checkout",
+    "select_delivery_window": "checkout",
+    "apply_promo": "checkout",
+    "place_order": "checkout",
     "go_back": "navigation",
     "select_store": "navigation",
     "next_page": "navigation",
@@ -700,9 +704,17 @@ class RindlerTelemetricAgent(BaseAgent):
                 print(f"\n  {'═' * 60}")
                 print(f"  🏃 ACTION LOOP (max {self.max_steps} steps)")
                 print(f"  {'═' * 60}", flush=True)
+                pending_state = None  # Terminal state to display before next LLM call
                 for step in range(self.max_steps):
                     try:
                         step_num = step + 1
+
+                        # Show what the agent is about to see (previous tool result)
+                        if pending_state is not None:
+                            tool_name, state_parsed = pending_state
+                            self._print_terminal_state(state_parsed, tool_name)
+                            pending_state = None
+
                         print(f"\n  ┌{'─' * 58}┐")
                         print(f"  │ Step {step_num}/{self.max_steps}: LLM thinking...                           │", flush=True)
 
@@ -772,6 +784,8 @@ class RindlerTelemetricAgent(BaseAgent):
                             )
 
                             # ── Play-by-play terminal state ──
+                            # Defer printing until BEFORE the next LLM call so the user
+                            # sees what the agent is looking at while it thinks.
                             if "error" in parsed:
                                 err = parsed["error"]
                                 if isinstance(err, dict):
@@ -779,7 +793,7 @@ class RindlerTelemetricAgent(BaseAgent):
                                 else:
                                     print(f"    ⚠️  {err}")
                             else:
-                                self._print_terminal_state(parsed, llm_response.tool_name)
+                                pending_state = (llm_response.tool_name, parsed)
 
                             # ── Context extractor validation ──
                             ctx = parsed.get("context") or {}
