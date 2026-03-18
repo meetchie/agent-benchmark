@@ -194,7 +194,8 @@ def validate_mapping(site: str) -> dict:
                 print(f"Error: Action '{action_name}' step {i} missing 'action' field.")
                 sys.exit(1)
             if step["action"] not in VALID_ACTIONS:
-                print(f"Warning: Action '{action_name}' step {i} uses unknown action '{step['action']}'.")
+                print(f"Error: Action '{action_name}' step {i} uses invalid action '{step['action']}'. Valid: {', '.join(sorted(VALID_ACTIONS))}")
+                sys.exit(1)
 
     print(f"  Mapping validated: {len(mapping['screens'])} screens, {len(mapping['actions'])} actions")
     return mapping
@@ -604,7 +605,7 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
         print(f"    Step {step_num}: {action_type or 'N/A'} ({elapsed_ms:.0f}ms)")
 
     # Run the agent
-    agent = Agent(task=task["goal"], llm=llm, max_steps=task["max_steps"])
+    agent = Agent(task=task["goal"], llm=llm, max_steps=task["max_steps"], initial_actions=[{"open_url": task["start_url"]}])
     success = False
     error_msg = None
 
@@ -878,7 +879,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     result = {
         "meta": {
             "task_id": task_id, "task_name": task["name"], "agent": "rindler",
-            "model": model, "site": task.get("site", ""),
+            "model": model, "site": site,
             "start_url": task["start_url"], "goal": task["goal"],
             "success_criteria": task["success_criteria"],
             "started_at": started_at.isoformat() + "Z",
