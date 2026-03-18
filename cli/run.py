@@ -16,7 +16,7 @@ import socket
 import subprocess
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -103,16 +103,21 @@ def find_free_port() -> int:
 
 
 def get_llm_for_browseruse(model: str):
-    """Create a LangChain chat model for browser-use based on the model flag."""
-    if model.startswith("gpt"):
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model)
-    elif model.startswith("claude"):
-        from langchain_anthropic import ChatAnthropic
-        model_map = {"claude-sonnet": "claude-sonnet-4-6"}
-        return ChatAnthropic(model=model_map.get(model, model))
-    else:
-        raise ValueError(f"Unsupported model: {model}")
+    """Create a browser-use compatible LLM instance based on the model flag."""
+    from browser_use.llm.models import get_llm_by_name
+
+    # browser-use uses its own LLM wrappers with 'provider_model' naming
+    model_map = {
+        "gpt-4o": "openai_gpt-4o",
+        "gpt-4o-mini": "openai_gpt-4o-mini",
+        "claude-sonnet": "openai_gpt-4o",  # browser-use doesn't support Anthropic; fallback to gpt-4o
+    }
+    bu_model = model_map.get(model)
+    if not bu_model:
+        raise ValueError(f"Unsupported model for browser-use: {model}")
+    if model == "claude-sonnet":
+        print("    Note: browser-use does not support Anthropic models; using gpt-4o for BrowserUse phase.")
+    return get_llm_by_name(bu_model)
 
 
 # ---------------------------------------------------------------------------
@@ -560,12 +565,12 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
     failure_screenshots = []
     current_step = {"index": 0}
 
-    started_at = datetime.now(datetime.timezone.utc)
+    started_at = datetime.now(timezone.utc)
 
     async def on_step_start(agent):
         current_step["index"] += 1
         current_step["started_at"] = time.monotonic()
-        current_step["start_ts"] = datetime.now(datetime.timezone.utc).isoformat() + "Z"
+        current_step["start_ts"] = datetime.now(timezone.utc).isoformat() + "Z"
 
     async def on_step_end(agent):
         elapsed_ms = (time.monotonic() - current_step["started_at"]) * 1000
@@ -605,12 +610,13 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
         print(f"    Step {step_num}: {action_type or 'N/A'} ({elapsed_ms:.0f}ms)")
 
     # Run the agent
-    agent = Agent(task=task["goal"], llm=llm, max_steps=task["max_steps"], initial_actions=[{"open_url": task["start_url"]}])
+    agent = Agent(task=task["goal"], llm=llm, initial_actions=[{"navigate": {"url": task["start_url"]}}])
     success = False
     error_msg = None
 
     try:
         history = await agent.run(
+            max_steps=task["max_steps"],
             on_step_start=on_step_start,
             on_step_end=on_step_end,
         )
@@ -657,7 +663,7 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
         except Exception:
             pass
 
-    finished_at = datetime.now(datetime.timezone.utc)
+    finished_at = datetime.now(timezone.utc)
     duration_ms = (finished_at - started_at).total_seconds() * 1000
 
     total_tokens_in = sum(s["tokens_input"] for s in steps_log)
@@ -720,7 +726,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     llm = LLMClient(model, RINDLER_SYSTEM_PROMPT)
     steps_log = []
     failure_screenshots = []
-    started_at = datetime.now(datetime.timezone.utc)
+    started_at = datetime.now(timezone.utc)
     session_id = None
     cumulative_cost = 0.0
 
@@ -771,7 +777,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
                 for step in range(max_steps):
                     step_num = step + 1
                     step_start = time.monotonic()
-                    step_ts = datetime.now(datetime.timezone.utc).isoformat() + "Z"
+                    step_ts = datetime.now(timezone.utc).isoformat() + "Z"
 
                     llm_resp = await llm.call(messages, llm_tools)
                     cost = compute_cost(model, llm_resp["tokens_input"], llm_resp["tokens_output"])
@@ -865,7 +871,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     except Exception as e:
         print(f"    Error: {e}")
 
-    finished_at = datetime.now(datetime.timezone.utc)
+    finished_at = datetime.now(timezone.utc)
     duration_ms = (finished_at - started_at).total_seconds() * 1000
 
     total_tokens_in = sum(s["tokens_input"] for s in steps_log)
@@ -931,8 +937,8 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
                         "model": model, "site": site,
                         "start_url": task["start_url"], "goal": task["goal"],
                         "success_criteria": task["success_criteria"],
-                        "started_at": datetime.now(datetime.timezone.utc).isoformat(),
-                        "finished_at": datetime.now(datetime.timezone.utc).isoformat(),
+                        "started_at": datetime.now(timezone.utc).isoformat(),
+                        "finished_at": datetime.now(timezone.utc).isoformat(),
                         "duration_ms": 0,
                     },
                     "result": {"success": False, "verdict": None, "judge_reasoning": None, "failure_category": None},
