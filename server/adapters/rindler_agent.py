@@ -9,6 +9,7 @@ import json
 import os
 import aiohttp
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 try:
@@ -56,6 +57,7 @@ from constants import COST_RATES
 # Maps semantic tool names to categories for cost analysis.
 # Downstream scripts group by category to compare agents.
 ACTION_CATEGORIES = {
+    "start_session": "session",
     "update_address": "address",
     "search_products": "search",
     "add_to_cart": "cart_add",
@@ -64,6 +66,9 @@ ACTION_CATEGORIES = {
     "view_cart": "cart_view",
     "view_product": "product",
     "checkout": "checkout",
+    "select_delivery_window": "checkout",
+    "apply_promo": "checkout",
+    "place_order": "checkout",
     "go_back": "navigation",
     "select_store": "navigation",
     "next_page": "navigation",
@@ -123,19 +128,26 @@ class MCPToolBridge:
     @staticmethod
     def inject_done_tool(tools: List[dict], provider: str) -> List[dict]:
         """Append the synthetic 'done' tool to the tool list."""
+        done_desc = (
+            "Call this ONLY when you have fully completed every part of the goal. "
+            "Do NOT call this if there are remaining items to add, quantities to update, "
+            "or steps you haven't tried yet. If a tool returns an error, try an alternative "
+            "approach (e.g. navigate to the cart first, then retry). Only report failure "
+            "after exhausting all available actions."
+        )
         if provider == "openai":
             tools = tools + [{
                 "type": "function",
                 "function": {
                     "name": "done",
-                    "description": "Call this when you have completed the goal or determined it cannot be completed.",
+                    "description": done_desc,
                     "parameters": DONE_TOOL_SCHEMA,
                 },
             }]
         else:  # anthropic
             tools = tools + [{
                 "name": "done",
-                "description": "Call this when you have completed the goal or determined it cannot be completed.",
+                "description": done_desc,
                 "input_schema": DONE_TOOL_SCHEMA,
             }]
         return tools
@@ -276,7 +288,7 @@ class RindlerTelemetricAgent(BaseAgent):
     def __init__(self, run_id: str, goal: str, lane: str = "RINDLER", **kwargs):
         super().__init__(run_id=run_id, goal=goal, lane=lane)
         self.server_url = os.environ.get("RINDLER_SERVER_URL", "http://localhost:8080")
-        self.llm_name = kwargs.get("llm", "gpt-4o-mini")
+        self.llm_name = kwargs.get("llm", "gpt-4o")
         self.max_steps = kwargs.get("max_steps", 25)
         self._token = None
         self._session_id = None
@@ -474,44 +486,161 @@ class RindlerTelemetricAgent(BaseAgent):
         raw = await client.call_tool(tool_name, tool_args)
         return parse_tool_result(raw)
 
-    def _print_terminal_state(self, parsed: dict):
-        """Print a rich summary of a terminal response."""
-        screen = parsed.get("screen", "")
-        if screen:
-            print(f"    📍 Screen: {screen}")
+    def _init_context_log(self, start_url: str):
+        """Initialize the full context log file that captures everything fed to the agent."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "arena_logs")
+        os.makedirs(log_dir, exist_ok=True)
+        self._context_log_path = os.path.join(log_dir, f"context_{self.lane.lower()}_{timestamp}.log")
+        with open(self._context_log_path, 'w') as f:
+            f.write(f"{'=' * 80}\n")
+            f.write(f"  RINDLER AGENT — FULL CONTEXT LOG\n")
+            f.write(f"{'=' * 80}\n")
+            f.write(f"  Timestamp:  {datetime.now().isoformat()}\n")
+            f.write(f"  Run ID:     {self.run_id}\n")
+            f.write(f"  Trace ID:   {self.trace_id}\n")
+            f.write(f"  Goal:       {self.goal}\n")
+            f.write(f"  Start URL:  {start_url}\n")
+            f.write(f"  LLM:        {self.llm_name}\n")
+            f.write(f"  Max Steps:  {self.max_steps}\n")
+            f.write(f"{'=' * 80}\n\n")
+            f.write(f"{'─' * 80}\n")
+            f.write(f"  SYSTEM PROMPT (fed to LLM)\n")
+            f.write(f"{'─' * 80}\n")
+            f.write(SYSTEM_PROMPT)
+            f.write(f"\n{'─' * 80}\n\n")
+        print(f"  📝 Context log: {self._context_log_path}")
 
-        ctx = parsed.get("context", {})
-        if ctx:
+    def _log_context(self, header: str, content: str):
+        """Append a section to the context log file."""
+        if not hasattr(self, '_context_log_path'):
+            return
+        with open(self._context_log_path, 'a') as f:
+            f.write(f"\n{'─' * 80}\n")
+            f.write(f"  [{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {header}\n")
+            f.write(f"{'─' * 80}\n")
+            f.write(content)
+            f.write("\n")
+
+    def _print_terminal_state(self, parsed: dict, step_label: str = ""):
+        """Print a detailed play-by-play of every terminal response phase."""
+        prefix = f"    "
+
+        # ── Phase 1: Screen Detection ──
+        screen = parsed.get("screen", "")
+        print(f"{prefix}┌─ SCREEN {'─' * 50}")
+        if screen:
+            print(f"{prefix}│  📍 Current screen: {screen}")
+        else:
+            print(f"{prefix}│  ⚠️  No screen detected")
+
+        # ── Phase 2: Context Extractors (cart + address) ──
+        ctx = parsed.get("context") or {}
+        print(f"{prefix}├─ CONTEXT EXTRACTORS {'─' * 38}")
+        if not ctx:
+            print(f"{prefix}│  (empty — no persistent context returned)")
+        else:
             cart = ctx.get("cart")
             address = ctx.get("address")
-            if cart:
-                items = cart.get("items", "?")
-                total = cart.get("total", "?")
-                print(f"    🛒 Cart: {items} items ({total})")
-            if address:
-                addr_str = address if isinstance(address, str) else json.dumps(address)
-                print(f"    📫 Address: {addr_str}")
+            store = ctx.get("store")
+            store_slug = ctx.get("store_slug")
 
+            if cart is not None:
+                if isinstance(cart, dict):
+                    items = cart.get("items", "?")
+                    total = cart.get("total", "?")
+                    print(f"{prefix}│  🛒 Cart: {items} items, total: {total}")
+                else:
+                    print(f"{prefix}│  🛒 Cart: {cart}")
+            else:
+                print(f"{prefix}│  🛒 Cart: (not extracted — extractor returned nothing)")
+
+            if address is not None:
+                addr_str = address if isinstance(address, str) else json.dumps(address)
+                print(f"{prefix}│  📫 Address: {addr_str}")
+            else:
+                print(f"{prefix}│  📫 Address: (not extracted — extractor returned nothing)")
+
+            if store:
+                print(f"{prefix}│  🏪 Store: {store}" + (f" (slug: {store_slug})" if store_slug else ""))
+
+            # Show any other context keys
+            other_keys = [k for k in ctx if k not in ("cart", "address", "store", "store_slug")]
+            for k in other_keys:
+                print(f"{prefix}│  📎 {k}: {ctx[k]}")
+
+        # ── Phase 3: Data Payload ──
         data = parsed.get("data")
+        print(f"{prefix}├─ DATA PAYLOAD {'─' * 44}")
         if data and isinstance(data, dict):
-            # Show session_id if present (from start_session)
             if "session_id" in data:
-                pass  # Already shown above
-            # Show search results summary
+                print(f"{prefix}│  🔑 session_id: {data['session_id']}")
+
+            products = data.get("products")
+            if products and isinstance(products, list):
+                print(f"{prefix}│  📋 {len(products)} products extracted:")
+                for i, p in enumerate(products[:8]):
+                    name = p.get("name", "?")
+                    price = p.get("price", "")
+                    size = p.get("size", "")
+                    suffix = f" ({size})" if size else ""
+                    print(f"{prefix}│     {i+1}. {name}{suffix} — {price}")
+                if len(products) > 8:
+                    print(f"{prefix}│     ... and {len(products) - 8} more")
+
             results = data.get("results")
             if results and isinstance(results, list):
-                print(f"    📋 {len(results)} results:")
-                for r in results[:5]:  # Show first 5
+                print(f"{prefix}│  📋 {len(results)} results:")
+                for r in results[:5]:
                     name = r.get("name", "?")
                     price = r.get("price", "")
                     item_id = r.get("id", "")
-                    print(f"       [{item_id}] {name} — {price}")
+                    print(f"{prefix}│     [{item_id}] {name} — {price}")
                 if len(results) > 5:
-                    print(f"       ... and {len(results) - 5} more")
+                    print(f"{prefix}│     ... and {len(results) - 5} more")
 
-        available = parsed.get("available_actions", [])
+            tree = data.get("accessibility_tree")
+            if tree:
+                tree_lines = tree.strip().split('\n')
+                print(f"{prefix}│  🌳 Accessibility tree: {len(tree_lines)} lines, {len(tree)} chars")
+
+            # Show any other data keys not already shown
+            shown = {"session_id", "products", "results", "accessibility_tree"}
+            for k in data:
+                if k not in shown:
+                    val = data[k]
+                    val_str = json.dumps(val, default=str) if not isinstance(val, str) else val
+                    if len(val_str) > 100:
+                        val_str = val_str[:100] + "..."
+                    print(f"{prefix}│  📎 {k}: {val_str}")
+        elif data is not None:
+            print(f"{prefix}│  Raw: {str(data)[:200]}")
+        else:
+            print(f"{prefix}│  (no data)")
+
+        # ── Phase 4: Available Actions ──
+        available = parsed.get("available_actions") or []
+        global_actions = parsed.get("global_actions") or []
+        print(f"{prefix}├─ AVAILABLE ACTIONS {'─' * 40}")
         if available:
-            print(f"    ▸ Actions: {', '.join(available)}")
+            print(f"{prefix}│  Screen:  {', '.join(available)}")
+        else:
+            print(f"{prefix}│  Screen:  (none)")
+        if global_actions:
+            print(f"{prefix}│  Global:  {', '.join(global_actions)}")
+        else:
+            print(f"{prefix}│  Global:  (none)")
+
+        # ── Phase 5: Errors ──
+        error = parsed.get("error")
+        if error:
+            print(f"{prefix}├─ ERROR {'─' * 51}")
+            if isinstance(error, dict):
+                print(f"{prefix}│  ❌ [{error.get('code', '?')}] {error.get('message', '?')}")
+            else:
+                print(f"{prefix}│  ❌ {error}")
+
+        print(f"{prefix}└{'─' * 59}")
 
     async def run(self, start_url=None, **kwargs):
         import time
@@ -519,6 +648,7 @@ class RindlerTelemetricAgent(BaseAgent):
         from mcp import ClientSession
 
         self.print_run_header(start_url)
+        self._init_context_log(start_url)
         self._token = await self._authenticate()
         llm = LLMClient(self.llm_name, SYSTEM_PROMPT)
         print(f"  🤖 LLM: {llm.model} ({llm.provider})")
@@ -535,10 +665,18 @@ class RindlerTelemetricAgent(BaseAgent):
                 llm_tools = MCPToolBridge.mcp_tools_to_llm_tools(mcp_tools, llm.provider)
                 llm_tools = MCPToolBridge.inject_done_tool(llm_tools, llm.provider)
 
+                # Log tool definitions to context log
+                self._log_context("MCP TOOLS REGISTERED", json.dumps(
+                    [{"name": t.name, "description": t.description} for t in mcp_tools],
+                    indent=2
+                ))
+
                 cumulative_cost = 0.0
 
-                # Start session
-                print(f"\n  ▶ start_session → {start_url}", flush=True)
+                # ── Phase: Start Session ──
+                print(f"\n  {'═' * 60}")
+                print(f"  ▶ PHASE: START SESSION → {start_url}")
+                print(f"  {'═' * 60}", flush=True)
                 t0 = time.monotonic()
                 parsed = await self._call_tool(client, "start_session", {"url": start_url})
                 elapsed = time.monotonic() - t0
@@ -547,7 +685,11 @@ class RindlerTelemetricAgent(BaseAgent):
                 print(f"    session={self._session_id}  screen={screen}  ({elapsed:.1f}s)")
                 if "error" in parsed:
                     print(f"    ⚠️  Error: {parsed['error']}")
-                self._print_terminal_state(parsed)
+                self._print_terminal_state(parsed, "start_session")
+
+                # Log full start_session response to context log
+                self._log_context("START_SESSION RESPONSE (full JSON)", json.dumps(parsed, indent=2, default=str))
+
                 try:
                     messages = self._build_initial_messages(llm.provider, parsed)
                 except Exception as e:
@@ -556,20 +698,44 @@ class RindlerTelemetricAgent(BaseAgent):
                     traceback.print_exc()
                     return self._build_result({"success": False, "message": f"Init error: {e}"}, 0)
 
-                print(f"\n  🏃 Action loop (max {self.max_steps} steps)", flush=True)
-                print(f"  {'─' * 60}", flush=True)
+                # Log what the agent sees as its first message
+                self._log_context("INITIAL MESSAGE → AGENT", json.dumps(messages, indent=2, default=str))
+
+                print(f"\n  {'═' * 60}")
+                print(f"  🏃 ACTION LOOP (max {self.max_steps} steps)")
+                print(f"  {'═' * 60}", flush=True)
+                pending_state = None  # Terminal state to display before next LLM call
                 for step in range(self.max_steps):
                     try:
-                        print(f"\n  Step {step + 1}/{self.max_steps}: thinking...", end=" ", flush=True)
+                        step_num = step + 1
+
+                        # Show what the agent is about to see (previous tool result)
+                        if pending_state is not None:
+                            tool_name, state_parsed = pending_state
+                            self._print_terminal_state(state_parsed, tool_name)
+                            pending_state = None
+
+                        print(f"\n  ┌{'─' * 58}┐")
+                        print(f"  │ Step {step_num}/{self.max_steps}: LLM thinking...                           │", flush=True)
+
+                        # Log the full messages context sent to LLM
+                        self._log_context(
+                            f"STEP {step_num} — MESSAGES → LLM ({len(messages)} messages, {len(json.dumps(messages, default=str)):,} chars)",
+                            json.dumps(messages, indent=2, default=str)
+                        )
+
                         llm_response = await llm.call(messages, llm_tools)
 
                         if llm_response.tool_name == "done":
                             done_args = llm_response.tool_args or {}
                             icon = "✅" if done_args.get("success") else "❌"
-                            print(f"→ done {icon}")
-                            print(f"    {done_args.get('message', '')}")
+                            print(f"  │ → done {icon}")
+                            print(f"  │   {done_args.get('message', '')}")
+                            print(f"  └{'─' * 58}┘")
                             print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
-                            return self._build_result(done_args, step + 1)
+                            self._log_context(f"STEP {step_num} — AGENT CALLED done()", json.dumps(done_args, indent=2, default=str))
+                            self._finalize_context_log(cumulative_cost, step_num, done_args)
+                            return self._build_result(done_args, step_num)
 
                         if llm_response.tool_name:
                             tool_args = llm_response.tool_args or {}
@@ -581,9 +747,17 @@ class RindlerTelemetricAgent(BaseAgent):
                             # Display tool call
                             display_args = {k: v for k, v in tool_args.items() if k != "session_id"}
                             if display_args:
-                                print(f"→ {llm_response.tool_name}({json.dumps(display_args, default=str)})")
+                                call_str = f"{llm_response.tool_name}({json.dumps(display_args, default=str)})"
                             else:
-                                print(f"→ {llm_response.tool_name}()")
+                                call_str = f"{llm_response.tool_name}()"
+                            print(f"  │ → {call_str}")
+
+                            # Log the agent's tool call
+                            self._log_context(
+                                f"STEP {step_num} — AGENT CALLS {llm_response.tool_name}",
+                                f"Args: {json.dumps(tool_args, indent=2, default=str)}\n"
+                                f"Tokens: {llm_response.tokens_input:,} in / {llm_response.tokens_output:,} out"
+                            )
 
                             self.log_step_start(action_type=llm_response.tool_name, action_data=tool_args)
                             t0 = time.monotonic()
@@ -603,7 +777,15 @@ class RindlerTelemetricAgent(BaseAgent):
                             )
                             event_dict["was_error"] = bool(parsed.get("error"))
 
-                            # Rich result display
+                            # Log full MCP response to context log
+                            self._log_context(
+                                f"STEP {step_num} — MCP RESPONSE for {llm_response.tool_name} ({elapsed:.1f}s)",
+                                json.dumps(parsed, indent=2, default=str)
+                            )
+
+                            # ── Play-by-play terminal state ──
+                            # Defer printing until BEFORE the next LLM call so the user
+                            # sees what the agent is looking at while it thinks.
                             if "error" in parsed:
                                 err = parsed["error"]
                                 if isinstance(err, dict):
@@ -611,26 +793,71 @@ class RindlerTelemetricAgent(BaseAgent):
                                 else:
                                     print(f"    ⚠️  {err}")
                             else:
-                                self._print_terminal_state(parsed)
+                                pending_state = (llm_response.tool_name, parsed)
+
+                            # ── Context extractor validation ──
+                            ctx = parsed.get("context") or {}
+                            cart_present = ctx.get("cart") is not None
+                            addr_present = ctx.get("address") is not None
+                            extractor_status = []
+                            if cart_present:
+                                extractor_status.append("cart=✓")
+                            else:
+                                extractor_status.append("cart=✗")
+                            if addr_present:
+                                extractor_status.append("addr=✓")
+                            else:
+                                extractor_status.append("addr=✗")
+                            print(f"    🔍 Context extractors: [{', '.join(extractor_status)}]")
 
                             print(f"    ⏱  {elapsed:.1f}s | tokens: {llm_response.tokens_input:,}in/{llm_response.tokens_output:,}out | cost: ${cost:.4f} (total: ${cumulative_cost:.4f})")
+                            print(f"  └{'─' * 58}┘")
 
                             messages = self._append_tool_exchange(llm.provider, messages, llm_response, parsed)
+
+                            # Log what gets appended to the message history
+                            self._log_context(
+                                f"STEP {step_num} — TOOL RESULT → AGENT (truncated to {MAX_RESULT_CHARS} chars)",
+                                truncate(json.dumps(parsed, default=str), MAX_RESULT_CHARS)
+                            )
                         else:
                             text_preview = (llm_response.text or "")[:200]
-                            print(f"→ [thinking] {text_preview}")
+                            print(f"  │ → [thinking] {text_preview}")
+                            print(f"  └{'─' * 58}┘")
                             messages.append({"role": "assistant", "content": llm_response.text})
+                            self._log_context(
+                                f"STEP {step_num} — AGENT THINKING (no tool call)",
+                                llm_response.text or "(empty)"
+                            )
                     except Exception as e:
                         print(f"\n    ❌ Step {step + 1} failed: {type(e).__name__}: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
+                        self._log_context(f"STEP {step + 1} — EXCEPTION", f"{type(e).__name__}: {e}")
                         return self._build_result({"success": False, "message": f"Agent error: {e}"}, step + 1)
 
         except Exception as e:
             print(f"\n  ❌ Agent error: {type(e).__name__}: {e}", flush=True)
             import traceback
             traceback.print_exc()
+            self._log_context("FATAL ERROR", f"{type(e).__name__}: {e}")
             return self._build_result({"success": False, "message": f"Agent error: {e}"}, 0)
 
+
         print(f"\n  💰 Total cost: ${cumulative_cost:.4f}")
+        self._finalize_context_log(cumulative_cost, self.max_steps, {"success": False, "message": "max steps reached"})
         return self._build_result({"success": False, "message": "max steps reached"}, self.max_steps)
+
+    def _finalize_context_log(self, total_cost: float, steps: int, result: dict):
+        """Write the final summary to the context log."""
+        if not hasattr(self, '_context_log_path'):
+            return
+        with open(self._context_log_path, 'a') as f:
+            f.write(f"\n{'=' * 80}\n")
+            f.write(f"  RUN COMPLETE\n")
+            f.write(f"{'=' * 80}\n")
+            f.write(f"  Steps:   {steps}\n")
+            f.write(f"  Cost:    ${total_cost:.4f}\n")
+            f.write(f"  Success: {result.get('success', False)}\n")
+            f.write(f"  Message: {result.get('message', '')}\n")
+            f.write(f"{'=' * 80}\n")

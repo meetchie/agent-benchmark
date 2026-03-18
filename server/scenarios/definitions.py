@@ -82,14 +82,15 @@ register_scenario(Scenario(
 1. Start a session on shipt.com using start_session.
 2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address.
 
-3. Search for "Granny Smith Apples" using search_products.
-   - Find a loose individual apple (not pre-bagged) and add exactly 6 individual apples (or ~3 lbs if sold by weight).
+3. Search for "Granny Smith Apples".
+   - PREFERRED: Add 6 loose individual Granny Smith apples.
+   - ACCEPTABLE SUBSTITUTE: A pre-bagged option totaling approximately 3 lbs (e.g., a 3lb bag) is an acceptable alternative.
 
-4. Search for "Milk" using search_products.
+4. Search for "Milk".
    - Find a gallon of Whole Milk that is NOT Organic.
    - Add 1 to cart.
 
-5. Search for "Advil" using search_products.
+5. Search for "Advil".
    - Verify the result is Ibuprofen in tablet/caplet form (avoid liquid gels).
    - Add the smallest pack size available.
 
@@ -98,6 +99,7 @@ register_scenario(Scenario(
    - Apple count is 6 (or ~3 lbs)
    - Milk is Whole and NOT Organic
    - Advil is in tablet/caplet form
+
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:

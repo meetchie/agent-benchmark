@@ -10,469 +10,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO sites (id, user_id, domain) VALUES ('ae3c7e30-1e14-5a53-8f78-471b1367e022', 'dbfde74b-c44d-53ab-abfb-e61f5ce31040', 'shipt.com')
 ON CONFLICT (id) DO NOTHING;
 
--- 3. Tool schemas
-
--- shipt_fill_address
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('b7d151c2-4d7b-509c-992f-cd655145338d', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_fill_address",
-  "tool_description": "Fill in the delivery address on Shipt and select from autocomplete",
-  "tool_hash": "d0a5358ab72b",
-  "parameters": {
-    "address": {
-      "type": "string",
-      "description": "Full street address including city, state, zip"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "06bcf0d71a26",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''address-input'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "input[placeholder*=''Enter delivery address'']"
-          },
-          {
-            "type": "css",
-            "selector": "input[aria-label*=''delivery address'']"
-          }
-        ]
-      }
-    },
-    {
-      "atomic_hash": "edc9039acaa3",
-      "action": "type",
-      "params": {
-        "primary_selector": "[data-testid=''address-input'']",
-        "text": "{{address}}",
-        "press_enter": false,
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "input[placeholder*=''Enter delivery address'']"
-          }
-        ]
-      }
-    },
-    {
-      "atomic_hash": "ae4f0c1b37d8",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''address-suggestion-0'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "li[role=''option'']:first-child"
-          },
-          {
-            "type": "text",
-            "selector": "Use this address"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_search_product
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('9de13032-7e9d-5a39-b46f-703745be5640', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_search_product",
-  "tool_description": "Search for a product on Shipt by query string",
-  "tool_hash": "f46a2f777e39",
-  "parameters": {
-    "query": {
-      "type": "string",
-      "description": "Product search query (e.g., ''bananas'', ''organic milk'')"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "c4bbb12c429e",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''search-input'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "input[type=''search'']"
-          },
-          {
-            "type": "css",
-            "selector": "input[placeholder*=''Search'']"
-          },
-          {
-            "type": "role",
-            "selector": "searchbox"
-          }
-        ]
-      }
-    },
-    {
-      "atomic_hash": "3940a26c346c",
-      "action": "type",
-      "params": {
-        "primary_selector": "[data-testid=''search-input'']",
-        "text": "{{query}}",
-        "press_enter": true,
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "input[type=''search'']"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_add_to_cart
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('19b4e05c-bbd6-5b3d-983f-976d42d58da0', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_add_to_cart",
-  "tool_description": "Add a visible product to the Shipt cart. Optionally specify product_name to disambiguate.",
-  "tool_hash": "aa1dbbdf6f94",
-  "parameters": {
-    "product_name": {
-      "type": "string",
-      "description": "Product name for disambiguation (optional)"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "a88ba1cce86e",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''add-to-cart-button'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''Add to cart'']"
-          },
-          {
-            "type": "text",
-            "selector": "Add to cart"
-          },
-          {
-            "type": "css",
-            "selector": "button[class*=''add-to-cart'']"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_adjust_quantity
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('758e1b62-12b8-5637-8fda-845702c40823', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_adjust_quantity",
-  "tool_description": "Increment the quantity of an item in the Shipt cart by 1. Call multiple times to reach the desired quantity.",
-  "tool_hash": "12fb574c152c",
-  "parameters": {
-    "product_name": {
-      "type": "string",
-      "description": "Name of the product to adjust"
-    },
-    "quantity": {
-      "type": "integer",
-      "description": "Desired quantity (positive integer)"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "a32724c54869",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''quantity-increase'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''Increase quantity'']"
-          },
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''increase'']"
-          },
-          {
-            "type": "text",
-            "selector": "+"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_remove_from_cart
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('ce552a53-2aa3-5b29-a50c-3af1d3c2d25b', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_remove_from_cart",
-  "tool_description": "Remove an item from the Shipt cart",
-  "tool_hash": "1c564945f02d",
-  "parameters": {
-    "product_name": {
-      "type": "string",
-      "description": "Name of the product to remove"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "0c43388c2ec9",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''remove-item'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''Remove'']"
-          },
-          {
-            "type": "text",
-            "selector": "Remove"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_select_store
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('6f592de8-d33e-5aec-879e-0664bf95fb7b', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_select_store",
-  "tool_description": "Select a retailer/store on Shipt (e.g., Target, Meijer, CVS)",
-  "tool_hash": "9b8a9c94901c",
-  "parameters": {
-    "store_name": {
-      "type": "string",
-      "description": "Store name (e.g., ''Target'', ''Meijer'')"
-    }
-  },
-  "steps": [
-    {
-      "atomic_hash": "d94c9c2141ff",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''store-selector'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''Choose store'']"
-          },
-          {
-            "type": "css",
-            "selector": "[class*=''store-picker'']"
-          },
-          {
-            "type": "text",
-            "selector": "Choose your store"
-          }
-        ]
-      }
-    },
-    {
-      "atomic_hash": "a5310b18fc7d",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''store-option-{{store_name}}'']",
-        "fallbacks": [
-          {
-            "type": "text",
-            "selector": "{{store_name}}"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_view_cart
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('c1a20ddf-e98f-5d33-ad5b-080baa5688dd', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_view_cart",
-  "tool_description": "Navigate to the Shipt cart page",
-  "tool_hash": "220da3a5769f",
-  "parameters": {},
-  "steps": [
-    {
-      "atomic_hash": "a2a2b95eb532",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''cart-icon'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "a[href*=''/cart'']"
-          },
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''cart'']"
-          },
-          {
-            "type": "css",
-            "selector": "[class*=''cart-icon'']"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_proceed_to_checkout
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('2be76365-42e8-5fbd-b85b-478ba130095a', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_proceed_to_checkout",
-  "tool_description": "Navigate from the Shipt cart to the checkout page",
-  "tool_hash": "cf2722c849f9",
-  "parameters": {},
-  "steps": [
-    {
-      "atomic_hash": "ef70a99ee3e7",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''checkout-button'']",
-        "fallbacks": [
-          {
-            "type": "text",
-            "selector": "Proceed to checkout"
-          },
-          {
-            "type": "text",
-            "selector": "Checkout"
-          },
-          {
-            "type": "css",
-            "selector": "button[class*=''checkout'']"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_exit_checkout
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('9cafe0a9-3ffe-5dd1-9c52-78e83de62146', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_exit_checkout",
-  "tool_description": "Exit the checkout flow and return to the main Shipt shopping experience",
-  "tool_hash": "5d334385ab40",
-  "parameters": {},
-  "steps": [
-    {
-      "atomic_hash": "e4a0b12f945b",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''back-to-shopping'']",
-        "fallbacks": [
-          {
-            "type": "text",
-            "selector": "Continue shopping"
-          },
-          {
-            "type": "text",
-            "selector": "Back to shopping"
-          },
-          {
-            "type": "css",
-            "selector": "a[href=''/'']"
-          },
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''back'']"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- shipt_get_cart_contents
-INSERT INTO schemas (id, site_id, definition, version)
-VALUES ('23f971cc-ad8f-5c17-a710-6a9cdcb3f0ed', 'ae3c7e30-1e14-5a53-8f78-471b1367e022', '{
-  "tool_name": "shipt_get_cart_contents",
-  "tool_description": "Open the cart, extract all item names, quantities, and prices, then close the cart. Read-only inspection.",
-  "tool_hash": "46fea6527804",
-  "parameters": {},
-  "steps": [
-    {
-      "atomic_hash": "ee7f3a8da51a",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''cart-icon'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "a[href*=''/cart'']"
-          },
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''cart'']"
-          }
-        ]
-      }
-    },
-    {
-      "atomic_hash": "bdaae095c477",
-      "action": "extract",
-      "params": {
-        "selector": "[data-testid=''cart-items-list'']"
-      }
-    },
-    {
-      "atomic_hash": "1c81f9b8f28d",
-      "action": "click",
-      "params": {
-        "primary_selector": "[data-testid=''close-cart'']",
-        "fallbacks": [
-          {
-            "type": "css",
-            "selector": "button[aria-label*=''close'']"
-          },
-          {
-            "type": "text",
-            "selector": "Close"
-          }
-        ]
-      }
-    }
-  ]
-}', 1)
-ON CONFLICT (id) DO UPDATE SET
-  definition = EXCLUDED.definition,
-  version = schemas.version + 1;
-
--- 4. Semantic terminal site config for Shipt
+-- 3. Semantic terminal site config for Shipt
 -- Selectors mapped from live DOM inspection (2026-03-16).
 -- Shipt has zero data-testid attrs; selectors use stable IDs, ARIA labels, and semantic queries.
 INSERT INTO site_configs (site_id, domain, config, version) VALUES (
@@ -495,28 +33,28 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "available_actions": ["search_products", "view_cart", "update_address", "select_store"]
             },
             "search_results": {
-                "url_pattern": "shipt\\.com/shop/stores/search",
+                "url_pattern": "shipt\\.com/shop/.+/search",
                 "parent_screen": "shop",
                 "extraction": {},
-                "available_actions": ["search_products", "add_to_cart", "view_product", "view_cart", "go_back"]
+                "available_actions": ["search_products", "add_to_cart", "view_product", "view_cart", "next_page", "prev_page", "go_back"]
             },
             "product_detail": {
                 "url_pattern": "shipt\\.com/shop/products/",
                 "parent_screen": "search_results",
                 "extraction": {},
-                "available_actions": ["add_to_cart", "view_cart", "go_back"]
+                "available_actions": ["add_to_cart", "view_cart", "search_products", "go_back"]
             },
             "cart": {
                 "url_pattern": "shipt\\.com/shop/cart",
                 "parent_screen": "shop",
                 "extraction": {},
-                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "go_back"]
+                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "search_products", "go_back"]
             },
             "checkout": {
                 "url_pattern": "shipt\\.com/checkout",
                 "parent_screen": "cart",
                 "extraction": {},
-                "available_actions": ["select_delivery_window", "apply_promo", "place_order", "go_back"]
+                "available_actions": ["go_back"]
             },
             "order_confirmation": {
                 "url_pattern": "shipt\\.com/order-confirmation",
@@ -543,7 +81,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "search_products": {
                 "params": {"query": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "navigate", "url": "https://www.shipt.com/shop/stores/search?query={{query}}"},
+                    {"action": "navigate", "url": "https://www.shipt.com/shop/{{store_slug}}/search?query={{query}}"},
                     {"action": "wait",   "strategy": "selector_visible", "selector": "button[aria-label*=''Add 1'']", "timeout": 15000}
                 ],
                 "target_screen": "search_results"
@@ -551,13 +89,31 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "add_to_cart": {
                 "params": {"item": {"type": "string", "required": true}},
                 "steps": [
-                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']"}
+                    {"action": "click",  "selector": "button[aria-label*=''Add 1''][aria-label*=''{{item}}''][aria-label*=''to cart'']",
+                     "fallbacks": [
+                        {"type": "css", "selector": "button[aria-label*=''Increase''][aria-label*=''{{item}}'']"},
+                        {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"}
+                     ]},
+                    {"action": "wait",   "strategy": "delay", "timeout": 1500, "optional": true},
+                    {"action": "click",  "selector": "[role=''dialog''] button:has-text(''Add to cart'')", "optional": true, "timeout": 2000,
+                     "fallbacks": [
+                        {"type": "css", "selector": "div[class*=''modal''] button:has-text(''Add to cart'')"},
+                        {"type": "text", "selector": "Add to cart"}
+                     ]},
+                    {"action": "wait",   "strategy": "delay", "timeout": 500, "optional": true},
+                    {"action": "click",  "selector": "[role=''dialog''] button[aria-label*=''Close'']", "optional": true, "timeout": 2000,
+                     "fallbacks": [
+                        {"type": "css", "selector": "[role=''dialog''] button[aria-label*=''close'']"},
+                        {"type": "css", "selector": "div[class*=''modal''] button[aria-label*=''Close'']"},
+                        {"type": "css", "selector": "button[aria-label=''Close'']"}
+                     ]}
                 ],
                 "stays_on_screen": true
             },
             "view_cart": {
                 "steps": [
-                    {"action": "navigate", "url": "https://www.shipt.com/shop/cart"}
+                    {"action": "navigate", "url": "https://www.shipt.com/shop/cart"},
+                    {"action": "wait",   "strategy": "delay", "timeout": 3000}
                 ],
                 "target_screen": "cart"
             },
@@ -598,6 +154,28 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ],
                 "target_screen": "shop"
             },
+            "next_page": {
+                "steps": [
+                    {"action": "click",  "selector": "button[aria-label=''Next'']",
+                     "fallbacks": [
+                        {"type": "css", "selector": "button[aria-label*=''next page'']"},
+                        {"type": "css", "selector": "a[aria-label*=''Next'']"},
+                        {"type": "text", "selector": "Next"}
+                     ]}
+                ],
+                "stays_on_screen": true
+            },
+            "prev_page": {
+                "steps": [
+                    {"action": "click",  "selector": "button[aria-label=''Previous'']",
+                     "fallbacks": [
+                        {"type": "css", "selector": "button[aria-label*=''previous page'']"},
+                        {"type": "css", "selector": "a[aria-label*=''Previous'']"},
+                        {"type": "text", "selector": "Previous"}
+                     ]}
+                ],
+                "stays_on_screen": true
+            },
             "go_back": {
                 "steps": [
                     {"action": "navigate", "url": "https://www.shipt.com/shop"}
@@ -608,12 +186,12 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         "context_extractors": {
             "cart": {
                 "steps": [
-                    {"action": "extract", "selector": "button[aria-label*=''cart''][aria-label*=''Click to view'']", "field": "summary"}
+                    {"action": "extract", "selector": ":is(button, a):has-text(''carts''), :is(button, a):has-text(''items in cart'')", "field": "summary"}
                 ]
             },
             "address": {
                 "steps": [
-                    {"action": "extract", "selector": "button[aria-label=''Change address'']", "field": "address"}
+                    {"action": "extract", "selector": "button:has-text(''Main St''), button:has-text(''Address'')", "field": "address"}
                 ]
             }
         }

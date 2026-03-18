@@ -72,6 +72,11 @@ IMPORTANT RULES:
 - If final extraction is missing or incomplete vs what was required = FAIL.
 - Only return PASS if ALL success criteria are demonstrably met.
 
+PRODUCT ATTRIBUTE REASONING:
+- When a criterion says "NOT Organic" or "NOT [attribute]", a product PASSES if its name does NOT contain that attribute. Absence of "Organic" in a product name means it is conventional (non-organic). Do not require explicit "non-organic" labeling.
+- When a criterion says a product should be a specific type (e.g., "tablet/caplet form"), check that the product name matches that type. It does NOT need to explicitly say "not liquid gel" — just verify the name says "Tablets" or "Caplet".
+- A "3lb Bag" at quantity 1 satisfies "approximately 3 lbs". Do not require quantity 6 for a 3lb bag.
+
 Return ONLY valid JSON, no markdown formatting."""
 
 # Map agent-specific action names to common vocabulary for the judge.
@@ -542,8 +547,8 @@ Examples:
     parser.add_argument(
         "--llm",
         type=str,
-        default="gpt-4o-mini",
-        help="LLM model for RINDLER agent (e.g., gpt-4o-mini, gpt-4o, claude-sonnet)"
+        default="gpt-4o",
+        help="LLM model for RINDLER agent (e.g., gpt-4o, gpt-4o-mini, claude-sonnet)"
     )
     parser.add_argument(
         "--max-steps",
