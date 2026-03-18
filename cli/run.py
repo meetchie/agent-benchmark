@@ -560,12 +560,12 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
     failure_screenshots = []
     current_step = {"index": 0}
 
-    started_at = datetime.utcnow()
+    started_at = datetime.now(datetime.timezone.utc)
 
     async def on_step_start(agent):
         current_step["index"] += 1
         current_step["started_at"] = time.monotonic()
-        current_step["start_ts"] = datetime.utcnow().isoformat() + "Z"
+        current_step["start_ts"] = datetime.now(datetime.timezone.utc).isoformat() + "Z"
 
     async def on_step_end(agent):
         elapsed_ms = (time.monotonic() - current_step["started_at"]) * 1000
@@ -657,7 +657,7 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
         except Exception:
             pass
 
-    finished_at = datetime.utcnow()
+    finished_at = datetime.now(datetime.timezone.utc)
     duration_ms = (finished_at - started_at).total_seconds() * 1000
 
     total_tokens_in = sum(s["tokens_input"] for s in steps_log)
@@ -720,7 +720,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     llm = LLMClient(model, RINDLER_SYSTEM_PROMPT)
     steps_log = []
     failure_screenshots = []
-    started_at = datetime.utcnow()
+    started_at = datetime.now(datetime.timezone.utc)
     session_id = None
     cumulative_cost = 0.0
 
@@ -771,7 +771,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
                 for step in range(max_steps):
                     step_num = step + 1
                     step_start = time.monotonic()
-                    step_ts = datetime.utcnow().isoformat() + "Z"
+                    step_ts = datetime.now(datetime.timezone.utc).isoformat() + "Z"
 
                     llm_resp = await llm.call(messages, llm_tools)
                     cost = compute_cost(model, llm_resp["tokens_input"], llm_resp["tokens_output"])
@@ -865,7 +865,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     except Exception as e:
         print(f"    Error: {e}")
 
-    finished_at = datetime.utcnow()
+    finished_at = datetime.now(datetime.timezone.utc)
     duration_ms = (finished_at - started_at).total_seconds() * 1000
 
     total_tokens_in = sum(s["tokens_input"] for s in steps_log)
@@ -921,7 +921,28 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
 
         results = []
         for task in tasks:
-            result = await run_rindler_task(task, model, results_dir, server_url, access_token, site)
+            try:
+                result = await run_rindler_task(task, model, results_dir, server_url, access_token, site)
+            except Exception as e:
+                print(f"    Task '{task['id']}' failed with error: {e}")
+                result = {
+                    "meta": {
+                        "task_id": task["id"], "task_name": task["name"], "agent": "rindler",
+                        "model": model, "site": site,
+                        "start_url": task["start_url"], "goal": task["goal"],
+                        "success_criteria": task["success_criteria"],
+                        "started_at": datetime.now(datetime.timezone.utc).isoformat(),
+                        "finished_at": datetime.now(datetime.timezone.utc).isoformat(),
+                        "duration_ms": 0,
+                    },
+                    "result": {"success": False, "verdict": None, "judge_reasoning": None, "failure_category": None},
+                    "stats": {"total_steps": 0, "total_tokens_input": 0, "total_tokens_output": 0, "total_cost_usd": 0, "avg_step_duration_ms": 0},
+                    "steps": [],
+                    "failure_screenshots": [],
+                }
+                log_path = results_dir / "rindler" / f"task-{task['id']}.json"
+                with open(log_path, "w") as f:
+                    json.dump(result, f, indent=2, default=str)
             results.append(result)
         return results
     finally:
