@@ -585,7 +585,12 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
                 latest = agent.history.model_actions()[-1]
                 if isinstance(latest, dict):
                     action_type = list(latest.keys())[0] if latest else None
-                    action_args = latest
+                    # Sanitize action_args — convert non-serializable objects to strings
+                    try:
+                        json.dumps(latest)
+                        action_args = latest
+                    except (TypeError, ValueError):
+                        action_args = {k: str(v) for k, v in latest.items()}
             if hasattr(agent.history, "extracted_content"):
                 extracted = agent.history.extracted_content()
                 if extracted:
@@ -704,7 +709,7 @@ async def run_browseruse_task(task: dict, model: str, results_dir: Path, site: s
     # Save per-task log
     log_path = results_dir / "browseruse" / f"task-{task_id}.json"
     with open(log_path, "w") as f:
-        json.dump(result, f, indent=2)
+        json.dump(result, f, indent=2, default=str)
     print(f"    Saved: {log_path.name}")
 
     return result
