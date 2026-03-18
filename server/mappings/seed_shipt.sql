@@ -95,13 +95,13 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         {"type": "css", "selector": "button[aria-label*=''Add''][aria-label*=''{{item}}''][aria-label*=''more'']"}
                      ]},
                     {"action": "wait",   "strategy": "delay", "timeout": 1500, "optional": true},
-                    {"action": "click",  "selector": "[role=''dialog''] button:has-text(''Add to cart'')", "optional": true,
+                    {"action": "click",  "selector": "[role=''dialog''] button:has-text(''Add to cart'')", "optional": true, "timeout": 2000,
                      "fallbacks": [
                         {"type": "css", "selector": "div[class*=''modal''] button:has-text(''Add to cart'')"},
                         {"type": "text", "selector": "Add to cart"}
                      ]},
                     {"action": "wait",   "strategy": "delay", "timeout": 500, "optional": true},
-                    {"action": "click",  "selector": "[role=''dialog''] button[aria-label*=''Close'']", "optional": true,
+                    {"action": "click",  "selector": "[role=''dialog''] button[aria-label*=''Close'']", "optional": true, "timeout": 2000,
                      "fallbacks": [
                         {"type": "css", "selector": "[role=''dialog''] button[aria-label*=''close'']"},
                         {"type": "css", "selector": "div[class*=''modal''] button[aria-label*=''Close'']"},
