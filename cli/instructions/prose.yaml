@@ -1,0 +1,25 @@
+site: prose
+domain: prose.com
+base_url: https://www.prose.com
+
+tasks:
+  - id: view-homepage
+    name: View the Prose homepage
+    goal: "Navigate to prose.com and identify the main product categories or calls to action on the homepage."
+    start_url: https://www.prose.com
+    success_criteria: "Agent successfully loads the Prose homepage and identifies at least one product category or CTA (e.g., 'Start your consultation', hair care, skin care)."
+    max_steps: 10
+
+  - id: start-consultation
+    name: Start a hair consultation
+    goal: "Navigate to prose.com and begin the hair care consultation quiz. Answer at least the first 5 questions."
+    start_url: https://www.prose.com
+    success_criteria: "Agent navigated into the consultation flow and progressed through at least 5 quiz questions."
+    max_steps: 30
+
+  - id: explore-products
+    name: Explore available products
+    goal: "Navigate to prose.com and find what product types are available (shampoo, conditioner, mask, etc). List the product types found."
+    start_url: https://www.prose.com
+    success_criteria: "Agent identified at least 2 distinct product types available on Prose."
+    max_steps: 20

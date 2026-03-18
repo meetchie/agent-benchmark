@@ -1,0 +1,555 @@
+{
+  "site_id": "prose",
+  "domain": "www.prose.com",
+  "screens": {
+    "homepage": {
+      "url_pattern": "prose\\.com/$",
+      "extraction": {
+        "fields": {
+          "hero_headline": "h1",
+          "haircare_cta": "[href='/consultation/category']",
+          "skincare_cta": "[href='/pages/skincare']"
+        }
+      },
+      "available_actions": [
+        "open_menu",
+        "start_consultation",
+        "view_product",
+        "view_accessories",
+        "view_gift_cards",
+        "view_reviews",
+        "sign_in"
+      ]
+    },
+    "consultation_category": {
+      "url_pattern": "prose\\.com/consultation/category",
+      "extraction": {
+        "fields": {
+          "haircare_option": "[data-testid='consultation-haircare']",
+          "skincare_option": "[data-testid='consultation-skincare']"
+        }
+      },
+      "available_actions": [
+        "start_consultation",
+        "dismiss_modal"
+      ]
+    },
+    "consultation_haircare": {
+      "url_pattern": "prose\\.com/consultation/haircare/.*",
+      "extraction": {
+        "fields": {
+          "question_text": "h1",
+          "current_section": "button[aria-current='true']",
+          "next_button_state": "[data-testid='consultation-haircare-next-button']"
+        }
+      },
+      "available_actions": [
+        "answer_question",
+        "select_answers",
+        "advance_consultation",
+        "go_back",
+        "enter_zipcode",
+        "dismiss_modal",
+        "navigate_to_section",
+        "save_exit_consultation"
+      ]
+    },
+    "consultation_skincare": {
+      "url_pattern": "prose\\.com/consultation/skincare/.*",
+      "extraction": {
+        "fields": {
+          "question_text": "h1",
+          "current_section": "button[aria-current='true']",
+          "next_button_state": "[data-testid='consultation-skincare-next-button']"
+        }
+      },
+      "available_actions": [
+        "answer_question",
+        "select_answers",
+        "advance_consultation",
+        "go_back",
+        "dismiss_modal",
+        "navigate_to_section",
+        "save_exit_consultation"
+      ]
+    },
+    "product_haircare_landing": {
+      "url_pattern": "prose\\.com/products/haircare",
+      "extraction": {
+        "container": "body",
+        "fields": {
+          "page_heading": "h1",
+          "get_formula_cta": "[href='/consultation/category']"
+        }
+      },
+      "available_actions": [
+        "start_consultation",
+        "view_product"
+      ]
+    },
+    "product_skincare_landing": {
+      "url_pattern": "prose\\.com/pages/skincare",
+      "extraction": {
+        "container": "body",
+        "fields": {
+          "page_heading": "h1",
+          "get_formula_cta": "[href='/consultation/category']"
+        }
+      },
+      "available_actions": [
+        "start_consultation",
+        "view_product"
+      ]
+    },
+    "product_detail": {
+      "url_pattern": "prose\\.com/products/(?!accessories|brushes).*",
+      "extraction": {
+        "fields": {
+          "product_name": "h1",
+          "price_subscribe": "[data-testid='price-subscribe']",
+          "price_onetime": "[data-testid='price-onetime']",
+          "get_formula_cta": "[href='/consultation/category']"
+        }
+      },
+      "available_actions": [
+        "start_consultation",
+        "view_product"
+      ]
+    },
+    "product_brushes": {
+      "url_pattern": "prose\\.com/products/brushes",
+      "extraction": {
+        "fields": {
+          "product_name": "h1",
+          "price": "[data-testid='price']",
+          "add_to_cart_button": "button",
+          "active_variant": "[data-testid='variant-selected']"
+        }
+      },
+      "available_actions": [
+        "select_brush_variant",
+        "add_to_cart"
+      ]
+    },
+    "accessories": {
+      "url_pattern": "prose\\.com/products/accessories",
+      "extraction": {
+        "container": "body",
+        "fields": {
+          "page_heading": "h2",
+          "product_links": "a[href*='/products/']"
+        },
+        "validation": {
+          "min_results": 1
+        }
+      },
+      "available_actions": [
+        "view_product",
+        "view_gift_cards"
+      ]
+    },
+    "gift_cards": {
+      "url_pattern": "prose\\.com/gift",
+      "extraction": {
+        "fields": {
+          "page_heading": "h1",
+          "recipient_input": "[placeholder='Who is it for?']",
+          "get_gifting_cta": "[href='/gift#gift-lp-form']"
+        }
+      },
+      "available_actions": []
+    },
+    "signin": {
+      "url_pattern": "prose\\.com/signin",
+      "extraction": {
+        "fields": {
+          "page_heading": "h2",
+          "email_input": "input[type='email']",
+          "sign_in_button": "button[type='submit']"
+        }
+      },
+      "available_actions": [
+        "sign_in",
+        "start_consultation"
+      ]
+    },
+    "reviews": {
+      "url_pattern": "prose\\.com/reviews",
+      "extraction": {
+        "container": "body",
+        "fields": {
+          "page_heading": "h1",
+          "haircare_tab": "button",
+          "skincare_tab": "button"
+        }
+      },
+      "available_actions": [
+        "view_reviews"
+      ]
+    }
+  },
+  "actions": {
+    "open_menu": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button[name='open-menu']",
+          "fallbacks": [
+            { "type": "role", "selector": "button[aria-label='open-menu']" }
+          ]
+        },
+        {
+          "action": "wait",
+          "selector": "a[href='/consultation/category']",
+          "strategy": "selector_visible"
+        }
+      ]
+    },
+    "start_consultation": {
+      "params": {
+        "category": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/consultation/category"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid='close-modal']",
+          "strategy": "selector_visible",
+          "timeout": 5000,
+          "optional": true
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='close-modal']",
+          "optional": true,
+          "fallbacks": [
+            { "type": "text", "selector": "Close" }
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='consultation-{{category}}']",
+          "fallbacks": [
+            { "type": "text", "selector": "{{category}}" }
+          ]
+        }
+      ],
+      "target_screen": "consultation_haircare"
+    },
+    "dismiss_modal": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "[data-testid='close-modal']",
+          "fallbacks": [
+            { "type": "text", "selector": "Close" },
+            { "type": "role", "selector": "button[aria-label='Close']" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "answer_question": {
+      "params": {
+        "answer_slug": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "wait",
+          "selector": "[data-testid='close-modal']",
+          "strategy": "selector_visible",
+          "timeout": 4000,
+          "optional": true
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='close-modal']",
+          "optional": true
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='consultation-haircare-answer-{{answer_slug}}']",
+          "fallbacks": [
+            { "type": "text", "selector": "{{answer_slug}}" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "select_answers": {
+      "params": {
+        "answer_slugs": {
+          "type": "array",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "wait",
+          "selector": "[data-testid='close-modal']",
+          "strategy": "selector_visible",
+          "timeout": 4000,
+          "optional": true
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='close-modal']",
+          "optional": true
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='consultation-haircare-answer-{{answer_slugs}}']",
+          "fallbacks": [
+            { "type": "text", "selector": "{{answer_slugs}}" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "advance_consultation": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "[data-testid='consultation-haircare-next-button']",
+          "fallbacks": [
+            { "type": "text", "selector": "Navigate to next screen" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "go_back": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button[aria-label='Navigate to previous screen']",
+          "fallbacks": [
+            { "type": "text", "selector": "Navigate to previous screen" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "enter_zipcode": {
+      "params": {
+        "zipcode": {
+          "type": "string",
+          "required": true
+        },
+        "country": {
+          "type": "string",
+          "required": false,
+          "default": "US"
+        }
+      },
+      "steps": [
+        {
+          "action": "type",
+          "selector": "[data-testid='consultation-zipcode-field']",
+          "value": "{{zipcode}}",
+          "fallbacks": [
+            { "type": "role", "selector": "textbox[name='Zip Code']" }
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid='consultation-haircare-next-button']",
+          "fallbacks": [
+            { "type": "text", "selector": "Navigate to next screen" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "navigate_to_section": {
+      "params": {
+        "section": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button[aria-label='Navigate to {{section}}']",
+          "fallbacks": [
+            { "type": "text", "selector": "Navigate to {{section}}" }
+          ]
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "save_exit_consultation": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button[aria-label='Exit Consultation']",
+          "fallbacks": [
+            { "type": "text", "selector": "Save + exit" }
+          ]
+        }
+      ],
+      "target_screen": "homepage"
+    },
+    "view_product": {
+      "params": {
+        "product_slug": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/products/{{product_slug}}"
+        }
+      ],
+      "target_screen": "product_detail"
+    },
+    "select_brush_variant": {
+      "params": {
+        "variant": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/products/brushes?variant={{variant}}"
+        }
+      ],
+      "target_screen": "product_brushes",
+      "stays_on_screen": true
+    },
+    "add_to_cart": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button[name='add-to-cart']",
+          "fallbacks": [
+            { "type": "text", "selector": "Add to cart" }
+          ]
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid='cart-confirmation']",
+          "strategy": "selector_visible",
+          "timeout": 3000,
+          "optional": true
+        }
+      ],
+      "stays_on_screen": true
+    },
+    "view_accessories": {
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/products/accessories"
+        }
+      ],
+      "target_screen": "accessories"
+    },
+    "view_gift_cards": {
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/gift"
+        }
+      ],
+      "target_screen": "gift_cards"
+    },
+    "view_reviews": {
+      "params": {
+        "category": {
+          "type": "string",
+          "required": false,
+          "default": "haircare"
+        }
+      },
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/reviews"
+        },
+        {
+          "action": "click",
+          "selector": "button[aria-label='{{category}}']",
+          "fallbacks": [
+            { "type": "text", "selector": "{{category}}" }
+          ],
+          "optional": true
+        }
+      ],
+      "target_screen": "reviews"
+    },
+    "sign_in": {
+      "params": {
+        "email": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "https://www.prose.com/signin"
+        },
+        {
+          "action": "type",
+          "selector": "input[type='email']",
+          "value": "{{email}}",
+          "fallbacks": [
+            { "type": "role", "selector": "textbox[name='Email address']" }
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "button[type='submit']",
+          "fallbacks": [
+            { "type": "text", "selector": "Sign in" }
+          ]
+        }
+      ],
+      "target_screen": "signin"
+    }
+  },
+  "context_extractors": {
+    "current_consultation_question": {
+      "steps": [
+        {
+          "action": "extract",
+          "selector": "h1",
+          "field": "question_text"
+        }
+      ]
+    },
+    "current_consultation_section": {
+      "steps": [
+        {
+          "action": "extract",
+          "selector": "button[aria-current='true']",
+          "field": "section_name"
+        }
+      ]
+    },
+    "geo_stressors": {
+      "steps": [
+        {
+          "action": "extract",
+          "selector": "body",
+          "field": "stressor_text"
+        }
+      ]
+    }
+  }
+}
