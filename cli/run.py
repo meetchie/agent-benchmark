@@ -56,7 +56,7 @@ COST_RATES = {
     "claude-sonnet": {"input": 3.00, "output": 15.00},
 }
 
-VALID_ACTIONS = {"click", "type", "navigate", "wait", "extract", "select"}
+VALID_ACTIONS = {"click", "type", "navigate", "wait", "extract", "select", "press_key"}
 
 REQUIRED_TASK_FIELDS = {"id", "name", "goal", "start_url", "success_criteria"}
 
