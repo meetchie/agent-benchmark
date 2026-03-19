@@ -25,6 +25,21 @@ import aiohttp
 import yaml
 
 # ---------------------------------------------------------------------------
+# Load root .env.local (does NOT override existing env vars)
+# ---------------------------------------------------------------------------
+
+_ENV_LOCAL = Path(__file__).resolve().parent.parent / ".env.local"
+if _ENV_LOCAL.exists():
+    for _line in _ENV_LOCAL.read_text().splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key, _val = _line.split("=", 1)
+        _key, _val = _key.strip(), _val.strip().strip("'\"")
+        if _key not in os.environ:
+            os.environ[_key] = _val
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -339,22 +354,18 @@ def validate_prerequisites(model: str, *, skip_rindler: bool = False, skip_brows
 
 
 def create_results_dir(site: str) -> Path:
-    """Create a unique results directory for this benchmark run."""
+    """Get or create the results directory for today's run. Reuses existing directory."""
     today = date.today().isoformat()
-    base = RESULTS_DIR / f"{site}-{today}"
-    results_path = base
+    results_path = RESULTS_DIR / f"{site}-{today}"
 
-    counter = 2
-    while results_path.exists():
-        results_path = RESULTS_DIR / f"{site}-{today}-{counter}"
-        counter += 1
+    (results_path / "browseruse" / "screenshots").mkdir(parents=True, exist_ok=True)
+    (results_path / "rindler" / "screenshots").mkdir(parents=True, exist_ok=True)
+    (results_path / "charts").mkdir(parents=True, exist_ok=True)
 
-    results_path.mkdir(parents=True)
-    (results_path / "browseruse" / "screenshots").mkdir(parents=True)
-    (results_path / "rindler" / "screenshots").mkdir(parents=True)
-    (results_path / "charts").mkdir(parents=True)
-
-    print(f"  Results directory: {results_path}")
+    if any((results_path / "browseruse").glob("task-*.json")):
+        print(f"  Results directory (existing): {results_path}")
+    else:
+        print(f"  Results directory: {results_path}")
     return results_path
 
 
@@ -611,11 +622,18 @@ def start_mcp_server() -> subprocess.Popen:
 
     global _mcp_server_proc
     print(f"  Starting MCP server from {server_dir}...")
+    # Ensure the server starts in HTTP mode, not MCP stdio mode.
+    # Force headless browser to avoid tab overload during benchmarks.
+    # Send logs to DEVNULL to prevent PIPE buffer deadlock.
+    env = os.environ.copy()
+    env.pop("MCP_STDIO", None)
+    env["BROWSER_HEADLESS"] = "true"
     proc = subprocess.Popen(
         ["go", "run", "main.go"],
         cwd=str(server_dir),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
     )
     _mcp_server_proc = proc
     return proc
@@ -843,7 +861,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
-        async with sse_client(server_url + "/mcp/", headers=headers) as (read, write):
+        async with sse_client(server_url + "/mcp/", headers=headers, timeout=30, sse_read_timeout=600) as (read, write):
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 mcp_tools = (await client.list_tools()).tools
@@ -884,101 +902,112 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
                 })
 
                 max_steps = task["max_steps"]
-                for step in range(max_steps):
-                    step_num = step + 1
-                    step_start = time.monotonic()
-                    step_ts = datetime.now(timezone.utc).isoformat() + "Z"
+                try:
+                    for step in range(max_steps):
+                        step_num = step + 1
+                        step_start = time.monotonic()
+                        step_ts = datetime.now(timezone.utc).isoformat() + "Z"
 
-                    llm_resp = await llm.call(messages, llm_tools)
-                    cost = compute_cost(model, llm_resp["tokens_input"], llm_resp["tokens_output"])
-                    cumulative_cost += cost
+                        llm_resp = await llm.call(messages, llm_tools)
+                        cost = compute_cost(model, llm_resp["tokens_input"], llm_resp["tokens_output"])
+                        cumulative_cost += cost
 
-                    if llm_resp["tool_name"] == "done":
-                        done_args = llm_resp["tool_args"] or {}
-                        step_elapsed = (time.monotonic() - step_start) * 1000
-                        steps_log.append({
-                            "step": step_num, "action": "done", "action_args": done_args,
-                            "started_at": step_ts, "duration_ms": round(step_elapsed, 2),
-                            "tokens_input": llm_resp["tokens_input"],
-                            "tokens_output": llm_resp["tokens_output"],
-                            "cost_usd": round(cost, 6),
-                            "observation": done_args.get("message", ""),
-                            "screenshot_path": None, "error": None,
-                            "mcp_tool": "done", "mcp_response_screen": None,
-                            "mcp_available_actions": [], "mcp_response_size_bytes": 0,
-                        })
-                        icon = "pass" if done_args.get("success") else "fail"
-                        print(f"    Step {step_num}: done ({icon}) — {done_args.get('message', '')[:60]}")
-                        break
-
-                    if llm_resp["tool_name"]:
-                        tool_args = llm_resp["tool_args"] or {}
-                        if session_id and "session_id" not in tool_args and llm_resp["tool_name"] != "start_session":
-                            tool_args["session_id"] = session_id
-
-                        t0 = time.monotonic()
-                        raw_result = await client.call_tool(llm_resp["tool_name"], tool_args)
-                        tool_elapsed = time.monotonic() - t0
-                        parsed = parse_tool_result(raw_result)
-                        step_elapsed = (time.monotonic() - step_start) * 1000
-
-                        steps_log.append({
-                            "step": step_num,
-                            "action": llm_resp["tool_name"],
-                            "action_args": {k: v for k, v in tool_args.items() if k != "session_id"},
-                            "started_at": step_ts,
-                            "duration_ms": round(step_elapsed, 2),
-                            "tokens_input": llm_resp["tokens_input"],
-                            "tokens_output": llm_resp["tokens_output"],
-                            "cost_usd": round(cost, 6),
-                            "observation": parsed.get("screen", str(parsed)[:200]),
-                            "screenshot_path": None,
-                            "error": parsed.get("error"),
-                            "mcp_tool": llm_resp["tool_name"],
-                            "mcp_response_screen": parsed.get("screen"),
-                            "mcp_available_actions": parsed.get("available_actions", []),
-                            "mcp_response_size_bytes": len(json.dumps(parsed, default=str)),
-                        })
-
-                        print(f"    Step {step_num}: {llm_resp['tool_name']} → {parsed.get('screen', '?')} ({step_elapsed:.0f}ms, ${cost:.4f})")
-
-                        # Append tool exchange to messages
-                        result_text = truncate(json.dumps(parsed, default=str), MAX_RESULT_CHARS)
-                        if llm.provider == "openai":
-                            messages.append({
-                                "role": "assistant",
-                                "tool_calls": [{"id": llm_resp["tool_call_id"], "type": "function",
-                                    "function": {"name": llm_resp["tool_name"], "arguments": json.dumps(llm_resp["tool_args"])}}],
+                        if llm_resp["tool_name"] == "done":
+                            done_args = llm_resp["tool_args"] or {}
+                            step_elapsed = (time.monotonic() - step_start) * 1000
+                            steps_log.append({
+                                "step": step_num, "action": "done", "action_args": done_args,
+                                "started_at": step_ts, "duration_ms": round(step_elapsed, 2),
+                                "tokens_input": llm_resp["tokens_input"],
+                                "tokens_output": llm_resp["tokens_output"],
+                                "cost_usd": round(cost, 6),
+                                "observation": done_args.get("message", ""),
+                                "screenshot_path": None, "error": None,
+                                "mcp_tool": "done", "mcp_response_screen": None,
+                                "mcp_available_actions": [], "mcp_response_size_bytes": 0,
                             })
-                            messages.append({"role": "tool", "tool_call_id": llm_resp["tool_call_id"], "content": result_text})
+                            icon = "pass" if done_args.get("success") else "fail"
+                            print(f"    Step {step_num}: done ({icon}) — {done_args.get('message', '')[:60]}")
+                            break
+
+                        if llm_resp["tool_name"]:
+                            tool_args = llm_resp["tool_args"] or {}
+                            if session_id and "session_id" not in tool_args and llm_resp["tool_name"] != "start_session":
+                                tool_args["session_id"] = session_id
+
+                            t0 = time.monotonic()
+                            raw_result = await client.call_tool(llm_resp["tool_name"], tool_args)
+                            tool_elapsed = time.monotonic() - t0
+                            parsed = parse_tool_result(raw_result)
+                            step_elapsed = (time.monotonic() - step_start) * 1000
+
+                            steps_log.append({
+                                "step": step_num,
+                                "action": llm_resp["tool_name"],
+                                "action_args": {k: v for k, v in tool_args.items() if k != "session_id"},
+                                "started_at": step_ts,
+                                "duration_ms": round(step_elapsed, 2),
+                                "tokens_input": llm_resp["tokens_input"],
+                                "tokens_output": llm_resp["tokens_output"],
+                                "cost_usd": round(cost, 6),
+                                "observation": parsed.get("screen", str(parsed)[:200]),
+                                "screenshot_path": None,
+                                "error": parsed.get("error"),
+                                "mcp_tool": llm_resp["tool_name"],
+                                "mcp_response_screen": parsed.get("screen"),
+                                "mcp_available_actions": parsed.get("available_actions", []),
+                                "mcp_response_size_bytes": len(json.dumps(parsed, default=str)),
+                            })
+
+                            print(f"    Step {step_num}: {llm_resp['tool_name']} → {parsed.get('screen', '?')} ({step_elapsed:.0f}ms, ${cost:.4f})")
+
+                            # Append tool exchange to messages
+                            result_text = truncate(json.dumps(parsed, default=str), MAX_RESULT_CHARS)
+                            if llm.provider == "openai":
+                                messages.append({
+                                    "role": "assistant",
+                                    "tool_calls": [{"id": llm_resp["tool_call_id"], "type": "function",
+                                        "function": {"name": llm_resp["tool_name"], "arguments": json.dumps(llm_resp["tool_args"])}}],
+                                })
+                                messages.append({"role": "tool", "tool_call_id": llm_resp["tool_call_id"], "content": result_text})
+                            else:
+                                messages.append({
+                                    "role": "assistant",
+                                    "content": [{"type": "tool_use", "id": llm_resp["tool_call_id"],
+                                        "name": llm_resp["tool_name"], "input": llm_resp["tool_args"]}],
+                                })
+                                messages.append({
+                                    "role": "user",
+                                    "content": [{"type": "tool_result", "tool_use_id": llm_resp["tool_call_id"], "content": result_text}],
+                                })
                         else:
-                            messages.append({
-                                "role": "assistant",
-                                "content": [{"type": "tool_use", "id": llm_resp["tool_call_id"],
-                                    "name": llm_resp["tool_name"], "input": llm_resp["tool_args"]}],
+                            # LLM returned text instead of tool call
+                            step_elapsed = (time.monotonic() - step_start) * 1000
+                            steps_log.append({
+                                "step": step_num, "action": "thinking", "action_args": {},
+                                "started_at": step_ts, "duration_ms": round(step_elapsed, 2),
+                                "tokens_input": llm_resp["tokens_input"],
+                                "tokens_output": llm_resp["tokens_output"],
+                                "cost_usd": round(cost, 6),
+                                "observation": (llm_resp["text"] or "")[:200],
+                                "screenshot_path": None, "error": None,
+                                "mcp_tool": None, "mcp_response_screen": None,
+                                "mcp_available_actions": [], "mcp_response_size_bytes": 0,
                             })
-                            messages.append({
-                                "role": "user",
-                                "content": [{"type": "tool_result", "tool_use_id": llm_resp["tool_call_id"], "content": result_text}],
-                            })
-                    else:
-                        # LLM returned text instead of tool call
-                        step_elapsed = (time.monotonic() - step_start) * 1000
-                        steps_log.append({
-                            "step": step_num, "action": "thinking", "action_args": {},
-                            "started_at": step_ts, "duration_ms": round(step_elapsed, 2),
-                            "tokens_input": llm_resp["tokens_input"],
-                            "tokens_output": llm_resp["tokens_output"],
-                            "cost_usd": round(cost, 6),
-                            "observation": (llm_resp["text"] or "")[:200],
-                            "screenshot_path": None, "error": None,
-                            "mcp_tool": None, "mcp_response_screen": None,
-                            "mcp_available_actions": [], "mcp_response_size_bytes": 0,
-                        })
-                        messages.append({"role": "assistant", "content": llm_resp["text"]})
-                        print(f"    Step {step_num}: [thinking] ({step_elapsed:.0f}ms)")
+                            messages.append({"role": "assistant", "content": llm_resp["text"]})
+                            print(f"    Step {step_num}: [thinking] ({step_elapsed:.0f}ms)")
+                finally:
+                    # Clean up browser session to avoid leaking tabs
+                    if session_id:
+                        try:
+                            await client.call_tool("close_session", {"session_id": session_id})
+                        except Exception:
+                            pass
 
     except Exception as e:
+        # Re-raise SSE/TaskGroup errors so the retry loop in run_rindler_phase can handle them
+        if "ExceptionGroup" in type(e).__name__:
+            raise
         print(f"    Error: {e}")
 
     finished_at = datetime.now(timezone.utc)
@@ -1050,7 +1079,17 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
                 results.append(existing)
                 continue
             try:
-                result = await run_rindler_task(task, model, results_dir, server_url, access_token, site)
+                # Retry on SSE connection failures (ExceptionGroup from anyio TaskGroup)
+                for _attempt in range(3):
+                    try:
+                        result = await run_rindler_task(task, model, results_dir, server_url, access_token, site)
+                        break
+                    except Exception as sse_err:
+                        if _attempt < 2 and "ExceptionGroup" in type(sse_err).__name__:
+                            print(f"    SSE connection failed (attempt {_attempt + 1}/3), retrying...")
+                            await asyncio.sleep(1)
+                        else:
+                            raise
             except Exception as e:
                 print(f"    Task '{task['id']}' failed with error: {e}")
                 result = {
