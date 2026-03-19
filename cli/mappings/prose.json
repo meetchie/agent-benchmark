@@ -4,11 +4,11 @@
   "screens": {
     "homepage": {
       "url_pattern": "prose\\.com/?$",
-      "available_actions": ["view_accessories", "view_product", "add_to_cart", "view_cart", "view_gift_cards", "search_products", "remove_from_cart", "go_back"]
+      "available_actions": ["view_accessories", "view_product", "view_cart", "view_gift_cards", "search_products", "go_back"]
     },
     "accessories": {
       "url_pattern": "prose\\.com/products/accessories",
-      "available_actions": ["view_product", "add_to_cart", "view_cart", "view_gift_cards", "view_accessories", "search_products", "go_back"]
+      "available_actions": ["view_product", "view_cart", "view_gift_cards", "view_accessories", "search_products", "go_back"]
     },
     "product_detail": {
       "url_pattern": "prose\\.com/products/prose-",
@@ -20,7 +20,7 @@
     },
     "cart": {
       "url_pattern": "prose\\.com/checkout/accessories",
-      "available_actions": ["view_cart", "view_product", "add_to_cart", "remove_from_cart", "view_accessories", "view_gift_cards", "search_products", "go_back"]
+      "available_actions": ["view_cart", "view_product", "remove_from_cart", "view_accessories", "view_gift_cards", "search_products", "go_back"]
     },
     "gift": {
       "url_pattern": "prose\\.com/gift",
@@ -71,8 +71,10 @@
         {
           "action": "click",
           "selector": "a:has-text('{{item}}')",
+          "timeout": 5000,
           "fallbacks": [
             {"type": "text", "selector": "{{item}}"},
+            {"type": "css", "selector": "h2:has-text('{{item}}')"},
             {"type": "css", "selector": "[href*='{{item}}']"}
           ]
         },
