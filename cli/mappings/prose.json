@@ -59,13 +59,14 @@
           "timeout": 10000
         },
         {
-          "action": "click",
-          "selector": "#bottom-modal-close-b",
-          "optional": true,
-          "timeout": 1000,
-          "fallbacks": [
-            {"type": "css", "selector": "button[id*='modal-close']"}
-          ]
+          "action": "press_key",
+          "value": "Escape",
+          "optional": true
+        },
+        {
+          "action": "wait",
+          "strategy": "delay",
+          "timeout": 500
         },
         {
           "action": "click",
@@ -90,21 +91,21 @@
       },
       "steps": [
         {
-          "action": "click",
-          "selector": "#bottom-modal-close-b",
-          "optional": true,
-          "timeout": 1000,
-          "fallbacks": [
-            {"type": "css", "selector": "button[id*='modal-close']"}
-          ]
+          "action": "press_key",
+          "value": "Escape",
+          "optional": true
+        },
+        {
+          "action": "wait",
+          "strategy": "delay",
+          "timeout": 500
         },
         {
           "action": "click",
-          "selector": "button:has-text('Add to cart')",
-          "timeout": 10000,
+          "selector": "[data-testid='add-to-cart']",
           "fallbacks": [
-            {"type": "text_exact", "selector": "Add to cart"},
-            {"type": "css", "selector": "button >> text=Add to cart"}
+            {"type": "css", "selector": "button:has-text('Add to cart')"},
+            {"type": "text_exact", "selector": "Add to cart"}
           ]
         }
       ],
