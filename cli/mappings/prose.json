@@ -116,21 +116,30 @@
         {
           "action": "wait",
           "strategy": "delay",
-          "timeout": 2000
+          "timeout": 3000
         },
         {
           "action": "click",
-          "selector": "text={{item}}",
+          "selector": "#bottom-modal-close-b",
+          "optional": true,
+          "timeout": 2000,
           "fallbacks": [
-            {"type": "css", "selector": "a:has-text('{{item}}')"},
-            {"type": "css", "selector": "[href*='{{item}}']"},
-            {"type": "text", "selector": "{{item}}"}
+            {"type": "css", "selector": "button[id*='modal-close']"},
+            {"type": "css", "selector": "[role='dialog'] button[aria-label*='close']"}
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "a:has-text('{{item}}')",
+          "fallbacks": [
+            {"type": "text", "selector": "{{item}}"},
+            {"type": "css", "selector": "[href*='{{item}}']"}
           ]
         },
         {
           "action": "wait",
           "strategy": "delay",
-          "timeout": 2000
+          "timeout": 3000
         }
       ],
       "target_screen": "product_detail"
@@ -142,7 +151,18 @@
       "steps": [
         {
           "action": "click",
-          "selector": "text=Add to cart",
+          "selector": "#bottom-modal-close-b",
+          "optional": true,
+          "timeout": 2000,
+          "fallbacks": [
+            {"type": "css", "selector": "button[id*='modal-close']"},
+            {"type": "css", "selector": "[role='dialog'] button[aria-label*='close']"},
+            {"type": "css", "selector": "[role='dialog'] button[aria-label*='Close']"}
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "button:text-is('Add to cart')",
           "fallbacks": [
             {"type": "css", "selector": "button:has-text('Add to cart')"},
             {"type": "css", "selector": "button:has-text('Add to Cart')"},
