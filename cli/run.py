@@ -46,6 +46,7 @@ if _ENV_LOCAL.exists():
 SCRIPT_DIR = Path(__file__).parent
 MAPPINGS_DIR = SCRIPT_DIR / "mappings"
 INSTRUCTIONS_DIR = SCRIPT_DIR / "instructions"
+EXTRACTORS_DIR = SCRIPT_DIR / "extractors"
 RESULTS_DIR = SCRIPT_DIR / "results"
 
 SUPPORTED_MODELS = ["gpt-4o", "gpt-4o-mini", "claude-sonnet"]
@@ -234,7 +235,14 @@ def validate_mapping(site: str) -> dict:
                 print(f"Error: Action '{action_name}' step {i} uses invalid action '{step['action']}'. Valid: {', '.join(sorted(VALID_ACTIONS))}")
                 sys.exit(1)
 
-    print(f"  Mapping validated: {len(mapping['screens'])} screens, {len(mapping['actions'])} actions")
+    # Load site-specific page extractor if available
+    extractor_path = EXTRACTORS_DIR / f"{site}.js"
+    if extractor_path.exists():
+        mapping["page_extractor"] = extractor_path.read_text()
+        print(f"  Mapping validated: {len(mapping['screens'])} screens, {len(mapping['actions'])} actions, extractor loaded")
+    else:
+        print(f"  Mapping validated: {len(mapping['screens'])} screens, {len(mapping['actions'])} actions")
+
     return mapping
 
 
