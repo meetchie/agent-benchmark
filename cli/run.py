@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
@@ -139,6 +140,15 @@ def parse_args():
         "--resume", metavar="DIR",
         help="Resume a previous run from the given results directory (skips completed tasks)",
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--browseruse-only", action="store_true",
+        help="Run only the BrowserUse phase (skip Rindler)",
+    )
+    mode.add_argument(
+        "--rindler-only", action="store_true",
+        help="Run only the Rindler phase (skip BrowserUse)",
+    )
     return parser.parse_args()
 
 
@@ -246,20 +256,86 @@ def validate_instructions(site: str) -> dict:
     return instructions
 
 
-def validate_api_keys(model: str):
-    """Check that required API keys are set."""
-    if model.startswith("gpt"):
-        if not os.environ.get("OPENAI_API_KEY"):
-            print("Error: OPENAI_API_KEY environment variable is required for gpt-* models.")
-            sys.exit(1)
-    elif model.startswith("claude"):
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("Error: ANTHROPIC_API_KEY environment variable is required for claude-* models.")
-            sys.exit(1)
-    # Always need OPENAI_API_KEY for the judge (gpt-4o-mini)
+def validate_prerequisites(model: str, *, skip_rindler: bool = False, skip_browseruse: bool = False):
+    """Check ALL prerequisites before running anything. Fail fast with clear errors."""
+    errors = []
+
+    # --- API Keys ---
     if not os.environ.get("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY is required for the GPT-4o-mini judge, even when using claude-* models.")
+        errors.append("OPENAI_API_KEY not set (required for judge + gpt-* models)")
+    if model.startswith("claude") and not os.environ.get("ANTHROPIC_API_KEY"):
+        errors.append("ANTHROPIC_API_KEY not set (required for claude-* models)")
+
+    # --- Playwright browser (BrowserUse only) ---
+    if not skip_browseruse:
+        playwright_chromium = Path.home() / ".cache" / "ms-playwright"
+        if not playwright_chromium.exists() or not any(playwright_chromium.iterdir()):
+            errors.append("Playwright browsers not installed (run: uv run playwright install chromium)")
+
+    # --- Rindler prerequisites ---
+    if not skip_rindler:
+        # Go compiler
+        if shutil.which("go") is None:
+            errors.append("'go' not found in PATH (required to build MCP server)")
+
+        # MCP server source
+        server_dir = SCRIPT_DIR.parent / "packages" / "mcp-server"
+        if not (server_dir / "main.go").exists():
+            errors.append(f"MCP server source not found at {server_dir}/main.go")
+
+        # MCP server env vars — check both direct env and the server's .env file
+        server_env_file = server_dir / ".env"
+        server_env_vars = {}
+        if server_env_file.exists():
+            for line in server_env_file.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    server_env_vars[k.strip()] = v.strip()
+
+        for var in ("MGMT_DATABASE_URL", "RUNTIME_DATABASE_URL", "REDIS_URL"):
+            if not os.environ.get(var) and var not in server_env_vars:
+                errors.append(f"{var} not set (required by MCP server — set in env or {server_env_file})")
+
+        # PostgreSQL connectivity
+        db_url = os.environ.get("MGMT_DATABASE_URL") or server_env_vars.get("MGMT_DATABASE_URL", "")
+        if db_url:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                parsed = _urlparse(db_url)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 5432
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(3)
+                s.connect((host, port))
+                s.close()
+            except (OSError, socket.timeout):
+                errors.append(f"Cannot connect to PostgreSQL at {host}:{port} (from MGMT_DATABASE_URL)")
+
+        # Redis connectivity
+        redis_url = os.environ.get("REDIS_URL") or server_env_vars.get("REDIS_URL", "")
+        if redis_url:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                parsed = _urlparse(redis_url)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 6379
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(3)
+                s.connect((host, port))
+                s.close()
+            except (OSError, socket.timeout):
+                errors.append(f"Cannot connect to Redis at {host}:{port} (from REDIS_URL)")
+
+    # --- Report ---
+    if errors:
+        print(f"\nPreflight check failed — {len(errors)} issue(s):\n")
+        for i, err in enumerate(errors, 1):
+            print(f"  {i}. {err}")
+        print()
         sys.exit(1)
+
+    print("  Prerequisites OK")
 
 
 def create_results_dir(site: str) -> Path:
@@ -1228,11 +1304,15 @@ async def main():
         print(f"  Resume: {args.resume}")
     print(f"{'=' * 60}\n")
 
-    # Phase 0: Validate
+    # Phase 0: Validate everything upfront
     print("Validating inputs...")
     mapping = validate_mapping(args.site)
     instructions = validate_instructions(args.site)
-    validate_api_keys(args.model)
+    validate_prerequisites(
+        args.model,
+        skip_rindler=args.browseruse_only,
+        skip_browseruse=args.rindler_only,
+    )
 
     # Determine results directory: resume existing or create new
     if args.resume:
@@ -1255,46 +1335,56 @@ async def main():
 
     print(f"\nReady to benchmark {len(tasks)} tasks.\n")
 
+    def _empty_results(agent_name: str, reason: str) -> list:
+        """Generate placeholder failed results for a skipped phase."""
+        return [{
+            "meta": {
+                "task_id": t["id"], "task_name": t["name"], "agent": agent_name,
+                "model": args.model, "site": args.site,
+                "start_url": t["start_url"], "goal": t["goal"],
+                "success_criteria": t["success_criteria"],
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": 0,
+            },
+            "result": {"success": False, "verdict": "skipped", "judge_reasoning": reason, "failure_category": None},
+            "stats": {"total_steps": 0, "total_tokens_input": 0, "total_tokens_output": 0, "total_cost_usd": 0, "avg_step_duration_ms": 0},
+            "steps": [],
+            "failure_screenshots": [],
+        } for t in tasks]
+
     # Phase 1: BrowserUse
-    print(f"{'=' * 60}")
-    print(f"  PHASE 1: BROWSERUSE")
-    print(f"{'=' * 60}\n")
-    browseruse_results = []
-    for task in tasks:
-        existing = load_existing_result(results_dir, "browseruse", task["id"])
-        if existing and args.resume:
-            print(f"  Skipping (cached): {task['name']} ({task['id']})")
-            browseruse_results.append(existing)
-        else:
-            result = await run_browseruse_task(task, args.model, results_dir, args.site)
-            browseruse_results.append(result)
+    if args.rindler_only:
+        print("  Skipping BrowserUse phase (--rindler-only)\n")
+        browseruse_results = _empty_results("browseruse", "Skipped (--rindler-only)")
+    else:
+        print(f"{'=' * 60}")
+        print(f"  PHASE 1: BROWSERUSE")
+        print(f"{'=' * 60}\n")
+        browseruse_results = []
+        for task in tasks:
+            existing = load_existing_result(results_dir, "browseruse", task["id"])
+            if existing and args.resume:
+                print(f"  Skipping (cached): {task['name']} ({task['id']})")
+                browseruse_results.append(existing)
+            else:
+                result = await run_browseruse_task(task, args.model, results_dir, args.site)
+                browseruse_results.append(result)
 
     # Phase 2: Rindler
-    print(f"\n{'=' * 60}")
-    print(f"  PHASE 2: RINDLER")
-    print(f"{'=' * 60}\n")
-    try:
-        rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
-    except Exception as e:
-        print(f"\n  Rindler phase failed: {e}")
-        print("  Continuing with BrowserUse-only results.\n")
-        rindler_results = []
-        for task in tasks:
-            rindler_results.append({
-                "meta": {
-                    "task_id": task["id"], "task_name": task["name"], "agent": "rindler",
-                    "model": args.model, "site": args.site,
-                    "start_url": task["start_url"], "goal": task["goal"],
-                    "success_criteria": task["success_criteria"],
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                    "finished_at": datetime.now(timezone.utc).isoformat(),
-                    "duration_ms": 0,
-                },
-                "result": {"success": False, "verdict": "error", "judge_reasoning": f"Rindler phase failed: {e}", "failure_category": "unknown"},
-                "stats": {"total_steps": 0, "total_tokens_input": 0, "total_tokens_output": 0, "total_cost_usd": 0, "avg_step_duration_ms": 0},
-                "steps": [],
-                "failure_screenshots": [],
-            })
+    if args.browseruse_only:
+        print("  Skipping Rindler phase (--browseruse-only)\n")
+        rindler_results = _empty_results("rindler", "Skipped (--browseruse-only)")
+    else:
+        print(f"\n{'=' * 60}")
+        print(f"  PHASE 2: RINDLER")
+        print(f"{'=' * 60}\n")
+        try:
+            rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
+        except Exception as e:
+            print(f"\n  Rindler phase failed: {e}")
+            print("  Continuing with BrowserUse-only results.\n")
+            rindler_results = _empty_results("rindler", f"Rindler phase failed: {e}")
 
     # Phase 3: Judge
     print(f"\n{'=' * 60}")
