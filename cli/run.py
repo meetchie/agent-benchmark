@@ -1028,6 +1028,36 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
 
                         if llm_resp["tool_name"]:
                             tool_args = llm_resp["tool_args"] or {}
+                            # Block duplicate start_session calls — each creates a new browser context
+                            if llm_resp["tool_name"] == "start_session" and session_id:
+                                # Return the existing session info without creating a new one
+                                parsed = {"data": {"session_id": session_id}, "screen": "homepage",
+                                          "available_actions": parsed.get("available_actions", []) if parsed else [],
+                                          "global_actions": parsed.get("global_actions", []) if parsed else [],
+                                          "context": {}, "error": None}
+                                step_elapsed = (time.monotonic() - step_start) * 1000
+                                steps_log.append({
+                                    "step": step_num, "action": "start_session (reused)",
+                                    "action_args": {}, "started_at": step_ts,
+                                    "duration_ms": round(step_elapsed, 2),
+                                    "tokens_input": llm_resp["tokens_input"],
+                                    "tokens_output": llm_resp["tokens_output"],
+                                    "cost_usd": round(cost, 6),
+                                    "observation": "reused existing session",
+                                    "screenshot_path": None, "error": None,
+                                    "mcp_tool": "start_session", "mcp_response_screen": "homepage",
+                                    "mcp_available_actions": [], "mcp_response_size_bytes": 0,
+                                })
+                                print(f"    Step {step_num}: start_session (reused existing) ({step_elapsed:.0f}ms)")
+                                result_text = truncate(json.dumps(parsed, default=str), MAX_RESULT_CHARS)
+                                if llm.provider == "openai":
+                                    messages.append({"role": "assistant", "tool_calls": [{"id": llm_resp["tool_call_id"], "type": "function", "function": {"name": "start_session", "arguments": json.dumps(llm_resp["tool_args"])}}]})
+                                    messages.append({"role": "tool", "tool_call_id": llm_resp["tool_call_id"], "content": result_text})
+                                else:
+                                    messages.append({"role": "assistant", "content": [{"type": "tool_use", "id": llm_resp["tool_call_id"], "name": "start_session", "input": llm_resp["tool_args"]}]})
+                                    messages.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": llm_resp["tool_call_id"], "content": result_text}]})
+                                continue
+
                             if session_id and "session_id" not in tool_args and llm_resp["tool_name"] != "start_session":
                                 tool_args["session_id"] = session_id
 
