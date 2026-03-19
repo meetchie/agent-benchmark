@@ -99,16 +99,12 @@
           ]
         },
         {
-          "action": "wait",
-          "strategy": "selector_visible",
-          "selector": "button:has-text('Add to cart')",
-          "timeout": 5000
-        },
-        {
           "action": "click",
           "selector": "button:has-text('Add to cart')",
+          "timeout": 10000,
           "fallbacks": [
-            {"type": "text", "selector": "Add to cart"}
+            {"type": "text_exact", "selector": "Add to cart"},
+            {"type": "css", "selector": "button >> text=Add to cart"}
           ]
         }
       ],
