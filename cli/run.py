@@ -621,6 +621,19 @@ def start_mcp_server() -> subprocess.Popen:
         sys.exit(1)
 
     global _mcp_server_proc
+
+    # Kill any existing process on port 8080
+    try:
+        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if ":8080" in line and "pid=" in line:
+                pid = int(line.split("pid=")[1].split(",")[0])
+                print(f"  Killing existing process on port 8080 (pid={pid})...")
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(2)
+    except Exception:
+        pass
+
     print(f"  Starting MCP server from {server_dir}...")
     # Ensure the server starts in HTTP mode, not MCP stdio mode.
     # Force headless browser to avoid tab overload during benchmarks.
@@ -628,13 +641,17 @@ def start_mcp_server() -> subprocess.Popen:
     env = os.environ.copy()
     env.pop("MCP_STDIO", None)
     env["BROWSER_HEADLESS"] = "true"
+    server_log = RESULTS_DIR / "mcp-server.log"
+    server_log.parent.mkdir(parents=True, exist_ok=True)
+    _server_log_fh = open(server_log, "w")
     proc = subprocess.Popen(
         ["go", "run", "main.go"],
         cwd=str(server_dir),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=_server_log_fh,
+        stderr=_server_log_fh,
         env=env,
     )
+    proc._log_fh = _server_log_fh  # attach for cleanup
     _mcp_server_proc = proc
     return proc
 
@@ -650,6 +667,8 @@ def stop_mcp_server(proc: subprocess.Popen):
         proc.kill()
         proc.wait()
     _mcp_server_proc = None
+    if hasattr(proc, "_log_fh"):
+        proc._log_fh.close()
     print("  MCP server stopped.")
 
 
@@ -668,6 +687,83 @@ async def wait_for_server(url: str, timeout: int = 30):
                 pass
             await asyncio.sleep(1)
     raise RuntimeError(f"MCP server did not become ready within {timeout}s")
+
+
+# ---------------------------------------------------------------------------
+# Site config seeding
+# ---------------------------------------------------------------------------
+
+# Fixed UUIDs for benchmark system user and sites (deterministic, idempotent)
+BENCHMARK_USER_ID = "00000000-0000-0000-0000-b00cb00c0001"
+BENCHMARK_USER_EMAIL = "benchmark@example.invalid"
+
+
+def _get_mgmt_db_url() -> str:
+    """Resolve the MGMT_DATABASE_URL from env or the MCP server's .env file."""
+    url = os.environ.get("MGMT_DATABASE_URL")
+    if url:
+        return url
+    server_env = SCRIPT_DIR.parent / "packages" / "mcp-server" / ".env"
+    if server_env.exists():
+        for line in server_env.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("MGMT_DATABASE_URL="):
+                return line.split("=", 1)[1].strip().strip("'\"")
+    raise RuntimeError("MGMT_DATABASE_URL not found in env or packages/mcp-server/.env")
+
+
+def seed_site_config(mapping: dict):
+    """Seed the site config into the MCP server's management database.
+
+    Creates the benchmark user and site if they don't exist, then upserts
+    the site config JSONB from the mapping file. Idempotent.
+    """
+    import psycopg2
+
+    # The MCP server uses eTLD+1 for domain lookups (strips www. prefix)
+    raw_domain = mapping["domain"]
+    domain = raw_domain.removeprefix("www.")
+    db_url = _get_mgmt_db_url()
+
+    # Generate a deterministic site UUID from the domain
+    import uuid
+    site_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, domain))
+
+    config_json = json.dumps(mapping)
+
+    print(f"  Seeding site config for '{domain}'...")
+
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor() as cur:
+            # 1. Ensure benchmark user exists
+            cur.execute("""
+                INSERT INTO users (id, email)
+                VALUES (%s, %s)
+                ON CONFLICT (id) DO NOTHING
+            """, (BENCHMARK_USER_ID, BENCHMARK_USER_EMAIL))
+
+            # 2. Ensure site exists
+            cur.execute("""
+                INSERT INTO sites (id, user_id, domain)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (domain) DO UPDATE SET updated_at = NOW()
+            """, (site_uuid, BENCHMARK_USER_ID, domain))
+
+            # 3. Upsert site config
+            cur.execute("""
+                INSERT INTO site_configs (site_id, domain, config, version)
+                VALUES (%s, %s, %s::jsonb, 1)
+                ON CONFLICT (domain) DO UPDATE SET
+                    config = EXCLUDED.config,
+                    version = site_configs.version + 1,
+                    updated_at = NOW()
+            """, (site_uuid, domain, config_json))
+
+        conn.commit()
+        print(f"  Site config seeded: {domain} (site_id={site_uuid[:8]}...)")
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1054,7 +1150,7 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     return result
 
 
-async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str, skip_cached: bool = True) -> list:
+async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str, mapping: dict, skip_cached: bool = True) -> list:
     """Run all tasks through Rindler: start server, authenticate, run tasks, stop server."""
     # Check if all tasks are already cached
     if skip_cached:
@@ -1062,6 +1158,9 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
         if all_cached:
             print("  All Rindler tasks cached — skipping server startup.")
             return [load_existing_result(results_dir, "rindler", t["id"]) for t in tasks]
+
+    # Seed the site config into the database before starting the server
+    seed_site_config(mapping)
 
     server_url = "http://localhost:8080"
 
@@ -1404,7 +1503,7 @@ async def main():
         print(f"  PHASE 2: RINDLER")
         print(f"{'=' * 60}\n")
         try:
-            rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, not args.fresh)
+            rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, mapping, not args.fresh)
         except Exception as e:
             print(f"\n  Rindler phase failed: {e}")
             print("  Continuing with BrowserUse-only results.\n")
