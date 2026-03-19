@@ -135,6 +135,10 @@ def parse_args():
         choices=SUPPORTED_MODELS,
         help="LLM model for both agents (default: gpt-4o)",
     )
+    parser.add_argument(
+        "--resume", metavar="DIR",
+        help="Resume a previous run from the given results directory (skips completed tasks)",
+    )
     return parser.parse_args()
 
 
@@ -501,6 +505,27 @@ async def oauth_authenticate(server_url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_mcp_server_proc = None
+
+
+def _cleanup_handler(signum, frame):
+    """Signal handler to clean up MCP server on Ctrl+C or SIGTERM."""
+    global _mcp_server_proc
+    if _mcp_server_proc is not None:
+        print(f"\n  Signal {signum} received — stopping MCP server...")
+        try:
+            _mcp_server_proc.send_signal(signal.SIGTERM)
+            _mcp_server_proc.wait(timeout=5)
+        except Exception:
+            _mcp_server_proc.kill()
+        _mcp_server_proc = None
+    sys.exit(1)
+
+
+signal.signal(signal.SIGINT, _cleanup_handler)
+signal.signal(signal.SIGTERM, _cleanup_handler)
+
+
 def start_mcp_server() -> subprocess.Popen:
     """Start the Go MCP server as a subprocess."""
     server_dir = SCRIPT_DIR.parent / "packages" / "mcp-server"
@@ -508,6 +533,7 @@ def start_mcp_server() -> subprocess.Popen:
         print(f"Error: MCP server not found at {server_dir}")
         sys.exit(1)
 
+    global _mcp_server_proc
     print(f"  Starting MCP server from {server_dir}...")
     proc = subprocess.Popen(
         ["go", "run", "main.go"],
@@ -515,11 +541,13 @@ def start_mcp_server() -> subprocess.Popen:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    _mcp_server_proc = proc
     return proc
 
 
 def stop_mcp_server(proc: subprocess.Popen):
     """Stop the MCP server subprocess."""
+    global _mcp_server_proc
     print("  Stopping MCP server...")
     proc.send_signal(signal.SIGTERM)
     try:
@@ -527,6 +555,7 @@ def stop_mcp_server(proc: subprocess.Popen):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    _mcp_server_proc = None
     print("  MCP server stopped.")
 
 
@@ -920,8 +949,15 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     return result
 
 
-async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str) -> list:
+async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str, resume: str | None = None) -> list:
     """Run all tasks through Rindler: start server, authenticate, run tasks, stop server."""
+    # Check if all tasks are already cached (resume mode)
+    if resume:
+        all_cached = all(load_existing_result(results_dir, "rindler", t["id"]) for t in tasks)
+        if all_cached:
+            print("  All Rindler tasks cached — skipping server startup.")
+            return [load_existing_result(results_dir, "rindler", t["id"]) for t in tasks]
+
     server_url = "http://localhost:8080"
 
     proc = start_mcp_server()
@@ -932,6 +968,11 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
 
         results = []
         for task in tasks:
+            existing = load_existing_result(results_dir, "rindler", task["id"]) if resume else None
+            if existing:
+                print(f"  Skipping (cached): {task['name']} ({task['id']})")
+                results.append(existing)
+                continue
             try:
                 result = await run_rindler_task(task, model, results_dir, server_url, access_token, site)
             except Exception as e:
@@ -1163,6 +1204,18 @@ def generate_summary(site: str, domain: str, model: str, tasks: list,
 # ---------------------------------------------------------------------------
 
 
+def load_existing_result(results_dir: Path, agent: str, task_id: str) -> dict | None:
+    """Load an existing task result if it exists (for resume support)."""
+    log_path = results_dir / agent / f"task-{task_id}.json"
+    if log_path.exists():
+        try:
+            with open(log_path) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+    return None
+
+
 async def main():
     args = parse_args()
 
@@ -1171,6 +1224,8 @@ async def main():
     print(f"{'=' * 60}")
     print(f"  Model: {args.model}")
     print(f"  Date:  {date.today().isoformat()}")
+    if args.resume:
+        print(f"  Resume: {args.resume}")
     print(f"{'=' * 60}\n")
 
     # Phase 0: Validate
@@ -1179,7 +1234,23 @@ async def main():
     instructions = validate_instructions(args.site)
     validate_api_keys(args.model)
 
-    results_dir = create_results_dir(args.site)
+    # Determine results directory: resume existing or create new
+    if args.resume:
+        resume_path = Path(args.resume)
+        if not resume_path.is_absolute():
+            resume_path = SCRIPT_DIR / resume_path
+        if not resume_path.exists():
+            print(f"Error: Resume directory not found: {resume_path}")
+            sys.exit(1)
+        results_dir = resume_path
+        # Ensure subdirs exist
+        (results_dir / "browseruse" / "screenshots").mkdir(parents=True, exist_ok=True)
+        (results_dir / "rindler" / "screenshots").mkdir(parents=True, exist_ok=True)
+        (results_dir / "charts").mkdir(parents=True, exist_ok=True)
+        print(f"  Resuming into: {results_dir}")
+    else:
+        results_dir = create_results_dir(args.site)
+
     tasks = instructions["tasks"]
 
     print(f"\nReady to benchmark {len(tasks)} tasks.\n")
@@ -1190,20 +1261,29 @@ async def main():
     print(f"{'=' * 60}\n")
     browseruse_results = []
     for task in tasks:
-        result = await run_browseruse_task(task, args.model, results_dir, args.site)
-        browseruse_results.append(result)
+        existing = load_existing_result(results_dir, "browseruse", task["id"])
+        if existing and args.resume:
+            print(f"  Skipping (cached): {task['name']} ({task['id']})")
+            browseruse_results.append(existing)
+        else:
+            result = await run_browseruse_task(task, args.model, results_dir, args.site)
+            browseruse_results.append(result)
 
     # Phase 2: Rindler
     print(f"\n{'=' * 60}")
     print(f"  PHASE 2: RINDLER")
     print(f"{'=' * 60}\n")
-    rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site)
+    rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
 
     # Phase 3: Judge
     print(f"\n{'=' * 60}")
     print(f"  PHASE 3: JUDGE")
     print(f"{'=' * 60}\n")
     for i, task in enumerate(tasks):
+        # Skip judging if already judged (resume mode)
+        if args.resume and browseruse_results[i].get("result", {}).get("verdict") and rindler_results[i].get("result", {}).get("verdict"):
+            print(f"  Skipping (already judged): {task['id']}")
+            continue
         browseruse_results[i], rindler_results[i] = await judge_task(
             task, browseruse_results[i], rindler_results[i]
         )
