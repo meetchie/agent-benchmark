@@ -38,7 +38,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "h2",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "accessories"
@@ -56,7 +56,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "h2",
-          "timeout": 10000
+          "timeout": 5000
         },
         {
           "action": "press_key",
@@ -64,25 +64,19 @@
           "optional": true
         },
         {
-          "action": "wait",
-          "strategy": "delay",
-          "timeout": 500
-        },
-        {
           "action": "click",
           "selector": "a:has-text('{{item}}')",
-          "timeout": 5000,
+          "timeout": 3000,
           "fallbacks": [
             {"type": "text", "selector": "{{item}}"},
-            {"type": "css", "selector": "h2:has-text('{{item}}')"},
-            {"type": "css", "selector": "[href*='{{item}}']"}
+            {"type": "css", "selector": "h2:has-text('{{item}}')"}
           ]
         },
         {
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "h1",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "product_detail"
@@ -96,11 +90,6 @@
           "action": "press_key",
           "value": "Escape",
           "optional": true
-        },
-        {
-          "action": "wait",
-          "strategy": "delay",
-          "timeout": 500
         },
         {
           "action": "click",
@@ -123,7 +112,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "main",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "cart"
@@ -138,7 +127,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "main",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "gift"
@@ -153,7 +142,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "h2",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "accessories"
@@ -187,7 +176,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "h2",
-          "timeout": 10000
+          "timeout": 5000
         }
       ],
       "target_screen": "accessories"
