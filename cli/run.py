@@ -147,9 +147,9 @@ def parse_args():
     )
     parser.add_argument("site", help="Site name (must match files in mappings/ and instructions/)")
     parser.add_argument(
-        "--model", default="gpt-4o",
+        "--model", default="gpt-4o-mini",
         choices=SUPPORTED_MODELS,
-        help="LLM model for both agents (default: gpt-4o)",
+        help="LLM model for both agents (default: gpt-4o-mini)",
     )
     parser.add_argument(
         "--fresh", action="store_true",
