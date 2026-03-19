@@ -1273,7 +1273,28 @@ async def main():
     print(f"\n{'=' * 60}")
     print(f"  PHASE 2: RINDLER")
     print(f"{'=' * 60}\n")
-    rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
+    try:
+        rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
+    except Exception as e:
+        print(f"\n  Rindler phase failed: {e}")
+        print("  Continuing with BrowserUse-only results.\n")
+        rindler_results = []
+        for task in tasks:
+            rindler_results.append({
+                "meta": {
+                    "task_id": task["id"], "task_name": task["name"], "agent": "rindler",
+                    "model": args.model, "site": args.site,
+                    "start_url": task["start_url"], "goal": task["goal"],
+                    "success_criteria": task["success_criteria"],
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": 0,
+                },
+                "result": {"success": False, "verdict": "error", "judge_reasoning": f"Rindler phase failed: {e}", "failure_category": "unknown"},
+                "stats": {"total_steps": 0, "total_tokens_input": 0, "total_tokens_output": 0, "total_cost_usd": 0, "avg_step_duration_ms": 0},
+                "steps": [],
+                "failure_screenshots": [],
+            })
 
     # Phase 3: Judge
     print(f"\n{'=' * 60}")
