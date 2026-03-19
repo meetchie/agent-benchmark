@@ -116,7 +116,7 @@
         {
           "action": "wait",
           "strategy": "delay",
-          "timeout": 3000
+          "timeout": 2000
         },
         {
           "action": "click",
@@ -139,7 +139,7 @@
         {
           "action": "wait",
           "strategy": "delay",
-          "timeout": 3000
+          "timeout": 2000
         }
       ],
       "target_screen": "product_detail"
@@ -164,7 +164,7 @@
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "button:has-text('Add to cart')",
-          "timeout": 15000
+          "timeout": 10000
         },
         {
           "action": "click",
