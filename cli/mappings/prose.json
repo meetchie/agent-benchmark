@@ -4,55 +4,27 @@
   "screens": {
     "homepage": {
       "url_pattern": "prose\\.com/?$",
-      "available_actions": [
-        "view_accessories",
-        "view_product",
-        "view_gift_cards",
-        "view_cart",
-        "search_products"
-      ]
+      "available_actions": ["view_accessories", "view_product", "add_to_cart", "view_cart", "view_gift_cards", "search_products", "remove_from_cart", "go_back"]
     },
     "accessories": {
       "url_pattern": "prose\\.com/products/accessories",
-      "available_actions": [
-        "view_product",
-        "view_gift_cards",
-        "view_cart"
-      ]
+      "available_actions": ["view_product", "add_to_cart", "view_cart", "view_gift_cards", "view_accessories", "search_products", "go_back"]
     },
     "product_detail": {
       "url_pattern": "prose\\.com/products/prose-",
-      "available_actions": [
-        "add_to_cart",
-        "view_accessories",
-        "view_cart",
-        "go_back"
-      ]
+      "available_actions": ["add_to_cart", "view_product", "view_accessories", "view_cart", "view_gift_cards", "search_products", "go_back"]
     },
     "brushes": {
       "url_pattern": "prose\\.com/products/brushes",
-      "available_actions": [
-        "add_to_cart",
-        "view_product",
-        "view_accessories",
-        "view_cart",
-        "go_back"
-      ]
+      "available_actions": ["add_to_cart", "view_product", "view_accessories", "view_cart", "view_gift_cards", "search_products", "go_back"]
     },
     "cart": {
       "url_pattern": "prose\\.com/checkout/accessories",
-      "available_actions": [
-        "remove_from_cart",
-        "view_accessories",
-        "go_back"
-      ]
+      "available_actions": ["view_cart", "view_product", "add_to_cart", "remove_from_cart", "view_accessories", "view_gift_cards", "search_products", "go_back"]
     },
     "gift": {
       "url_pattern": "prose\\.com/gift",
-      "available_actions": [
-        "view_accessories",
-        "go_back"
-      ]
+      "available_actions": ["view_accessories", "view_product", "view_cart", "view_gift_cards", "search_products", "go_back"]
     }
   },
   "actions": {
