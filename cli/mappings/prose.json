@@ -14,14 +14,6 @@
     },
     "accessories": {
       "url_pattern": "prose\\.com/products/accessories",
-      "extraction": {
-        "container": "main",
-        "item": "a[href*='/products/']",
-        "fields": {
-          "name": "h3, h2, span",
-          "price": "span:has-text('$')"
-        }
-      },
       "available_actions": [
         "view_product",
         "view_gift_cards",
@@ -30,13 +22,6 @@
     },
     "product_detail": {
       "url_pattern": "prose\\.com/products/prose-",
-      "extraction": {
-        "fields": {
-          "name": "h1",
-          "price": {"selector": "span:has-text('$')"},
-          "description": "p"
-        }
-      },
       "available_actions": [
         "add_to_cart",
         "view_accessories",
@@ -46,14 +31,6 @@
     },
     "brushes": {
       "url_pattern": "prose\\.com/products/brushes",
-      "extraction": {
-        "fields": {
-          "name": "h1",
-          "price": {"selector": "span:has-text('$')"},
-          "material": "p:has-text('Material')",
-          "variant_selector": "img[cursor='pointer']"
-        }
-      },
       "available_actions": [
         "add_to_cart",
         "view_product",
@@ -64,11 +41,6 @@
     },
     "cart": {
       "url_pattern": "prose\\.com/checkout/accessories",
-      "extraction": {
-        "fields": {
-          "items": "li, tr, div:has-text('$')"
-        }
-      },
       "available_actions": [
         "remove_from_cart",
         "view_accessories",
@@ -77,12 +49,6 @@
     },
     "gift": {
       "url_pattern": "prose\\.com/gift",
-      "extraction": {
-        "fields": {
-          "amount": "span:has-text('$')",
-          "recipient_field": "input[placeholder*='Who']"
-        }
-      },
       "available_actions": [
         "view_accessories",
         "go_back"
@@ -98,8 +64,9 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "h2",
+          "timeout": 10000
         }
       ],
       "target_screen": "accessories"
@@ -115,17 +82,17 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "h2",
+          "timeout": 10000
         },
         {
           "action": "click",
           "selector": "#bottom-modal-close-b",
           "optional": true,
-          "timeout": 2000,
+          "timeout": 1000,
           "fallbacks": [
-            {"type": "css", "selector": "button[id*='modal-close']"},
-            {"type": "css", "selector": "[role='dialog'] button[aria-label*='close']"}
+            {"type": "css", "selector": "button[id*='modal-close']"}
           ]
         },
         {
@@ -138,8 +105,9 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "h1",
+          "timeout": 10000
         }
       ],
       "target_screen": "product_detail"
@@ -153,32 +121,23 @@
           "action": "click",
           "selector": "#bottom-modal-close-b",
           "optional": true,
-          "timeout": 2000,
+          "timeout": 1000,
           "fallbacks": [
-            {"type": "css", "selector": "button[id*='modal-close']"},
-            {"type": "css", "selector": "[role='dialog'] button[aria-label*='close']"},
-            {"type": "css", "selector": "[role='dialog'] button[aria-label*='Close']"}
+            {"type": "css", "selector": "button[id*='modal-close']"}
           ]
         },
         {
           "action": "wait",
           "strategy": "selector_visible",
           "selector": "button:has-text('Add to cart')",
-          "timeout": 10000
+          "timeout": 5000
         },
         {
           "action": "click",
           "selector": "button:has-text('Add to cart')",
-          "timeout": 10000,
           "fallbacks": [
-            {"type": "text", "selector": "Add to cart"},
-            {"type": "css", "selector": "button:text-is('Add to cart')"}
+            {"type": "text", "selector": "Add to cart"}
           ]
-        },
-        {
-          "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
         }
       ],
       "stays_on_screen": true
@@ -191,8 +150,9 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "main",
+          "timeout": 10000
         }
       ],
       "target_screen": "cart"
@@ -205,8 +165,9 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "main",
+          "timeout": 10000
         }
       ],
       "target_screen": "gift"
@@ -216,6 +177,12 @@
         {
           "action": "navigate",
           "url": "https://www.prose.com/products/accessories"
+        },
+        {
+          "action": "wait",
+          "strategy": "selector_visible",
+          "selector": "h2",
+          "timeout": 10000
         }
       ],
       "target_screen": "accessories"
@@ -232,11 +199,6 @@
             {"type": "text", "selector": "Remove"},
             {"type": "css", "selector": "button[aria-label*='Remove']"}
           ]
-        },
-        {
-          "action": "wait",
-          "strategy": "delay",
-          "timeout": 1000
         }
       ],
       "stays_on_screen": true
@@ -252,8 +214,9 @@
         },
         {
           "action": "wait",
-          "strategy": "delay",
-          "timeout": 2000
+          "strategy": "selector_visible",
+          "selector": "h2",
+          "timeout": 10000
         }
       ],
       "target_screen": "accessories"
