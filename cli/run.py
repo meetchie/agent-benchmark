@@ -152,8 +152,8 @@ def parse_args():
         help="LLM model for both agents (default: gpt-4o)",
     )
     parser.add_argument(
-        "--resume", metavar="DIR",
-        help="Resume a previous run from the given results directory (skips completed tasks)",
+        "--fresh", action="store_true",
+        help="Re-run all tasks from scratch, ignoring cached results",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -1054,10 +1054,10 @@ async def run_rindler_task(task: dict, model: str, results_dir: Path, server_url
     return result
 
 
-async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str, resume: str | None = None) -> list:
+async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: str, skip_cached: bool = True) -> list:
     """Run all tasks through Rindler: start server, authenticate, run tasks, stop server."""
-    # Check if all tasks are already cached (resume mode)
-    if resume:
+    # Check if all tasks are already cached
+    if skip_cached:
         all_cached = all(load_existing_result(results_dir, "rindler", t["id"]) for t in tasks)
         if all_cached:
             print("  All Rindler tasks cached — skipping server startup.")
@@ -1073,7 +1073,7 @@ async def run_rindler_phase(tasks: list, model: str, results_dir: Path, site: st
 
         results = []
         for task in tasks:
-            existing = load_existing_result(results_dir, "rindler", task["id"]) if resume else None
+            existing = load_existing_result(results_dir, "rindler", task["id"]) if skip_cached else None
             if existing:
                 print(f"  Skipping (cached): {task['name']} ({task['id']})")
                 results.append(existing)
@@ -1339,8 +1339,8 @@ async def main():
     print(f"{'=' * 60}")
     print(f"  Model: {args.model}")
     print(f"  Date:  {date.today().isoformat()}")
-    if args.resume:
-        print(f"  Resume: {args.resume}")
+    if args.fresh:
+        print(f"  Mode:  fresh (re-running all tasks)")
     print(f"{'=' * 60}\n")
 
     # Phase 0: Validate everything upfront
@@ -1353,22 +1353,7 @@ async def main():
         skip_browseruse=args.rindler_only,
     )
 
-    # Determine results directory: resume existing or create new
-    if args.resume:
-        resume_path = Path(args.resume)
-        if not resume_path.is_absolute():
-            resume_path = SCRIPT_DIR / resume_path
-        if not resume_path.exists():
-            print(f"Error: Resume directory not found: {resume_path}")
-            sys.exit(1)
-        results_dir = resume_path
-        # Ensure subdirs exist
-        (results_dir / "browseruse" / "screenshots").mkdir(parents=True, exist_ok=True)
-        (results_dir / "rindler" / "screenshots").mkdir(parents=True, exist_ok=True)
-        (results_dir / "charts").mkdir(parents=True, exist_ok=True)
-        print(f"  Resuming into: {results_dir}")
-    else:
-        results_dir = create_results_dir(args.site)
+    results_dir = create_results_dir(args.site)
 
     tasks = instructions["tasks"]
 
@@ -1403,7 +1388,7 @@ async def main():
         browseruse_results = []
         for task in tasks:
             existing = load_existing_result(results_dir, "browseruse", task["id"])
-            if existing and args.resume:
+            if existing and not args.fresh:
                 print(f"  Skipping (cached): {task['name']} ({task['id']})")
                 browseruse_results.append(existing)
             else:
@@ -1419,7 +1404,7 @@ async def main():
         print(f"  PHASE 2: RINDLER")
         print(f"{'=' * 60}\n")
         try:
-            rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, args.resume)
+            rindler_results = await run_rindler_phase(tasks, args.model, results_dir, args.site, not args.fresh)
         except Exception as e:
             print(f"\n  Rindler phase failed: {e}")
             print("  Continuing with BrowserUse-only results.\n")
@@ -1430,8 +1415,8 @@ async def main():
     print(f"  PHASE 3: JUDGE")
     print(f"{'=' * 60}\n")
     for i, task in enumerate(tasks):
-        # Skip judging if already judged (resume mode)
-        if args.resume and browseruse_results[i].get("result", {}).get("verdict") and rindler_results[i].get("result", {}).get("verdict"):
+        # Skip judging if already judged
+        if not args.fresh and browseruse_results[i].get("result", {}).get("verdict") and rindler_results[i].get("result", {}).get("verdict"):
             print(f"  Skipping (already judged): {task['id']}")
             continue
         browseruse_results[i], rindler_results[i] = await judge_task(
