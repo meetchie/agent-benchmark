@@ -120,10 +120,11 @@
         },
         {
           "action": "click",
-          "selector": "a:has-text('{{item}}')",
+          "selector": "text={{item}}",
           "fallbacks": [
-            {"type": "text", "selector": "{{item}}"},
-            {"type": "css", "selector": "a[href*='{{item}}']"}
+            {"type": "css", "selector": "a:has-text('{{item}}')"},
+            {"type": "css", "selector": "[href*='{{item}}']"},
+            {"type": "text", "selector": "{{item}}"}
           ]
         },
         {
@@ -141,11 +142,13 @@
       "steps": [
         {
           "action": "click",
-          "selector": "button:has-text('Add to cart')",
+          "selector": "text=Add to cart",
           "fallbacks": [
-            {"type": "text", "selector": "Add to cart"},
+            {"type": "css", "selector": "button:has-text('Add to cart')"},
             {"type": "css", "selector": "button:has-text('Add to Cart')"},
-            {"type": "css", "selector": "button[type='submit']:has-text('Add')"}
+            {"type": "text", "selector": "Add to cart"},
+            {"type": "css", "selector": "[data-testid='add-to-cart']"},
+            {"type": "css", "selector": "button[type='submit']"}
           ]
         },
         {
