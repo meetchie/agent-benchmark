@@ -161,14 +161,18 @@
           ]
         },
         {
+          "action": "wait",
+          "strategy": "selector_visible",
+          "selector": "button:has-text('Add to cart')",
+          "timeout": 15000
+        },
+        {
           "action": "click",
-          "selector": "button:text-is('Add to cart')",
+          "selector": "button:has-text('Add to cart')",
+          "timeout": 10000,
           "fallbacks": [
-            {"type": "css", "selector": "button:has-text('Add to cart')"},
-            {"type": "css", "selector": "button:has-text('Add to Cart')"},
             {"type": "text", "selector": "Add to cart"},
-            {"type": "css", "selector": "[data-testid='add-to-cart']"},
-            {"type": "css", "selector": "button[type='submit']"}
+            {"type": "css", "selector": "button:text-is('Add to cart')"}
           ]
         },
         {
