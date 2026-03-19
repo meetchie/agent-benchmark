@@ -93,7 +93,7 @@ DONE_TOOL_SCHEMA = {
     "required": ["success", "message"],
 }
 
-MAX_RESULT_CHARS = 12000
+MAX_RESULT_CHARS = 2000
 
 # ---------------------------------------------------------------------------
 # Utility functions
