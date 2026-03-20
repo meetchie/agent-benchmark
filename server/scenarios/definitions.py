@@ -51,13 +51,13 @@ register_scenario(Scenario(
     description="Set delivery address, search for product, add to cart on Shipt",
     start_url="https://shipt.com",
     tags=["e-commerce", "grocery", "cart"],
-    goal="""You are shopping on Shipt using Rindler's semantic commerce tools.
+    goal="""You are shopping on Shipt (shipt.com).
 
-1. Start a session on shipt.com using start_session.
-2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address or set_address.
-3. Search for "Organic Bananas" using search_products.
-4. Add the first result to your cart using add_to_cart.
-5. Verify the cart has the item by calling view_cart.
+1. Go to shipt.com.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701".
+3. Search for "Organic Bananas".
+4. Add the first result to your cart.
+5. Navigate to the cart/bag page and verify the item is there.
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
@@ -77,10 +77,10 @@ register_scenario(Scenario(
     description="Complex multi-item order with strict attribute and quantity logic",
     start_url="https://shipt.com",
     tags=["agentic-flow", "logic-test", "dirty-data"],
-    goal="""You are shopping on Shipt using Rindler's semantic commerce tools.
+    goal="""You are shopping on Shipt (shipt.com).
 
-1. Start a session on shipt.com using start_session.
-2. Set the delivery address to "1 Main St, Springfield, IL 62701" using update_address.
+1. Go to shipt.com.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701".
 
 3. Search for "Granny Smith Apples".
    - PREFERRED: Add 6 loose individual Granny Smith apples.
@@ -94,12 +94,11 @@ register_scenario(Scenario(
    - Verify the result is Ibuprofen in tablet/caplet form (avoid liquid gels).
    - Add the smallest pack size available.
 
-6. Call view_cart to verify:
+6. Navigate to the cart/bag page and verify:
    - Cart contains 3 unique products
    - Apple count is 6 (or ~3 lbs)
    - Milk is Whole and NOT Organic
    - Advil is in tablet/caplet form
-
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:

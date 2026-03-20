@@ -163,6 +163,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         
         try:
             history = await agent.run(
+                max_steps=30,
                 on_step_start=on_step_start,
                 on_step_end=on_step_end
             )
