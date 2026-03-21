@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Task, RunStatus } from "../lib/types";
 import { BenchmarkHeader } from "./BenchmarkHeader";
+import { BackgroundGrid } from "./BackgroundGrid";
 import { URLInput } from "./URLInput";
 import { TaskCard } from "./TaskCard";
 import { RunButton } from "./RunButton";
@@ -57,16 +58,7 @@ export function SetupView({
           justifyContent: hasContent ? "flex-start" : "center",
         }}
       >
-        {/* Grid background with radial fade — matches main site */}
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: "linear-gradient(to right, rgba(96,165,250,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(96,165,250,0.12) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-            maskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 70%)",
-            WebkitMaskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 70%)",
-          }}
-        />
+        <BackgroundGrid />
         <div className="w-full max-w-[560px] relative z-10">
           {/* URL input — centered in the column */}
           <URLInput
