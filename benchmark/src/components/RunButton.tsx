@@ -13,7 +13,7 @@ export function RunButton({ status, disabled, onClick }: RunButtonProps) {
     <button
       onClick={onClick}
       disabled={disabled || isRunning}
-      className={`w-full rounded-none border-2 py-2.5 text-sm font-semibold transition-all
+      className={`w-full rounded-none border-2 py-3.5 text-base font-semibold transition-all
         ${
           disabled || isRunning
             ? "border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed"

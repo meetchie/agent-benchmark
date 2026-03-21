@@ -17,7 +17,7 @@ export function URLInput({ value, onChange, onSubmit, disabled }: URLInputProps)
 
   return (
     <div className="space-y-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+      <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
         Website URL
       </label>
       <input
@@ -28,7 +28,7 @@ export function URLInput({ value, onChange, onSubmit, disabled }: URLInputProps)
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder="https://your-site.com"
-        className={`w-full rounded-none border-2 px-3 py-2 text-sm outline-none transition-colors
+        className={`w-full rounded-none border-2 px-4 py-3 text-base outline-none transition-colors
           ${isValid ? "border-slate-300 focus:border-[#3c49ad]" : "border-red-400"}
           ${disabled ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-slate-900"}
         `}
