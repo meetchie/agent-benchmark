@@ -16,6 +16,7 @@ interface SetupViewProps {
   runStatus: RunStatus;
   canRun: boolean;
   onRun: () => void;
+  onRegenerateTasks: () => void;
 }
 
 export function SetupView({
@@ -30,6 +31,7 @@ export function SetupView({
   runStatus,
   canRun,
   onRun,
+  onRegenerateTasks,
 }: SetupViewProps) {
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
@@ -51,9 +53,22 @@ export function SetupView({
           />
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Task
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Task
+              </label>
+              {!tasksLoading && tasks.length > 0 && (
+                <button
+                  onClick={onRegenerateTasks}
+                  className="text-xs text-[#3c49ad] hover:text-[#2f3a8a] flex items-center gap-1"
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Regenerate
+                </button>
+              )}
+            </div>
 
             {tasksLoading && (
               <div className="flex items-center gap-2 py-4 justify-center">

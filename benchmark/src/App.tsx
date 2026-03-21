@@ -57,6 +57,30 @@ export default function App() {
     }
   }, [url, tasksLoading]);
 
+  const handleRegenerateTasks = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = "";  // Clear so it regenerates even for same URL
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    try {
+      const data = await generateTasks(trimmed);
+      setTasks(data.tasks);
+      lastGeneratedUrlRef.current = trimmed;
+    } catch (e) {
+      setTasksError(
+        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [url, tasksLoading]);
+
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -198,6 +222,7 @@ export default function App() {
       runStatus={runStatus}
       canRun={canRun}
       onRun={handleRun}
+      onRegenerateTasks={handleRegenerateTasks}
     />
   );
 }
