@@ -66,3 +66,29 @@ def test_status_running():
     resp = client.get(f"/benchmark/status/{run_id}")
     assert resp.status_code == 200
     assert resp.json()["status"] == "running"
+
+
+def test_generate_tasks_success():
+    fake_tasks = [
+        {"id": "task_1", "label": "Test task", "goal": "Do something."},
+        {"id": "task_2", "label": "Test task 2", "goal": "Do something else."},
+        {"id": "task_3", "label": "Test task 3", "goal": "Do another thing."},
+    ]
+    with patch("server.fetch_and_generate", new_callable=AsyncMock, return_value=fake_tasks):
+        resp = client.post("/benchmark/generate-tasks", json={"url": "https://www.dominos.com"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["tasks"]) == 3
+    assert data["tasks"][0]["id"] == "task_1"
+
+
+def test_generate_tasks_invalid_url():
+    resp = client.post("/benchmark/generate-tasks", json={"url": "not-a-url"})
+    assert resp.status_code == 422
+
+
+def test_generate_tasks_site_unreachable():
+    with patch("server.fetch_and_generate", new_callable=AsyncMock, side_effect=ConnectionError("timeout")):
+        resp = client.post("/benchmark/generate-tasks", json={"url": "https://unreachable-site.com"})
+    assert resp.status_code == 502
+    assert "detail" in resp.json()

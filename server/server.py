@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from benchmark_runner import RunState, run_benchmark
+from task_generator import fetch_and_generate
 
 
 # In-memory run state store
@@ -51,6 +52,17 @@ class StartRequest(BaseModel):
         return v
 
 
+class GenerateTasksRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def url_must_be_http(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("url must start with http:// or https://")
+        return v
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -74,3 +86,16 @@ async def get_status(run_id: str):
     if not state:
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
     return state.to_response()
+
+
+@app.post("/benchmark/generate-tasks")
+async def generate_tasks_endpoint(req: GenerateTasksRequest):
+    try:
+        tasks = await fetch_and_generate(req.url)
+        return {"tasks": tasks}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=502, detail={"error": "Could not access site", "detail": str(e)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "Task generation failed", "detail": str(e)[:200]})
