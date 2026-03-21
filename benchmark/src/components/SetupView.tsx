@@ -51,15 +51,23 @@ export function SetupView({
       <BenchmarkHeader />
 
       <div
-        className="flex-1 flex flex-col items-center justify-center px-6 transition-all duration-500 ease-in-out"
+        className="flex-1 flex flex-col items-center justify-center px-6 transition-all duration-500 ease-in-out relative"
         style={{
           paddingTop: hasContent ? "48px" : "0",
           justifyContent: hasContent ? "flex-start" : "center",
-          backgroundImage: "radial-gradient(circle at 1px 1px, rgb(60 73 173 / 0.12) 1px, transparent 0)",
-          backgroundSize: "32px 32px",
         }}
       >
-        <div className="w-full max-w-[560px]">
+        {/* Grid background with radial fade — matches main site */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "linear-gradient(to right, rgba(96,165,250,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(96,165,250,0.12) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+            maskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 70%)",
+            WebkitMaskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 70%)",
+          }}
+        />
+        <div className="w-full max-w-[560px] relative z-10">
           {/* URL input — centered in the column */}
           <URLInput
             value={url}
