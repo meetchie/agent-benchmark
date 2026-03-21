@@ -3,6 +3,44 @@ import { formatMs, formatTimer } from "../lib/utils";
 import { RunningHeader } from "./RunningHeader";
 import { StepLog } from "./StepLog";
 
+function StepBreakdown({ steps, isFail }: { steps: StepRecord[]; isFail: boolean }) {
+  const avgMs = steps.reduce((sum, s) => sum + s.elapsed_ms, 0) / steps.length;
+  // "Slow" = took more than 2x the average
+  const slowThreshold = Math.max(avgMs * 2, 3000);
+
+  const slowSteps = steps
+    .map((s, i) => ({ ...s, index: i }))
+    .filter((s) => {
+      if (isFail && s.index === steps.length - 1) return false; // already shown as stuck step
+      return s.elapsed_ms > slowThreshold;
+    })
+    .sort((a, b) => b.elapsed_ms - a.elapsed_ms);
+
+  if (slowSteps.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+        Slow Steps
+      </p>
+      <div className="border border-slate-200 bg-white divide-y divide-slate-100">
+        {slowSteps.map((step) => (
+          <div key={step.step} className="flex items-center gap-2 px-3 py-1.5">
+            <span className="text-xs text-amber-500 shrink-0">⚠</span>
+            <span className="flex-1 text-xs text-slate-600 truncate">
+              <span className="text-slate-400 mr-1">#{step.step}</span>
+              {step.description}
+            </span>
+            <span className="shrink-0 text-xs text-amber-600 font-mono font-medium">
+              {formatMs(step.elapsed_ms)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface RunningViewProps {
   url: string;
   taskLabel: string;
@@ -120,6 +158,11 @@ export function RunningView({
                 <span>Output: {summary.output_tokens.toLocaleString()}</span>
                 <span>Total: {summary.total_tokens.toLocaleString()}</span>
               </div>
+            )}
+
+            {/* Step breakdown — show slow/problematic steps */}
+            {steps.length > 0 && (
+              <StepBreakdown steps={steps} isFail={!!isFail} />
             )}
 
             <div className="flex gap-3">
