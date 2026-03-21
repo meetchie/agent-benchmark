@@ -59,7 +59,7 @@ export function SetupView({
       <div
         className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out relative"
         style={{
-          paddingTop: shifted ? "15vh" : "30vh",
+          paddingTop: shifted ? "15vh" : "35vh",
         }}
       >
         <BackgroundGrid />
