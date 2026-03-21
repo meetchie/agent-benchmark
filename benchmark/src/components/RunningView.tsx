@@ -122,16 +122,17 @@ export function RunningView({
             </div>
           </div>
         ) : (
-          /* Screenshot area — full width, natural aspect ratio */
-          <div className="border-2 border-slate-200 bg-white overflow-hidden">
+          /* Screenshot area — capped height so steps are always visible */
+          <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ maxHeight: "55vh" }}>
             {screenshot ? (
               <img
                 src={screenshot}
                 alt="Agent screenshot"
-                className="w-full block"
+                className="w-full block object-contain"
+                style={{ maxHeight: "55vh" }}
               />
             ) : (
-              <div className="flex items-center justify-center" style={{ aspectRatio: "16/10" }}>
+              <div className="flex items-center justify-center" style={{ height: "55vh" }}>
                 <svg
                   className="animate-spin h-5 w-5 text-[#3c49ad]"
                   fill="none"
