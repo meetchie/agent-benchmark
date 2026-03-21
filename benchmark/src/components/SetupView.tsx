@@ -52,7 +52,12 @@ export function SetupView({
 
       <div
         className="flex-1 flex flex-col items-center justify-center px-6 transition-all duration-500 ease-in-out"
-        style={{ paddingTop: hasContent ? "48px" : "0", justifyContent: hasContent ? "flex-start" : "center" }}
+        style={{
+          paddingTop: hasContent ? "48px" : "0",
+          justifyContent: hasContent ? "flex-start" : "center",
+          backgroundImage: "radial-gradient(circle at 1px 1px, rgb(60 73 173 / 0.12) 1px, transparent 0)",
+          backgroundSize: "32px 32px",
+        }}
       >
         <div className="w-full max-w-[560px]">
           {/* URL input — centered in the column */}
