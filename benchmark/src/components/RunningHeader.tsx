@@ -46,10 +46,15 @@ export function RunningHeader({
   const displayTime = isRunning ? formatTimer(elapsed) : totalMs ? formatTimer(totalMs) : "";
 
   return (
-    <header className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between">
+    <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="text-sm font-semibold text-slate-900 shrink-0">Rindler</span>
-        <span className="text-slate-300 shrink-0">|</span>
+        <a href="https://rindlerapp.com" className="flex items-center gap-2.5 shrink-0">
+          <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />
+          <span className="text-lg font-semibold text-slate-900">Rindler</span>
+        </a>
+        <span className="text-slate-400 font-light shrink-0">|</span>
+        <span className="text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
+        <span className="text-slate-400 font-light shrink-0">|</span>
         <span className="text-xs text-slate-500 truncate">{domain}</span>
         <span className="text-slate-300 shrink-0">|</span>
         <span className="text-xs text-slate-500 truncate">{taskLabel}</span>
