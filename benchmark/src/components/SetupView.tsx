@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Task, RunStatus } from "../lib/types";
 import { BenchmarkHeader } from "./BenchmarkHeader";
 import { URLInput } from "./URLInput";
@@ -33,25 +34,42 @@ export function SetupView({
   onRun,
   onRegenerateTasks,
 }: SetupViewProps) {
-  // URL starts centered, shifts to top once tasks load or are loading
   const hasContent = tasks.length > 0 || tasksLoading || tasksError;
+
+  // Delay showing tasks so the fade-in triggers after mount
+  const [tasksVisible, setTasksVisible] = useState(false);
+  useEffect(() => {
+    if (tasks.length > 0 && !tasksLoading) {
+      const t = setTimeout(() => setTasksVisible(true), 50);
+      return () => clearTimeout(t);
+    }
+    setTasksVisible(false);
+  }, [tasks.length, tasksLoading]);
 
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
       <BenchmarkHeader />
 
-      <div className={`flex-1 flex flex-col items-center px-6 transition-all duration-300 ${
-        hasContent ? "pt-12" : "justify-center"
-      }`}>
-        <div className="w-full max-w-[480px] space-y-6">
-          {!hasContent && (
-            <div className="text-center">
-              <p className="text-sm text-slate-400">
-                Paste a URL to generate benchmark tasks
-              </p>
-            </div>
-          )}
+      <div
+        className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out"
+        style={{ paddingTop: hasContent ? "48px" : "30vh" }}
+      >
+        <div className="w-full max-w-[480px]">
+          {/* Subtitle — fades out */}
+          <div
+            className="text-center mb-6 transition-all duration-300 ease-in-out"
+            style={{
+              opacity: hasContent ? 0 : 1,
+              maxHeight: hasContent ? 0 : "40px",
+              overflow: "hidden",
+            }}
+          >
+            <p className="text-sm text-slate-400">
+              Paste a URL to generate benchmark tasks
+            </p>
+          </div>
 
+          {/* URL input + loading spinner */}
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <URLInput
@@ -61,23 +79,37 @@ export function SetupView({
                 disabled={runStatus === "running"}
               />
             </div>
-            {tasksLoading && (
-              <div className="flex items-center gap-2 shrink-0 pt-5">
-                <svg
-                  className="animate-spin h-4 w-4 text-[#3c49ad]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <span className="text-xs text-slate-400 whitespace-nowrap">Generating tasks...</span>
-              </div>
-            )}
+            <div
+              className="flex items-center gap-2 shrink-0 pt-5 transition-all duration-300"
+              style={{
+                opacity: tasksLoading ? 1 : 0,
+                width: tasksLoading ? "auto" : 0,
+                overflow: "hidden",
+              }}
+            >
+              <svg
+                className="animate-spin h-4 w-4 text-[#3c49ad]"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-xs text-slate-400 whitespace-nowrap">Generating tasks...</span>
+            </div>
           </div>
 
-          {/* Tasks section — only shows after loading starts */}
-          {hasContent && !tasksLoading && (
+          {/* Tasks section — fades in */}
+          <div
+            className="transition-all duration-500 ease-in-out"
+            style={{
+              opacity: tasksVisible ? 1 : 0,
+              transform: tasksVisible ? "translateY(0)" : "translateY(12px)",
+              maxHeight: tasksVisible ? "600px" : 0,
+              overflow: "hidden",
+              marginTop: tasksVisible ? "24px" : 0,
+            }}
+          >
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -116,12 +148,13 @@ export function SetupView({
                 </div>
               )}
             </div>
-          )}
 
-          {/* Run button — only after tasks loaded */}
-          {tasks.length > 0 && !tasksLoading && (
-            <RunButton status={runStatus} disabled={!canRun} onClick={onRun} />
-          )}
+            {tasks.length > 0 && (
+              <div className="mt-6">
+                <RunButton status={runStatus} disabled={!canRun} onClick={onRun} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
