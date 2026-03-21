@@ -55,21 +55,7 @@ export function SetupView({
         style={{ paddingTop: hasContent ? "48px" : "0", justifyContent: hasContent ? "flex-start" : "center" }}
       >
         <div className="w-full max-w-[560px]">
-          {/* Subtitle — fades out */}
-          <div
-            className="text-center mb-8 transition-all duration-300 ease-in-out"
-            style={{
-              opacity: hasContent ? 0 : 1,
-              maxHeight: hasContent ? 0 : "40px",
-              overflow: "hidden",
-            }}
-          >
-            <p className="text-base text-slate-400">
-              Paste a URL to generate benchmark tasks
-            </p>
-          </div>
-
-          {/* URL input */}
+          {/* URL input — centered in the column */}
           <URLInput
             value={url}
             onChange={onUrlChange}

@@ -16,10 +16,10 @@ export function URLInput({ value, onChange, onSubmit, disabled }: URLInputProps)
   };
 
   return (
-    <div className="space-y-1">
-      <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-        Website URL
-      </label>
+    <div className="space-y-2">
+      <p className="text-sm text-slate-400">
+        Paste a website URL to generate benchmark tasks
+      </p>
       <input
         type="url"
         value={value}
