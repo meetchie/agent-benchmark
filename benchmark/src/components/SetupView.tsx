@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Task, RunStatus } from "../lib/types";
 import { BenchmarkHeader } from "./BenchmarkHeader";
 import { BackgroundGrid } from "./BackgroundGrid";
@@ -35,7 +35,12 @@ export function SetupView({
   onRun,
   onRegenerateTasks,
 }: SetupViewProps) {
-  const hasContent = tasks.length > 0 || tasksLoading || tasksError;
+  // Once shifted up, stay up — never go back down
+  const hasShifted = useRef(false);
+  if (tasks.length > 0 || tasksLoading) {
+    hasShifted.current = true;
+  }
+  const shifted = hasShifted.current;
 
   // Delay showing tasks so the fade-in triggers after mount
   const [tasksVisible, setTasksVisible] = useState(false);
@@ -52,15 +57,14 @@ export function SetupView({
       <BenchmarkHeader />
 
       <div
-        className="flex-1 flex flex-col items-center justify-center px-6 transition-all duration-500 ease-in-out relative"
+        className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out relative"
         style={{
-          paddingTop: hasContent ? "48px" : "0",
-          justifyContent: hasContent ? "flex-start" : "center",
+          paddingTop: shifted ? "15vh" : "30vh",
         }}
       >
         <BackgroundGrid />
         <div className="w-full max-w-[560px] relative z-10">
-          {/* URL input — centered in the column */}
+          {/* URL input */}
           <URLInput
             value={url}
             onChange={onUrlChange}
@@ -68,7 +72,7 @@ export function SetupView({
             disabled={runStatus === "running"}
           />
 
-          {/* Loading indicator — below URL, left aligned */}
+          {/* Loading indicator — below URL */}
           <div
             className="flex items-center gap-2 transition-all duration-300"
             style={{
@@ -88,6 +92,13 @@ export function SetupView({
             </svg>
             <span className="text-sm text-slate-400">Generating tasks...</span>
           </div>
+
+          {/* Error — shows below URL without shifting anything */}
+          {tasksError && !tasksLoading && (
+            <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3 mt-4">
+              <p className="text-sm text-amber-700">{tasksError}</p>
+            </div>
+          )}
 
           {/* Tasks section — fades in */}
           <div
@@ -117,12 +128,6 @@ export function SetupView({
                   </button>
                 )}
               </div>
-
-              {tasksError && (
-                <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3">
-                  <p className="text-sm text-amber-700">{tasksError}</p>
-                </div>
-              )}
 
               {tasks.length > 0 && (
                 <div className="space-y-3">
