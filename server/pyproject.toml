@@ -16,6 +16,7 @@ dependencies = [
     # LLM orchestration
     "langchain>=0.2.0",
     "langchain-openai>=0.1.0",
+    "openai>=1.30.0",
     
     # HTTP clients (for SKYVERN agent)
     "requests>=2.31.0",
