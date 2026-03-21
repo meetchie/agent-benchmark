@@ -4,12 +4,6 @@ export interface Task {
   goal: string;
 }
 
-export interface Category {
-  id: string;
-  label: string;
-  tasks: Task[];
-}
-
 export interface StepRecord {
   step: number;
   description: string;
