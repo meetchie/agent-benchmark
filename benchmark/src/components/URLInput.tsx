@@ -17,7 +17,7 @@ export function URLInput({ value, onChange, onSubmit, disabled }: URLInputProps)
 
   return (
     <div className="space-y-2">
-      <p className="text-sm text-slate-400">
+      <p className="text-base text-slate-600 font-medium">
         Paste a website URL to generate benchmark tasks
       </p>
       <input
