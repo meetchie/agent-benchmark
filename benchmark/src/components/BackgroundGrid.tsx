@@ -96,7 +96,7 @@ export function BackgroundGrid() {
       const offsetX = (cw % spacing) / 2;
       const offsetY = (ch % spacing) / 2;
 
-      const fadeZone = ch * 0.15;
+      const fadeZone = 0;
 
       // Vertical grid lines
       const segLen = 4 * dpr;
