@@ -1,24 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import tasksData from "../tasks.yaml";
-import { startBenchmark, pollStatus } from "./lib/api";
-import type { Category, Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
+import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
+import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
 import { BenchmarkHeader } from "./components/BenchmarkHeader";
 import { URLInput } from "./components/URLInput";
-import { CategorySelector } from "./components/CategorySelector";
 import { TaskCard } from "./components/TaskCard";
 import { RunButton } from "./components/RunButton";
 import { ScreenshotViewer } from "./components/ScreenshotViewer";
 import { StepLog } from "./components/StepLog";
 import { SummaryCard } from "./components/SummaryCard";
 
-const CATEGORIES: Category[] = tasksData.categories;
 const MAX_POLLS = 180;
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
   const [url, setUrl] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [steps, setSteps] = useState<StepRecord[]>([]);
@@ -29,12 +28,36 @@ export default function App() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
+  const lastGeneratedUrlRef = useRef("");
 
-  const selectedCategory = CATEGORIES.find((c) => c.id === categoryId) ?? null;
-  const selectedTask = selectedCategory?.tasks.find((t) => t.id === taskId) ?? null;
+  const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
   const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
+
+  const handleUrlSubmit = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (trimmed === lastGeneratedUrlRef.current) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = trimmed;
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    try {
+      const data = await generateTasks(trimmed);
+      setTasks(data.tasks);
+    } catch (e) {
+      setTasksError(
+        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [url, tasksLoading]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -129,25 +152,41 @@ export default function App() {
         {/* LEFT PANEL */}
         <div className="w-[40%] min-w-[300px] border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
           <div className="p-6 space-y-6 flex-1">
-            <URLInput value={url} onChange={setUrl} disabled={isRunning} />
-
-            <CategorySelector
-              categories={CATEGORIES}
-              selected={categoryId}
-              onSelect={(id) => {
-                setCategoryId(id);
-                setTaskId(null);
-              }}
+            <URLInput
+              value={url}
+              onChange={setUrl}
+              onSubmit={handleUrlSubmit}
               disabled={isRunning}
             />
 
-            {selectedCategory && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Task
-                </label>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Task
+              </label>
+
+              {tasksLoading && (
                 <div className="space-y-2">
-                  {selectedCategory.tasks.map((task: Task) => (
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-slate-100 animate-pulse border-2 border-slate-200" />
+                  ))}
+                </div>
+              )}
+
+              {tasksError && (
+                <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3">
+                  <p className="text-sm text-amber-700">{tasksError}</p>
+                </div>
+              )}
+
+              {!tasksLoading && !tasksError && tasks.length === 0 && (
+                <p className="text-sm text-slate-400">
+                  Enter a URL above to generate tasks.
+                </p>
+              )}
+
+              {!tasksLoading && tasks.length > 0 && (
+                <div className="space-y-2">
+                  {tasks.map((task: Task) => (
                     <TaskCard
                       key={task.id}
                       task={task}
@@ -157,8 +196,8 @@ export default function App() {
                     />
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className="p-6 border-t border-slate-100">
@@ -184,7 +223,7 @@ export default function App() {
                 </svg>
               </div>
               <p className="text-sm font-medium text-slate-700">
-                Enter a URL, select a category and task, then hit Run.
+                Enter a URL to generate benchmark tasks, then hit Run.
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 The agent's browser will appear here in real time.
