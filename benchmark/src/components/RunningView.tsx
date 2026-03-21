@@ -104,45 +104,45 @@ export function RunningView({
                   {errorMsg}
                 </p>
               )}
-            </div>
 
-            {/* Stuck step callout for failures */}
-            {isFail && stuckStep && (
-              <div className="border-2 border-red-300 bg-red-50 p-4">
-                <p className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
-                  Where it failed
-                </p>
-                <p className="text-sm text-red-700 font-medium">
-                  Step #{stuckStep.step}: {stuckStep.description}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Spent {formatMs(stuckStep.elapsed_ms)} on this step before giving up
-                </p>
-              </div>
-            )}
-
-            {/* Slow steps */}
-            {slowSteps.length > 0 && (
-              <div className="border-2 border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">
-                  Slow Steps
-                </p>
-                <div className="space-y-1">
-                  {slowSteps.map((step) => (
-                    <div key={step.step} className="flex items-center gap-2">
-                      <span className="text-xs text-amber-500">⚠</span>
-                      <span className="flex-1 text-xs text-slate-600">
-                        <span className="text-slate-400 mr-1">#{step.step}</span>
-                        {step.description}
-                      </span>
-                      <span className="text-xs text-amber-600 font-mono font-medium">
-                        {formatMs(step.elapsed_ms)}
-                      </span>
-                    </div>
-                  ))}
+              {/* Stuck step — inside the card */}
+              {isFail && stuckStep && (
+                <div className="mt-3 pt-3 border-t border-red-200">
+                  <p className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
+                    Where it failed
+                  </p>
+                  <p className="text-sm text-red-700 font-medium">
+                    Step #{stuckStep.step}: {stuckStep.description}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Spent {formatMs(stuckStep.elapsed_ms)} on this step
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Slow steps — inside the card */}
+              {slowSteps.length > 0 && (
+                <div className={`mt-3 pt-3 ${isFail ? "border-t border-red-200" : "border-t border-green-200"}`}>
+                  <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">
+                    Slow Steps
+                  </p>
+                  <div className="space-y-1">
+                    {slowSteps.map((step) => (
+                      <div key={step.step} className="flex items-center gap-2">
+                        <span className="text-xs text-amber-500">⚠</span>
+                        <span className="flex-1 text-xs text-slate-600">
+                          <span className="text-slate-400 mr-1">#{step.step}</span>
+                          {step.description}
+                        </span>
+                        <span className="text-xs text-amber-600 font-mono font-medium">
+                          {formatMs(step.elapsed_ms)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* All steps */}
             <StepLog steps={steps} isRunning={false} />
