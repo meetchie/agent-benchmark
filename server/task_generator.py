@@ -192,8 +192,9 @@ async def fetch_and_generate(url: str) -> list[dict]:
         raise ValueError(f"Invalid or disallowed URL: {url}")
 
     timeout = aiohttp.ClientTimeout(total=5)
+    connector = aiohttp.TCPConnector(ssl=False)
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.get(url) as response:
                 if response.status >= 400:
                     raise ConnectionError(
