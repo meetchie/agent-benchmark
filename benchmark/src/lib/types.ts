@@ -22,6 +22,9 @@ export interface StatusComplete {
   success: boolean;
   summary: string;
   total_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
 }
 
 export interface StatusError {
@@ -37,4 +40,7 @@ export interface SummaryData {
   success: boolean;
   summary: string;
   total_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
 }

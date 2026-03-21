@@ -127,6 +127,9 @@ export default function App() {
               success: data.success,
               summary: data.summary,
               total_ms: data.total_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              total_tokens: data.total_tokens,
             });
           }
 

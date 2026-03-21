@@ -62,9 +62,16 @@ export function RunningView({
                 {isPass ? "✓ PASS" : isError ? "✗ ERROR" : "✗ FAIL"}
               </span>
               {summary && (
-                <span className="text-sm text-slate-500 font-mono">
-                  {formatTimer(summary.total_ms)}
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-slate-500 font-mono">
+                    {formatTimer(summary.total_ms)}
+                  </span>
+                  {summary.total_tokens > 0 && (
+                    <span className="text-xs text-slate-400 font-mono">
+                      {summary.total_tokens.toLocaleString()} tokens
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -104,6 +111,15 @@ export function RunningView({
               <p className="text-sm text-red-700 leading-relaxed mb-4">
                 {errorMsg}
               </p>
+            )}
+
+            {/* Token breakdown */}
+            {summary && summary.total_tokens > 0 && (
+              <div className="flex gap-4 mb-4 text-xs text-slate-400 font-mono">
+                <span>Input: {summary.input_tokens.toLocaleString()}</span>
+                <span>Output: {summary.output_tokens.toLocaleString()}</span>
+                <span>Total: {summary.total_tokens.toLocaleString()}</span>
+              </div>
             )}
 
             <div className="flex gap-3">

@@ -46,6 +46,9 @@ class RunState:
     summary: str = ""
     total_ms: int = 0
     message: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
     def to_response(self) -> dict:
         """Serialize for API response. Only latest step includes screenshot_b64."""
@@ -63,6 +66,9 @@ class RunState:
                 "success": self.success,
                 "summary": self.summary,
                 "total_ms": self.total_ms,
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "total_tokens": self.total_tokens,
             }
         else:
             return {"status": "error", "message": self.message}
@@ -106,14 +112,12 @@ async def _take_screenshot(agent) -> Optional[str]:
     Caps width at 1280px, JPEG quality 80 — ~50-150 KB per screenshot.
     """
     try:
-        # browser_use exposes the page via agent.browser_context
-        page = await agent.browser_context.get_current_page()
-        # Set viewport to max 1280px wide before capturing
-        await page.set_viewport_size({"width": 1280, "height": 800})
-        img_bytes = await page.screenshot(type="jpeg", quality=80, full_page=False)
+        # browser_use ≥0.11 uses browser_session; older versions used browser_context
+        session = getattr(agent, 'browser_session', None) or agent.browser_context
+        img_bytes = await session.take_screenshot(format="jpeg", quality=80)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
     except Exception as e:
-        logging.debug(f"_take_screenshot failed: {e}")
+        logging.error(f"_take_screenshot failed: {type(e).__name__}: {e}")
         return None
 
 
@@ -203,6 +207,15 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
 
         if not summary:
             summary = "Agent completed the task." if success else "Agent did not complete the task."
+
+        # Extract token usage
+        try:
+            usage = history.usage
+            state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
+            state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
+            state.total_tokens = getattr(usage, 'total_tokens', 0)
+        except Exception as e:
+            logging.debug(f"Token usage extraction failed: {e}")
 
         state.status = "complete"
         state.success = success
