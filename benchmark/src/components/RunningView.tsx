@@ -1,6 +1,5 @@
 import type { StepRecord, SummaryData } from "../lib/types";
 import { RunningHeader } from "./RunningHeader";
-import { ScreenshotViewer } from "./ScreenshotViewer";
 import { StepLog } from "./StepLog";
 import { ResultsOverlay } from "./ResultsOverlay";
 
