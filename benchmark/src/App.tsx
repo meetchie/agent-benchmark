@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth, useUser, useClerk } from "@clerk/clerk-react";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
@@ -13,7 +13,6 @@ const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
   const { isSignedIn, getToken } = useAuth();
-  const { user } = useUser();
   const clerk = useClerk();
 
   const [view, setView] = useState<View>("setup");
