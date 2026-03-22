@@ -252,7 +252,7 @@ export function RunningView({
                   Check out Rindler →
                 </a>
                 <a
-                  href="https://rindler.ai"
+                  href="https://cal.com/example/demo"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad]"
