@@ -13,14 +13,20 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from benchmark_runner import RunState, run_benchmark
 from task_generator import fetch_and_generate
+from clerk_auth import verify_clerk_jwt
+
 # In-memory run state store
 _runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev sessions only
+
+# Per-user concurrency limit (max active runs)
+_active_runs: dict[str, int] = {}  # user_id -> count
+_MAX_CONCURRENT_RUNS = 5
 
 # Demo mode — returns fake data without calling OpenAI or launching a browser
 # Set DEMO_MODE=true in .env to enable
@@ -47,6 +53,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def get_current_user(authorization: str = Header(None)) -> dict:
+    """Verify Clerk JWT from Authorization header."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.split(" ", 1)[1]
+    try:
+        claims = verify_clerk_jwt(token)
+        return {"user_id": claims["sub"]}
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 class StartRequest(BaseModel):
@@ -129,15 +147,30 @@ async def _demo_run(state: RunState, url: str, goal: str):
 
 
 @app.post("/benchmark/start")
-async def start_benchmark_endpoint(req: StartRequest):
+async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
+    user_id = user["user_id"]
+
+    active = _active_runs.get(user_id, 0)
+    if active >= _MAX_CONCURRENT_RUNS:
+        raise HTTPException(status_code=429, detail={
+            "error": "Too many runs in progress. Wait for one to finish.",
+        })
+
+    _active_runs[user_id] = active + 1
     run_id = str(uuid.uuid4())
-    state = RunState(run_id=run_id)
+    state = RunState(run_id=run_id, user_id=user_id)
     _runs[run_id] = state
 
-    if _check_demo_mode():
-        asyncio.create_task(_demo_run(state, req.url, req.goal))
-    else:
-        asyncio.create_task(run_benchmark(state, req.url, req.goal))
+    async def _run_and_decrement(state, url, goal, uid):
+        try:
+            if _check_demo_mode():
+                await _demo_run(state, url, goal)
+            else:
+                await run_benchmark(state, url, goal)
+        finally:
+            _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
+
+    asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id))
 
     return {"run_id": run_id}
 
