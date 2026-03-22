@@ -105,12 +105,40 @@ async def auth_signup(req: AuthRequest):
         raise HTTPException(status_code=422 if "Invalid email" in str(e) or "8 characters" in str(e) else 409, detail=str(e))
 
 
+# Track failed sign-in attempts: email -> (count, first_attempt_time)
+_signin_attempts: dict[str, tuple[int, float]] = {}
+_MAX_SIGNIN_ATTEMPTS = 5
+_LOCKOUT_SECONDS = 900  # 15 minutes
+
+
 @app.post("/auth/signin")
 async def auth_signin(req: AuthRequest):
+    import time
+    email = req.email.strip().lower()
+
+    # Check lockout
+    if email in _signin_attempts:
+        count, first_time = _signin_attempts[email]
+        if count >= _MAX_SIGNIN_ATTEMPTS:
+            elapsed = time.time() - first_time
+            if elapsed < _LOCKOUT_SECONDS:
+                remaining = int((_LOCKOUT_SECONDS - elapsed) / 60) + 1
+                raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {remaining} minutes.")
+            else:
+                del _signin_attempts[email]
+
     try:
         result = await signin(req.email, req.password)
+        # Success — clear attempts
+        _signin_attempts.pop(email, None)
         return result
     except PermissionError as e:
+        # Track failed attempt
+        if email in _signin_attempts:
+            count, first_time = _signin_attempts[email]
+            _signin_attempts[email] = (count + 1, first_time)
+        else:
+            _signin_attempts[email] = (1, time.time())
         raise HTTPException(status_code=401, detail=str(e))
 
 
