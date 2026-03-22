@@ -16,18 +16,19 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     const res = await fetch(`${containerUrl}/benchmark/status/${runId}`, {
+      headers: {
+        "X-Internal-Key": context.env.INTERNAL_API_KEY || "",
+      },
       signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      return Response.json({ error: "Container error", detail: text }, { status: 502 });
+      return Response.json({ error: "Service temporarily unavailable" }, { status: 502 });
     }
 
     const data = await res.json();
     return Response.json(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: "Failed to reach container", detail: msg }, { status: 502 });
+    return Response.json({ error: "Service temporarily unavailable" }, { status: 502 });
   }
 };

@@ -12,7 +12,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const res = await fetch(`${containerUrl}/benchmark/generate-tasks`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": context.env.INTERNAL_API_KEY || "",
+      },
       body: context.request.body,
       signal: AbortSignal.timeout(30000),
     });
@@ -28,7 +31,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const data = await res.json();
     return Response.json(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: "Failed to reach container", detail: msg }, { status: 502 });
+    return Response.json({ error: "Service temporarily unavailable" }, { status: 502 });
   }
 };
