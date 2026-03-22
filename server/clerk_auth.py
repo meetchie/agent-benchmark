@@ -22,7 +22,7 @@ def _get_clerk_issuer() -> str:
         import base64
         encoded = pk.split("_", 2)[-1].rstrip("$")
         encoded += "=" * (4 - len(encoded) % 4)
-        domain = base64.b64decode(encoded).decode()
+        domain = base64.b64decode(encoded).decode().rstrip("$")
         return f"https://{domain}"
     raise RuntimeError("CLERK_PUBLISHABLE_KEY is required")
 
