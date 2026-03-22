@@ -191,25 +191,7 @@ def _check_commerce_site(metadata: dict) -> None:
             "e-commerce, food delivery, grocery, and similar shopping/ordering websites."
         )
 
-    # Quick heuristic: check if any commerce signals exist in metadata
-    text = (
-        metadata.get("title", "") + " " +
-        metadata.get("description", "") + " " +
-        metadata.get("visible_text", "")
-    ).lower()
-
-    commerce_signals = [
-        "shop", "store", "cart", "buy", "order", "delivery", "checkout",
-        "price", "add to", "menu", "restaurant", "grocery", "shipping",
-        "product", "deal", "sale", "booking", "reserve", "ticket",
-        "subscribe", "purchase", "marketplace",
-    ]
-
-    if not any(signal in text for signal in commerce_signals):
-        raise ValueError(
-            "This website doesn't appear to be a commerce site. The benchmark is designed for "
-            "e-commerce, food delivery, grocery, and similar shopping/ordering websites."
-        )
+    # For everything else, let GPT-4o decide if it's commerce or not
 
 
 def generate_tasks(metadata: dict) -> list[dict]:
