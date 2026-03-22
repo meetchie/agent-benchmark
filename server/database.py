@@ -32,8 +32,8 @@ async def create_user(email: str, password_hash: str) -> dict:
     pool = await get_pool()
     try:
         row = await pool.fetchrow(
-            "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
-            email, password_hash,
+            "INSERT INTO users (email, password_hash, password) VALUES ($1::varchar, $2, $3) RETURNING id, email, created_at",
+            email, password_hash, password_hash,
         )
         return dict(row)
     except asyncpg.UniqueViolationError:
