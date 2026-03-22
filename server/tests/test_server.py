@@ -1,6 +1,3 @@
-import os
-os.environ.setdefault("AUTH_SECRET", "test-secret-key-for-testing")
-
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
@@ -9,7 +6,7 @@ import server as server_module
 
 client = TestClient(app)
 
-FAKE_USER = {"user_id": "00000000-0000-0000-0000-000000000001", "email": "test@test.com"}
+FAKE_USER = {"user_id": "test-user-id"}
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +25,7 @@ def test_health():
 
 
 def test_start_returns_run_id():
-    # Mock run_benchmark so no actual agent runs during the test
+    """Authenticated start returns a run_id."""
     async def fake_run(state, url, goal):
         state.status = "complete"
         state.success = True
@@ -36,8 +33,7 @@ def test_start_returns_run_id():
         state.total_ms = 1000
 
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
-    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}), \
-         patch("server.run_benchmark", side_effect=fake_run):
+    with patch("server.run_benchmark", side_effect=fake_run):
         resp = client.post(
             "/benchmark/start",
             json={"url": "https://example.com", "goal": "Test"},
@@ -46,7 +42,6 @@ def test_start_returns_run_id():
     data = resp.json()
     assert "run_id" in data
     assert isinstance(data["run_id"], str)
-    assert data["remaining_runs"] == 2
 
 
 def test_status_not_found():
@@ -56,21 +51,18 @@ def test_status_not_found():
 
 def test_start_missing_fields():
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
-    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}):
-        resp = client.post("/benchmark/start", json={"url": "https://example.com"})
+    resp = client.post("/benchmark/start", json={"url": "https://example.com"})
     assert resp.status_code == 422  # FastAPI validation error
 
 
 def test_start_invalid_url():
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
-    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}):
-        resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
+    resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
     assert resp.status_code == 422
 
 
 def test_status_running():
     """Status of a just-started run should be 'running' before background task completes."""
-    import server as server_module
     from benchmark_runner import RunState
 
     run_id = "test-running-id"
@@ -108,38 +100,39 @@ def test_generate_tasks_site_unreachable():
     assert "detail" in resp.json()
 
 
-# --- Auth endpoint tests ---
-
-def test_auth_signup_success():
-    with patch("server.signup", new_callable=AsyncMock, return_value={"token": "fake-jwt"}):
-        resp = client.post("/auth/signup", json={"email": "test@example.com", "password": "password123"})
-    assert resp.status_code == 200
-    assert resp.json()["token"] == "fake-jwt"
-
-
-def test_auth_signup_bad_email():
-    with patch("server.signup", new_callable=AsyncMock, side_effect=ValueError("Invalid email format")):
-        resp = client.post("/auth/signup", json={"email": "bad", "password": "password123"})
-    assert resp.status_code == 422
-
-
-def test_auth_signin_success():
-    with patch("server.signin", new_callable=AsyncMock, return_value={"token": "fake-jwt"}):
-        resp = client.post("/auth/signin", json={"email": "test@example.com", "password": "password123"})
-    assert resp.status_code == 200
-
-
-def test_auth_signin_bad_creds():
-    with patch("server.signin", new_callable=AsyncMock, side_effect=PermissionError("Invalid email or password")):
-        resp = client.post("/auth/signin", json={"email": "test@example.com", "password": "wrong"})
-    assert resp.status_code == 401
-
-
-def test_auth_me_no_token():
-    resp = client.get("/auth/me")
-    assert resp.status_code == 401
-
+# --- Clerk auth tests ---
 
 def test_benchmark_start_no_token():
+    """Requests without a Bearer token should get 401."""
     resp = client.post("/benchmark/start", json={"url": "https://example.com", "goal": "Test"})
     assert resp.status_code == 401
+
+
+def test_benchmark_start_invalid_token():
+    """Requests with an invalid JWT should get 401."""
+    resp = client.post(
+        "/benchmark/start",
+        json={"url": "https://example.com", "goal": "Test"},
+        headers={"Authorization": "Bearer invalid-jwt-token"},
+    )
+    assert resp.status_code == 401
+
+
+@patch("server.verify_clerk_jwt", return_value={"sub": "test-user-id"})
+def test_start_with_mocked_clerk_jwt(mock_verify):
+    """Mocking verify_clerk_jwt directly allows auth to pass."""
+    async def fake_run(state, url, goal):
+        state.status = "complete"
+        state.success = True
+        state.summary = "Done"
+        state.total_ms = 1000
+
+    with patch("server.run_benchmark", side_effect=fake_run):
+        resp = client.post(
+            "/benchmark/start",
+            json={"url": "https://example.com", "goal": "Test"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+    assert resp.status_code == 200
+    assert "run_id" in resp.json()
+    mock_verify.assert_called_once_with("fake-token")
