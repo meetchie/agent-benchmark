@@ -13,7 +13,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -96,10 +96,32 @@ async def health():
     return {"ok": True}
 
 
+# Track signups by IP: ip -> (count, first_time)
+_signup_attempts: dict[str, tuple[int, float]] = {}
+_MAX_SIGNUPS_PER_HOUR = 3
+
+
 @app.post("/auth/signup")
-async def auth_signup(req: AuthRequest):
+async def auth_signup(req: AuthRequest, request: Request):
+    import time
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Check signup rate limit by IP
+    if client_ip in _signup_attempts:
+        count, first_time = _signup_attempts[client_ip]
+        if time.time() - first_time > 3600:
+            del _signup_attempts[client_ip]
+        elif count >= _MAX_SIGNUPS_PER_HOUR:
+            raise HTTPException(status_code=429, detail="Too many signups. Try again later.")
+
     try:
         result = await signup(req.email, req.password)
+        # Track successful signup
+        if client_ip in _signup_attempts:
+            count, first_time = _signup_attempts[client_ip]
+            _signup_attempts[client_ip] = (count + 1, first_time)
+        else:
+            _signup_attempts[client_ip] = (1, time.time())
         return result
     except ValueError as e:
         raise HTTPException(status_code=422 if "Invalid email" in str(e) or "8 characters" in str(e) else 409, detail=str(e))
