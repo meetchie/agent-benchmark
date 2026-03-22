@@ -236,30 +236,30 @@ export function RunningView({
             </>
           ) : (
             <>
-              {/* Screenshot */}
-              <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ maxHeight: "55vh" }}>
+              {/* Screenshot — fixed 55% of available height */}
+              <div className="border-2 border-slate-200 bg-white overflow-hidden flex items-center justify-center" style={{ height: "55vh", flexShrink: 0 }}>
                 {screenshot ? (
                   <img
                     src={screenshot}
                     alt="Agent screenshot"
-                    className="w-full block object-contain"
-                    style={{ maxHeight: "55vh" }}
+                    className="max-w-full max-h-full object-contain"
                   />
                 ) : (
-                  <div className="flex items-center justify-center" style={{ height: "40vh" }}>
-                    <svg
-                      className="animate-spin h-5 w-5 text-[#3c49ad]"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  </div>
+                  <svg
+                    className="animate-spin h-5 w-5 text-[#3c49ad]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
                 )}
               </div>
 
-              <StepLog steps={steps} isRunning={isRunning} />
+              {/* Steps — fills remaining space, scrolls internally */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <StepLog steps={steps} isRunning={isRunning} />
+              </div>
             </>
           )}
         </div>
