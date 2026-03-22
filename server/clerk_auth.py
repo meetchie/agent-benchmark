@@ -1,19 +1,30 @@
 """Clerk JWT verification using JWKS (no shared secret needed).
 
 Fetches Clerk's public keys from the JWKS endpoint and verifies
-JWT signatures. Keys are cached in memory for the process lifetime.
-
-Note: JWKS cache never expires (cleared only on unknown kid). If Clerk
-rotates keys, a process restart may be needed in the unlikely case that
-the kid stays the same but key material changes. Acceptable for MVP.
+JWT signatures. Keys are cached with a 1-hour TTL.
 """
 
 import os
+import time
 import jwt
 import json
 import urllib.request
 
 _jwks_cache: dict | None = None
+_jwks_cache_time: float = 0
+_JWKS_CACHE_TTL = 3600  # 1 hour
+
+
+def _get_clerk_issuer() -> str:
+    """Derive the Clerk issuer URL from the publishable key."""
+    pk = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+    if pk:
+        import base64
+        encoded = pk.split("_", 2)[-1].rstrip("$")
+        encoded += "=" * (4 - len(encoded) % 4)
+        domain = base64.b64decode(encoded).decode()
+        return f"https://{domain}"
+    raise RuntimeError("CLERK_PUBLISHABLE_KEY is required")
 
 
 def _get_jwks_url() -> str:
@@ -21,24 +32,19 @@ def _get_jwks_url() -> str:
     url = os.getenv("CLERK_JWKS_URL")
     if url:
         return url
-    pk = os.getenv("CLERK_PUBLISHABLE_KEY", "")
-    if pk:
-        import base64
-        encoded = pk.split("_", 2)[-1].rstrip("$")
-        encoded += "=" * (4 - len(encoded) % 4)
-        domain = base64.b64decode(encoded).decode()
-        return f"https://{domain}/.well-known/jwks.json"
-    raise RuntimeError("CLERK_PUBLISHABLE_KEY or CLERK_JWKS_URL is required")
+    return f"{_get_clerk_issuer()}/.well-known/jwks.json"
 
 
 def _fetch_jwks() -> dict:
-    """Fetch and cache JWKS from Clerk."""
-    global _jwks_cache
-    if _jwks_cache is not None:
+    """Fetch and cache JWKS from Clerk with TTL."""
+    global _jwks_cache, _jwks_cache_time
+    now = time.monotonic()
+    if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
         return _jwks_cache
     url = _get_jwks_url()
     with urllib.request.urlopen(url, timeout=5) as resp:
         _jwks_cache = json.loads(resp.read())
+    _jwks_cache_time = now
     return _jwks_cache
 
 
@@ -60,8 +66,10 @@ def verify_clerk_jwt(token: str) -> dict:
             break
 
     if key_data is None:
-        global _jwks_cache
+        # Key not found — maybe keys rotated. Clear cache and retry once.
+        global _jwks_cache, _jwks_cache_time
         _jwks_cache = None
+        _jwks_cache_time = 0
         jwks = _fetch_jwks()
         for key in jwks.get("keys", []):
             if key.get("kid") == kid:
@@ -74,10 +82,14 @@ def verify_clerk_jwt(token: str) -> dict:
     from jwt.algorithms import RSAAlgorithm
     public_key = RSAAlgorithm.from_jwk(key_data)
 
+    # Verify issuer matches our Clerk instance
+    expected_issuer = _get_clerk_issuer()
+
     claims = jwt.decode(
         token,
         public_key,
         algorithms=["RS256"],
         options={"verify_aud": False},
+        issuer=expected_issuer,
     )
     return claims

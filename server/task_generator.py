@@ -11,6 +11,7 @@ Functions:
 import json
 import re
 import ipaddress
+import socket
 from urllib.parse import urlparse
 
 import aiohttp
@@ -133,10 +134,7 @@ def extract_metadata(html: str, url: str) -> dict:
 
 
 def validate_url(url: str) -> bool:
-    """Validate that a URL uses http/https and is not a private/internal IP.
-
-    Rejects 127.x, 10.x, 192.168.x, 169.254.x ranges.
-    """
+    """Validate URL scheme and block private/internal IPs (including via DNS resolution)."""
     try:
         parsed = urlparse(url)
     except Exception:
@@ -149,21 +147,38 @@ def validate_url(url: str) -> bool:
     if not hostname:
         return False
 
-    # Check if hostname is an IP address in a private range
+    # Block obviously dangerous hostnames
+    if hostname in ("localhost", "metadata.google.internal"):
+        return False
+
+    # Resolve hostname to IPs and check all of them
     try:
-        ip = ipaddress.ip_address(hostname)
-        private_networks = [
-            ipaddress.ip_network("127.0.0.0/8"),
-            ipaddress.ip_network("10.0.0.0/8"),
-            ipaddress.ip_network("192.168.0.0/16"),
-            ipaddress.ip_network("169.254.0.0/16"),
-        ]
-        for network in private_networks:
-            if ip in network:
-                return False
-    except ValueError:
-        # Not an IP address — hostname is fine
-        pass
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False  # Can't resolve — reject
+
+    private_networks = [
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("169.254.0.0/16"),
+        ipaddress.ip_network("100.64.0.0/10"),
+        ipaddress.ip_network("0.0.0.0/8"),
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("fc00::/7"),
+        ipaddress.ip_network("fe80::/10"),
+    ]
+
+    for info in addrinfo:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+            for network in private_networks:
+                if ip in network:
+                    return False
+        except ValueError:
+            continue
 
     return True
 
@@ -204,11 +219,17 @@ def generate_tasks(metadata: dict) -> list[dict]:
     _check_commerce_site(metadata)
     client = OpenAI()
 
+    # Sanitize metadata to prevent prompt injection
+    safe_url = metadata.get("url", "")[:500].replace("\n", "").replace("\r", "")
+    safe_title = metadata.get("title", "")[:200].replace("\n", " ")
+    safe_desc = metadata.get("description", "")[:500].replace("\n", " ")
+    safe_text = metadata.get("visible_text", "")[:1000].replace("\n", " ")
+
     prompt = PROMPT_TEMPLATE.format(
-        title=metadata.get("title", ""),
-        description=metadata.get("description", ""),
-        visible_text=metadata.get("visible_text", ""),
-        url=metadata.get("url", ""),
+        title=safe_title,
+        description=safe_desc,
+        visible_text=safe_text,
+        url=safe_url,
     )
 
     response = client.chat.completions.create(
@@ -257,13 +278,13 @@ async def fetch_and_generate(url: str) -> list[dict]:
         raise ValueError(f"Invalid or disallowed URL: {url}")
 
     timeout = aiohttp.ClientTimeout(total=5)
-    connector = aiohttp.TCPConnector(ssl=False)
+    connector = aiohttp.TCPConnector()
     try:
         async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.get(url) as response:
                 if response.status >= 400:
                     raise ConnectionError(
-                        f"Failed to fetch {url}: HTTP {response.status}"
+                        f"Failed to fetch the site: HTTP {response.status}"
                     )
 
                 content_type = response.headers.get("Content-Type", "")
@@ -274,7 +295,7 @@ async def fetch_and_generate(url: str) -> list[dict]:
 
                 html = await response.text()
     except (aiohttp.ClientError, TimeoutError) as exc:
-        raise ConnectionError(f"Failed to fetch {url}: {exc}") from exc
+        raise ConnectionError("Failed to fetch the site. It may be unreachable or blocking automated access.") from exc
 
     metadata = extract_metadata(html, url)
     return generate_tasks(metadata)
