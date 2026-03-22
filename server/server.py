@@ -26,6 +26,9 @@ from database import get_remaining_runs, try_record_run, get_pool, close_pool
 # In-memory run state store
 _runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev sessions only
 
+# Admin emails get unlimited runs
+ADMIN_EMAILS: set[str] = set()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -115,6 +118,9 @@ async def auth_signin(req: AuthRequest):
 async def auth_me(user: dict = Depends(get_current_user)):
     import uuid as uuid_mod
     user_id = uuid_mod.UUID(user["user_id"])
+    is_admin = user.get("email", "").lower() in ADMIN_EMAILS
+    if is_admin:
+        return {"user_id": user["user_id"], "email": user["email"], "remaining_runs": 999, "reset_time": None}
     info = await get_remaining_runs(user_id)
     return {"user_id": user["user_id"], "email": user["email"], **info}
 
@@ -123,15 +129,20 @@ async def auth_me(user: dict = Depends(get_current_user)):
 async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
     import uuid as uuid_mod
     user_id = uuid_mod.UUID(user["user_id"])
+    is_admin = user.get("email", "").lower() in ADMIN_EMAILS
 
-    # Atomic rate limit check + record
-    run_record = await try_record_run(user_id)
-    if run_record is None:
-        info = await get_remaining_runs(user_id)
-        raise HTTPException(status_code=429, detail={
-            "error": "Rate limit exceeded",
-            "reset_time": info["reset_time"],
-        })
+    if not is_admin:
+        # Atomic rate limit check + record
+        run_record = await try_record_run(user_id)
+        if run_record is None:
+            info = await get_remaining_runs(user_id)
+            raise HTTPException(status_code=429, detail={
+                "error": "Rate limit exceeded",
+                "reset_time": info["reset_time"],
+            })
+        remaining = run_record["remaining_runs"]
+    else:
+        remaining = 999
 
     run_id = str(uuid_mod.uuid4())
     state = RunState(run_id=run_id)
@@ -140,7 +151,7 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
 
     return {
         "run_id": run_id,
-        "remaining_runs": run_record["remaining_runs"],
+        "remaining_runs": remaining,
     }
 
 
