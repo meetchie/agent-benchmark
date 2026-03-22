@@ -1,25 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import tasksData from "../tasks.yaml";
-import { startBenchmark, pollStatus } from "./lib/api";
-import type { Category, Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
+import { useAuth, useClerk } from "@clerk/clerk-react";
+import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
+import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
-import { BenchmarkHeader } from "./components/BenchmarkHeader";
-import { URLInput } from "./components/URLInput";
-import { CategorySelector } from "./components/CategorySelector";
-import { TaskCard } from "./components/TaskCard";
-import { RunButton } from "./components/RunButton";
-import { ScreenshotViewer } from "./components/ScreenshotViewer";
-import { StepLog } from "./components/StepLog";
-import { SummaryCard } from "./components/SummaryCard";
+import { SetupView } from "./components/SetupView";
+import { RunningView } from "./components/RunningView";
 
-const CATEGORIES: Category[] = tasksData.categories;
-const MAX_POLLS_DEFAULT = 300;
-const MAX_POLLS_HARD = 600;
+type View = "setup" | "running";
+
+const MAX_POLLS = 180;
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
+  const { isSignedIn, getToken } = useAuth();
+  const clerk = useClerk();
+
+  const [view, setView] = useState<View>("setup");
+
   const [url, setUrl] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [steps, setSteps] = useState<StepRecord[]>([]);
@@ -30,12 +31,60 @@ export default function App() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
+  const lastGeneratedUrlRef = useRef("");
 
-  const selectedCategory = CATEGORIES.find((c) => c.id === categoryId) ?? null;
-  const selectedTask = selectedCategory?.tasks.find((t) => t.id === taskId) ?? null;
+  const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
   const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
+
+  const handleUrlSubmit = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (trimmed === lastGeneratedUrlRef.current) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = trimmed;
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    try {
+      const data = await generateTasks(trimmed);
+      setTasks(data.tasks);
+    } catch (e) {
+      setTasksError(
+        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [url, tasksLoading]);
+
+  const handleRegenerateTasks = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = "";
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    try {
+      const data = await generateTasks(trimmed);
+      setTasks(data.tasks);
+      lastGeneratedUrlRef.current = trimmed;
+    } catch (e) {
+      setTasksError(
+        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [url, tasksLoading]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -45,19 +94,17 @@ export default function App() {
   }, []);
 
   const startPolling = useCallback(
-    (runId: string, hard: boolean) => {
+    (runId: string) => {
       pollCountRef.current = 0;
       retriesRef.current = 0;
-      const maxPolls = hard ? MAX_POLLS_HARD : MAX_POLLS_DEFAULT;
-      const timeoutMin = hard ? 10 : 5;
 
       pollRef.current = setInterval(async () => {
         pollCountRef.current++;
 
-        if (pollCountRef.current > maxPolls) {
+        if (pollCountRef.current > MAX_POLLS) {
           stopPolling();
           setRunStatus("error");
-          setErrorMsg(`Timed out after ${timeoutMin} minutes.`);
+          setErrorMsg("Timed out after 3 minutes.");
           return;
         }
 
@@ -85,6 +132,9 @@ export default function App() {
               success: data.success,
               summary: data.summary,
               total_ms: data.total_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              total_tokens: data.total_tokens,
             });
           }
 
@@ -102,107 +152,94 @@ export default function App() {
     [stopPolling]
   );
 
-  const handleRun = useCallback(async () => {
-    if (!canRun || !selectedTask) return;
+  const doRun = useCallback(async () => {
+    if (!selectedTask) return;
+
+    let token: string | null = null;
+    if (!isSignedIn) {
+      clerk.openSignIn();
+      return;
+    }
+    token = await getToken();
+    if (!token) {
+      setErrorMsg("Could not get auth token. Please sign in again.");
+      return;
+    }
 
     setRunStatus("running");
     setSteps([]);
     setScreenshot(null);
     setSummary(null);
     setErrorMsg(null);
+    setView("running");
 
     try {
-      const { run_id } = await startBenchmark(url, selectedTask.goal);
-      startPolling(run_id, selectedTask.hard ?? false);
+      const data = await startBenchmark(url, selectedTask.goal, token);
+      startPolling(data.run_id);
     } catch (e) {
+      if (e instanceof Error && e.message === "AUTH_EXPIRED") {
+        clerk.openSignIn();
+        setRunStatus("idle");
+        setView("setup");
+        return;
+      }
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [canRun, selectedTask, url, startPolling]);
+  }, [selectedTask, isSignedIn, getToken, clerk, url, startPolling]);
+
+  const handleRun = useCallback(async () => {
+    if (!canRun || !selectedTask) return;
+    await doRun();
+  }, [canRun, selectedTask, doRun]);
+
+  const handleRunAgain = useCallback(async () => {
+    if (!selectedTask) return;
+    await doRun();
+  }, [selectedTask, doRun]);
+
+  const handleNewTest = useCallback(() => {
+    stopPolling();
+    setRunStatus("idle");
+    setSteps([]);
+    setScreenshot(null);
+    setSummary(null);
+    setErrorMsg(null);
+    setView("setup");
+  }, [stopPolling]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const isRunning = runStatus === "running";
+  if (view === "running") {
+    return (
+      <RunningView
+        url={url}
+        taskLabel={selectedTask?.label ?? ""}
+        isRunning={runStatus === "running"}
+        steps={steps}
+        screenshot={screenshot}
+        summary={summary}
+        errorMsg={errorMsg}
+        onRunAgain={handleRunAgain}
+        onNewTest={handleNewTest}
+      />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
-      <BenchmarkHeader />
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT PANEL */}
-        <div className="w-[40%] min-w-[300px] border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
-          <div className="p-6 space-y-6 flex-1">
-            <URLInput value={url} onChange={setUrl} disabled={isRunning} />
-
-            <CategorySelector
-              categories={CATEGORIES}
-              selected={categoryId}
-              onSelect={(id) => {
-                setCategoryId(id);
-                setTaskId(null);
-              }}
-              disabled={isRunning}
-            />
-
-            {selectedCategory && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Task
-                </label>
-                <div className="space-y-2">
-                  {selectedCategory.tasks.map((task: Task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      selected={taskId === task.id}
-                      onSelect={() => setTaskId(task.id)}
-                      disabled={isRunning}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-6 border-t border-slate-100">
-            <RunButton status={runStatus} disabled={!canRun} onClick={handleRun} />
-          </div>
-        </div>
-
-        {/* RIGHT PANEL */}
-        <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-4">
-          {summary && <SummaryCard data={summary} />}
-
-          {runStatus === "error" && errorMsg && (
-            <div className="border-2 border-red-300 bg-red-50 px-4 py-3">
-              <p className="text-sm text-red-700">{errorMsg}</p>
-            </div>
-          )}
-
-          {runStatus === "idle" && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-24">
-              <div className="w-16 h-16 rounded-full bg-[#3c49ad]/10 flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-[#3c49ad]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-slate-700">
-                Enter a URL, select a category and task, then hit Run.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                The agent's browser will appear here in real time.
-              </p>
-            </div>
-          )}
-
-          {runStatus !== "idle" && (
-            <>
-              <ScreenshotViewer src={screenshot} />
-              <StepLog steps={steps} isRunning={isRunning} />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <SetupView
+      url={url}
+      onUrlChange={setUrl}
+      onUrlSubmit={handleUrlSubmit}
+      tasks={tasks}
+      tasksLoading={tasksLoading}
+      tasksError={tasksError}
+      taskId={taskId}
+      onTaskSelect={(id) => setTaskId(id)}
+      runStatus={runStatus}
+      canRun={canRun}
+      onRun={handleRun}
+      onRegenerateTasks={handleRegenerateTasks}
+    />
   );
 }
