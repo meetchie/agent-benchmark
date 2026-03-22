@@ -75,8 +75,24 @@ class RunState:
 
 
 def _format_action(agent) -> str:
-    """Extract a human-readable description of the last agent action."""
+    """Extract a human-readable description of the last agent action.
+
+    Uses the agent's own 'next_goal' from its model output for rich descriptions
+    like 'Click on the Menu link' instead of just 'Clicking element'.
+    Falls back to action type if model output isn't available.
+    """
     try:
+        # Try to get the rich description from the agent's model output
+        if agent.history.history:
+            last_item = agent.history.history[-1]
+            if hasattr(last_item, 'model_output') and last_item.model_output:
+                mo = last_item.model_output
+                # next_goal is the best description of what the agent is doing
+                goal = getattr(mo, 'next_goal', '')
+                if goal:
+                    return str(goal)[:120]
+
+        # Fallback: format from raw action data
         actions = agent.history.model_actions()
         if not actions:
             return "Processing..."
@@ -84,21 +100,32 @@ def _format_action(agent) -> str:
         if isinstance(last, dict):
             action_type = list(last.keys())[0] if last else "action"
             action_data = last.get(action_type, {})
-            if action_type == "go_to_url":
+            el = last.get("interacted_element")
+
+            if action_type in ("go_to_url", "navigate"):
                 url = action_data.get("url", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Navigating to {url[:60]}"
+                return f"Navigating to {url[:80]}"
             elif action_type in ("click_element", "click"):
+                # Try to get element info
+                if el and hasattr(el, 'node_name'):
+                    tag = getattr(el, 'node_name', '').lower()
+                    attrs = getattr(el, 'attributes', {}) or {}
+                    label = attrs.get('aria-label', '') or attrs.get('title', '') or attrs.get('alt', '')
+                    if label:
+                        return f"Clicking {tag} \"{label[:60]}\""
+                    return f"Clicking <{tag}> element"
                 return "Clicking element"
             elif action_type in ("input_text", "type"):
                 text = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Typing: {str(text)[:40]}"
+                return f"Typing: \"{str(text)[:50]}\""
             elif action_type == "scroll":
-                return "Scrolling page"
+                direction = action_data.get("direction", "down") if isinstance(action_data, dict) else "down"
+                return f"Scrolling {direction}"
             elif action_type == "extract_content":
-                return "Extracting page content"
+                return "Reading page content"
             elif action_type == "done":
                 result = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Done: {str(result)[:60]}"
+                return f"Done: {str(result)[:80]}"
             else:
                 return f"{action_type.replace('_', ' ').capitalize()}"
     except Exception as e:
