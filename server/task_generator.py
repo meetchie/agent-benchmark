@@ -17,43 +17,73 @@ import aiohttp
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
-PROMPT_TEMPLATE = """You are a benchmark task generator for testing browser automation agents on real websites.
+PROMPT_TEMPLATE = """You are a benchmark task generator that creates HARD, realistic tasks to stress-test AI browser automation agents on real websites. Your goal is to expose the real weaknesses of AI agents — the kinds of failures that cost businesses money.
 
-Given information about a website, generate exactly 3 benchmark tasks that an AI browser agent should be able to complete on this site. Each task should test a different capability.
+Given information about a website, generate exactly 3 benchmark tasks. These tasks should be the kind of thing a real customer does — but that AI agents consistently mess up.
+
+DESIGN PHILOSOPHY:
+You are testing for Rindler, a company building infrastructure to make the web agent-ready. The benchmark should expose WHY agents fail today:
+- Agents ignore shipping costs and order from multiple stores when one would be cheaper
+- Agents can't handle complex forms with dropdowns, modals, date pickers, and address autocomplete
+- Agents lose context in multi-step workflows (customize → add to cart → continue shopping → add another)
+- Agents don't comparison shop — they grab the first result instead of the best match
+- Agents struggle with conditional UI (options that appear only after selecting something else)
+- Agents can't handle quantity selectors, size/color matrices, or variant pickers properly
+- Agents skip important details like delivery time windows, special instructions, or substitution preferences
 
 RULES:
 - Tasks must be specific to THIS website — reference actual features, sections, or products visible on the site
-- Each task should have 3-5 concrete steps that the agent must follow in sequence
-- Include a verification step at the end (e.g., "Verify success by checking that the cart shows the item")
-- Tasks should be realistic things a real user would do on this site
-- Vary the difficulty: one easy (navigate + read), one medium (search + interact), one hard (multi-step workflow)
-- Do NOT include any steps that require login, payment, or submitting personal information beyond an address
+- Each task should have 5-10 concrete steps with SPECIFIC constraints the agent must satisfy
+- Include precise numeric constraints (prices, quantities, sizes, distances) that require the agent to compare and choose — not just grab the first result
+- Include at least one step that requires interacting with a dropdown, modal, date picker, address form, or other complex UI widget
+- Include verification steps that check MULTIPLE criteria (not just "is it in the cart" but "is it the RIGHT item at the RIGHT price in the RIGHT quantity")
+- Do NOT include any steps that require login, payment, or submitting sensitive personal information
+- Use delivery address "1 Main St, Springfield, IL 62701" when address is needed
 - Keep labels short (under 60 characters)
 - Write goals as multi-line step-by-step instructions
+- ALL tasks should be genuinely challenging — no trivial "search and add to cart" tasks
 
-EXAMPLES of good tasks (for reference on style and complexity):
+TASK DIFFICULTY LEVELS (generate one of each):
+1. MEDIUM: Multi-step with constraints (5-7 steps). Requires comparing options, using filters correctly, and making a specific choice based on criteria.
+2. HARD: Complex workflow with state management (7-9 steps). Requires maintaining context across multiple pages, handling complex forms, and satisfying multiple constraints simultaneously.
+3. EXPERT: Multi-item workflow with optimization (8-10 steps). Requires building a cart with multiple items that satisfy overlapping constraints (budget limits, same-store preference, delivery windows, etc.)
 
-Example 1 (e-commerce site):
-  label: "Find running shoes in size 10 and add to cart"
+EXAMPLES of the complexity level expected:
+
+Example 1 (grocery/delivery aggregator — EXPERT):
+  label: "Build a $30-$40 cart from a single store"
   goal: |
-    Search for men's running shoes.
-    Filter or sort results to find options available in US size 10.
-    Add the cheapest available size-10 option to cart.
-    Verify success by checking the cart shows the shoes.
+    Set delivery address to 1 Main St, Springfield, IL 62701. Select the first autocomplete suggestion and confirm.
+    Browse available stores and select one that offers free delivery or the lowest delivery fee.
+    Add a gallon of whole milk (must be whole, not 2% or skim) to cart.
+    Add a dozen large eggs (not medium, not organic unless it's the only option) to cart.
+    Add a loaf of sliced bread (white or wheat, not specialty/artisan) to cart.
+    Add one bunch of bananas to cart.
+    Check the cart subtotal. If under $30, add one more item from the same store. If over $40, remove the most expensive item and find a cheaper alternative.
+    Verify: all items are from the SAME store, subtotal is between $30-$40, and delivery fee is shown.
 
-Example 2 (food delivery site):
-  label: "Order half-and-half pizza with sides"
+Example 2 (food delivery — HARD):
+  label: "Order dinner for 4 under $60 with drinks"
   goal: |
-    Order a large pizza that is half cheese, half pepperoni.
-    Also add a large Diet Coke and garlic bread twists (or closest available side).
-    Verify success by checking that all items appear in the cart or order summary.
+    Set delivery address to 1 Main St, Springfield, IL 62701.
+    Find a restaurant that is currently open, has a rating of 4+ stars, and offers a delivery time under 45 minutes.
+    Order an entree that serves 2 or more people (family size, sharing platter, or equivalent).
+    Add a second, different entree suitable for someone who doesn't eat pork (check description/ingredients).
+    Add 4 drinks — at least 2 different types (e.g., 2 sodas and 2 waters, not 4 of the same).
+    Check if there are any available promotions, coupons, or deals and apply the best one.
+    Verify: the order total (before tip) is under $60, there are at least 2 entrees and 4 drinks, delivery time is shown as under 45 minutes.
 
-Example 3 (grocery site):
-  label: "Add Organic Bananas to cart"
+Example 3 (e-commerce — HARD):
+  label: "Find a gift set under $50 with gift wrapping"
   goal: |
-    Set delivery address to 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
-    Search for "Organic Bananas" and add the first result to cart.
-    Verify success by checking that the cart icon shows a count or an "In cart" indicator appears.
+    Search for "gift set" or browse the gifts/holiday section.
+    Filter results to show only items priced between $25 and $50.
+    Sort by customer rating (highest first) or best sellers.
+    Select an item that has at least 4-star reviews and is in stock for delivery (not pickup-only or backordered).
+    Choose a specific variant if applicable (color, size, scent — pick the most popular or first available option).
+    If the site offers gift wrapping or a gift message option, enable it and enter the message "Happy Birthday!".
+    Add to cart and verify: the item is in cart, price is between $25-$50, and gift wrapping (if available) is applied.
+    Check estimated delivery date — report whether it arrives within 5 business days.
 
 Respond with a JSON object with a "tasks" key containing an array of 3 objects, each with "label" (string) and "goal" (string) fields. No markdown, no explanation.
 
@@ -61,8 +91,7 @@ WEBSITE INFORMATION:
 Title: {title}
 Description: {description}
 Content preview: {visible_text}
-URL: {url}
-"""
+URL: {url}"""
 
 
 def extract_metadata(html: str, url: str) -> dict:
