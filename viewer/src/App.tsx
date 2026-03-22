@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import "./App.css";
-import { parseLog, scenarioLabel } from "./lib/parseLog";
-import type { ParsedLog } from "./lib/parseLog";
+import { parseLog, parseLogMeta } from "./lib/parseLog";
+import type { ParsedLog, LogFileMeta } from "./lib/parseLog";
 import { SummaryCards } from "./components/SummaryCards";
 import { GoalPanel } from "./components/GoalPanel";
 import { FrictionPanel } from "./components/FrictionPanel";
@@ -15,13 +15,17 @@ function App() {
   const [page, setPage] = useState<Page>(() => {
     return window.location.hash === "#trends" ? "trends" : "viewer";
   });
-  const [files, setFiles] = useState<string[]>([]);
+  const [fileMetas, setFileMetas] = useState<LogFileMeta[]>([]);
+  const [metaLoading, setMetaLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [log, setLog] = useState<ParsedLog | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const rawCache = useRef<Map<string, string>>(new Map());
 
   // Sync hash with page state
   useEffect(() => {
@@ -37,26 +41,58 @@ function App() {
     setPage(p);
   }, []);
 
-  // Load manifest on mount
+  // Load manifest and file metadata on mount
   useEffect(() => {
+    setMetaLoading(true);
     fetch("/logs/manifest.json")
       .then((r) => r.json())
-      .then((data: { files: string[] }) => {
-        setFiles(data.files);
+      .then(async (data: { files: string[] }) => {
+        const metas = await Promise.all(
+          data.files.map(async (f) => {
+            try {
+              const resp = await fetch(`/logs/${f}`);
+              const raw = await resp.text();
+              rawCache.current.set(f, raw);
+              return parseLogMeta(raw, f);
+            } catch {
+              return null;
+            }
+          })
+        );
+        setFileMetas(
+          metas.filter((m): m is LogFileMeta => m !== null)
+        );
       })
-      .catch(() => {
-        // Manifest not available — user can still upload
-      });
+      .catch(() => {})
+      .finally(() => setMetaLoading(false));
   }, []);
 
-  // Load selected log file
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Load selected log file (from cache or fetch)
   const loadLogFile = useCallback(async (filename: string) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`/logs/${filename}`);
-      if (!resp.ok) throw new Error(`Failed to load ${filename}`);
-      const raw = await resp.text();
+      let raw = rawCache.current.get(filename);
+      if (!raw) {
+        const resp = await fetch(`/logs/${filename}`);
+        if (!resp.ok) throw new Error(`Failed to load ${filename}`);
+        raw = await resp.text();
+        rawCache.current.set(filename, raw);
+      }
       const parsed = parseLog(raw, filename);
       setLog(parsed);
       setSelectedFile(filename);
@@ -68,25 +104,22 @@ function App() {
   }, []);
 
   // Handle file upload
-  const handleFileUpload = useCallback(
-    async (file: File) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const raw = await file.text();
-        const parsed = parseLog(raw, file.name);
-        setLog(parsed);
-        setSelectedFile(file.name);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to parse file"
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const handleFileUpload = useCallback(async (file: File) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const raw = await file.text();
+      const parsed = parseLog(raw, file.name);
+      setLog(parsed);
+      setSelectedFile(file.name);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to parse file"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -118,6 +151,9 @@ function App() {
     [handleFileUpload]
   );
 
+  const selectedMeta =
+    fileMetas.find((m) => m.filename === selectedFile) ?? null;
+
   return (
     <div className="app">
       {/* Header */}
@@ -146,20 +182,95 @@ function App() {
 
         {page === "viewer" && (
           <div className="header-controls">
-            <select
-              className="file-select"
-              value={selectedFile}
-              onChange={(e) => {
-                if (e.target.value) loadLogFile(e.target.value);
-              }}
-            >
-              <option value="">Select a log file...</option>
-              {files.map((f) => (
-                <option key={f} value={f}>
-                  {scenarioLabel(f)}
-                </option>
-              ))}
-            </select>
+            {/* Custom log selector dropdown */}
+            <div className="log-selector" ref={dropdownRef}>
+              <button
+                className={`log-selector-trigger ${dropdownOpen ? "open" : ""}`}
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+              >
+                {selectedMeta ? (
+                  <span className="log-selector-value">
+                    <span
+                      className={`agent-tag ${selectedMeta.isMcp ? "mcp" : "bu"}`}
+                    >
+                      {selectedMeta.isMcp ? "MCP" : "BU"}
+                    </span>
+                    <span
+                      className={`prompt-tag ${selectedMeta.promptType}`}
+                    >
+                      {selectedMeta.promptType === "simple"
+                        ? "Simple"
+                        : selectedMeta.promptType === "complex"
+                          ? "Complex"
+                          : "—"}
+                    </span>
+                    <span className="log-selector-site">
+                      {selectedMeta.site}
+                    </span>
+                    <span className="log-selector-date">
+                      {selectedMeta.dateLabel} {selectedMeta.timeLabel}
+                    </span>
+                    <span
+                      className={`verdict-dot ${selectedMeta.verdict.toLowerCase()}`}
+                    />
+                  </span>
+                ) : (
+                  <span className="log-selector-placeholder">
+                    {metaLoading ? "Loading runs..." : "Select a log run..."}
+                  </span>
+                )}
+                <span className="log-selector-chevron">&#9662;</span>
+              </button>
+
+              {dropdownOpen && (
+                <div className="log-selector-dropdown">
+                  {fileMetas.length === 0 && (
+                    <div className="log-selector-empty">
+                      {metaLoading ? "Loading..." : "No log files found"}
+                    </div>
+                  )}
+                  {fileMetas.map((meta) => (
+                    <button
+                      key={meta.filename}
+                      className={`log-selector-option ${
+                        selectedFile === meta.filename ? "selected" : ""
+                      }`}
+                      onClick={() => {
+                        loadLogFile(meta.filename);
+                        setDropdownOpen(false);
+                      }}
+                    >
+                      <span
+                        className={`agent-tag ${meta.isMcp ? "mcp" : "bu"}`}
+                      >
+                        {meta.isMcp ? "MCP" : "BU"}
+                      </span>
+                      <span className={`prompt-tag ${meta.promptType}`}>
+                        {meta.promptType === "simple"
+                          ? "Simple"
+                          : meta.promptType === "complex"
+                            ? "Complex"
+                            : "—"}
+                      </span>
+                      <span className="log-selector-site">{meta.site}</span>
+                      <span className="log-selector-date">
+                        {meta.dateLabel} {meta.timeLabel}
+                      </span>
+                      <span
+                        className={`verdict-indicator ${meta.verdict.toLowerCase()}`}
+                      >
+                        {meta.verdict === "PASS"
+                          ? "PASS"
+                          : meta.verdict === "FAIL"
+                            ? "FAIL"
+                            : "—"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <span className="or-divider">or</span>
             <button
               className="upload-btn"

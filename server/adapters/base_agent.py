@@ -12,8 +12,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 import sys
-# Add project root to path for telemetric_logger import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Add clean-room root to path for telemetric_logger import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from telemetric_logger import TelemetricWrapper, TelemetryEvent
 
 

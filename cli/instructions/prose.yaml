@@ -1,0 +1,307 @@
+site: prose
+domain: prose.com
+base_url: https://www.prose.com
+
+tasks:
+  # --------------------------------------------------------------------------
+  # Task 1: Browse accessories catalog
+  # --------------------------------------------------------------------------
+  - id: browse-accessories
+    name: Browse the accessories catalog and report products
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section of the website.
+      2. Identify ALL accessory products available for purchase.
+      3. For each product, note:
+         - Product name
+         - Price
+         - Whether it has an "Add to cart" button
+
+      VERIFICATION: Report your complete findings, listing every accessory product with its name and price.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the accessories section (URL contains /products/accessories or similar)
+      2. At least 4 accessory products were identified (brushes, hair towel, candle, gift cards)
+      3. Product names and prices were reported
+
+      The task FAILS if:
+      - The agent never reached the accessories section
+      - Fewer than 4 products were identified
+      - Prices were not reported
+    max_steps: 15
+
+  # --------------------------------------------------------------------------
+  # Task 2: Add a boar bristle brush to cart
+  # --------------------------------------------------------------------------
+  - id: add-boar-brush
+    name: Add the Boar Bristle Brush to cart
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Find the brushes product page.
+      3. Select the "Boar Bristle Brush" variant (for fine to medium hair).
+      4. Click "Add to cart".
+      5. Navigate to the cart to verify the item was added.
+
+      VERIFICATION: After adding to cart, navigate to the cart page and report the exact cart contents including the product name, quantity, and price.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the brushes product page
+      2. The Boar Bristle Brush variant was selected (not the mixed or detangling brush)
+      3. The "Add to cart" button was clicked
+      4. The cart was viewed and contains a Boar Bristle Brush at $72.00
+
+      The task FAILS if:
+      - The wrong brush variant was selected
+      - The item was not added to cart
+      - The cart was never verified
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 3: Add detangling brush to cart
+  # --------------------------------------------------------------------------
+  - id: add-detangling-brush
+    name: Add the Tipped-Metal Bristle Brush to cart
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the brushes product page.
+      2. Browse the available brush variants and identify which one is best for thick or curly hair.
+      3. Select that brush variant (it should be the Tipped-Metal Bristle Brush / detangling brush).
+      4. Click "Add to cart".
+      5. Navigate to the cart to verify the item was added.
+
+      VERIFICATION: After adding to cart, navigate to the cart page and report the exact cart contents including the product name, quantity, and price.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the brushes page
+      2. The agent identified the Tipped-Metal Bristle Brush as the one for thick/curly hair
+      3. The correct variant was selected (detangling brush, not boar or mixed)
+      4. The item was added to cart and the cart verified
+
+      The task FAILS if:
+      - The wrong brush variant was selected (boar or mixed instead of detangling)
+      - The item was not added to cart
+      - The agent never verified the cart
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 4: Add hair towel wrap to cart
+  # --------------------------------------------------------------------------
+  - id: add-hair-towel
+    name: Add the Hair Towel Wrap to cart
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Find the Prose Hair Towel Wrap product.
+      3. Click "Add to cart".
+      4. Navigate to the cart to verify the item was added.
+
+      VERIFICATION: After adding to cart, navigate to the cart page and report the exact cart contents including the product name, quantity, and price.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the Hair Towel Wrap product page
+      2. The "Add to cart" button was clicked
+      3. The cart was viewed and contains a Hair Towel Wrap at $35.00
+
+      The task FAILS if:
+      - The agent added the wrong product (e.g., a brush or candle instead of the towel)
+      - The item was not added to cart
+      - The cart was never verified
+    max_steps: 20
+
+  # --------------------------------------------------------------------------
+  # Task 5: Add candle to cart
+  # --------------------------------------------------------------------------
+  - id: add-candle
+    name: Add the Prose Candle to cart
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Find the Prose Candle product (8.6 oz).
+      3. Click "Add to cart".
+      4. Navigate to the cart to verify the item was added.
+
+      VERIFICATION: After adding to cart, navigate to the cart page and report the exact cart contents including the product name, quantity, and price.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the Prose Candle product page
+      2. The "Add to cart" button was clicked
+      3. The cart was viewed and contains a Prose Candle at $52.00
+
+      The task FAILS if:
+      - The wrong product was added
+      - The item was not added to cart
+      - The cart was never verified
+    max_steps: 20
+
+  # --------------------------------------------------------------------------
+  # Task 6: Multi-item cart — brush + towel
+  # --------------------------------------------------------------------------
+  - id: multi-item-brush-towel
+    name: Add a brush and the hair towel to cart
+    goal: |
+      Go to prose.com.
+
+      You are building a cart with multiple accessories.
+
+      1. Navigate to the accessories section.
+      2. Go to the brushes page and select the Boar + Nylon Bristle Brush (the one for medium to thick hair).
+      3. Click "Add to cart".
+      4. Navigate back to the accessories section.
+      5. Find and go to the Hair Towel Wrap product page.
+      6. Click "Add to cart".
+      7. Navigate to the cart to verify both items are present.
+
+      VERIFICATION: After completing the task, navigate to the cart page and report the exact cart contents including each product name, quantity, and price. The cart should contain exactly 2 items.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The Boar + Nylon Bristle Brush was added to cart (NOT the boar-only or detangling brush)
+      2. The Hair Towel Wrap was added to cart
+      3. The cart contains exactly 2 items
+      4. Total should be approximately $107.00 ($72.00 + $35.00)
+
+      The task FAILS if:
+      - Only one item is in the cart
+      - The wrong brush variant was selected
+      - The wrong accessory was added
+      - The cart was never verified
+    max_steps: 35
+
+  # --------------------------------------------------------------------------
+  # Task 7: Compare brush variants and report differences
+  # --------------------------------------------------------------------------
+  - id: compare-brushes
+    name: Compare all brush variants and report differences
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the brushes product page.
+      2. View each of the 3 brush variants one by one by clicking on each variant image.
+      3. For EACH variant, record:
+         - Brush name
+         - Price
+         - Bristle material
+         - What hair type it's recommended for
+      4. After viewing all 3 variants, report a comparison table of all brush options.
+
+      VERIFICATION: Report a clear comparison of all 3 brush variants with their names, prices, materials, and recommended hair types.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent visited the brushes product page
+      2. All 3 brush variants were viewed (Boar Bristle, Boar + Nylon, Tipped-Metal)
+      3. For each variant: name, price ($72.00 each), material, and hair type recommendation were reported
+      4. A comparison was presented
+
+      The task FAILS if:
+      - Fewer than 3 variants were viewed
+      - Material or hair type information is missing for any variant
+      - The agent only viewed one variant and assumed the others
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 8: Multi-item cart — all accessories
+  # --------------------------------------------------------------------------
+  - id: full-accessories-cart
+    name: Add one of every accessory type to cart
+    goal: |
+      Go to prose.com.
+
+      You are building a comprehensive accessories order. Add one of each accessory type to your cart:
+
+      1. Navigate to the accessories section.
+      2. Add the Hair Towel Wrap ($35.00) to cart.
+      3. Navigate back to accessories.
+      4. Add the Prose Candle ($52.00) to cart.
+      5. Navigate to the brushes page.
+      6. Select any brush variant you prefer and add it to cart ($72.00).
+      7. Navigate to the cart to verify all 3 items are present.
+
+      VERIFICATION: After completing the task, navigate to the cart page and report the exact cart contents including each product name, quantity, and price. The cart should contain exactly 3 items with a total of approximately $159.00.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The Hair Towel Wrap ($35.00) is in the cart
+      2. The Prose Candle ($52.00) is in the cart
+      3. A brush variant ($72.00) is in the cart
+      4. The cart contains exactly 3 items
+      5. The total is approximately $159.00
+
+      The task FAILS if:
+      - Any of the 3 items is missing from the cart
+      - Duplicate items were added instead of different products
+      - The cart was never verified
+    max_steps: 40
+
+  # --------------------------------------------------------------------------
+  # Task 9: Find the cheapest accessory and add to cart
+  # --------------------------------------------------------------------------
+  - id: cheapest-accessory
+    name: Find and add the cheapest accessory to cart
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Browse ALL available accessories and their prices.
+      3. Identify which accessory has the LOWEST price (excluding gift cards).
+      4. Navigate to that product's page and add it to cart.
+      5. Navigate to the cart to verify.
+
+      VERIFICATION: Report which accessory was the cheapest, its price, and confirm it is in the cart.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent browsed the accessories section and compared prices
+      2. The cheapest accessory was correctly identified (Hair Towel Wrap at $35.00)
+      3. The Hair Towel Wrap was added to cart
+      4. The cart was verified
+
+      The task FAILS if:
+      - The agent added a more expensive item (brush at $72 or candle at $52)
+      - The agent did not compare prices before choosing
+      - Gift cards were incorrectly included in the price comparison
+      - The cart was never verified
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 10: Gift card exploration
+  # --------------------------------------------------------------------------
+  - id: explore-gift-cards
+    name: Explore gift card options and begin the gifting flow
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Find the gift card option.
+      3. Navigate to the gift card page.
+      4. Identify:
+         - The minimum gift card amount
+         - How the gifting process works (what does the recipient get?)
+         - What input fields are required to purchase a gift card
+      5. Enter "Jane Doe" as the recipient name in the appropriate field.
+
+      VERIFICATION: Report the minimum gift card amount, how the gift process works, and confirm that "Jane Doe" was entered as the recipient name.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the gift card page (URL contains /gift)
+      2. The minimum amount was identified (starting at $50)
+      3. The gifting process was explained (recipient takes consultation, gets credits)
+      4. "Jane Doe" was entered in the recipient name field
+
+      The task FAILS if:
+      - The agent never reached the gift card page
+      - The minimum amount was not identified or is incorrect
+      - The recipient name was not entered
+    max_steps: 20

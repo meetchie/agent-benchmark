@@ -72,7 +72,21 @@ IMPORTANT RULES:
 - If final extraction is missing or incomplete vs what was required = FAIL.
 - Only return PASS if ALL success criteria are demonstrably met.
 
+PRODUCT ATTRIBUTE REASONING:
+- When a criterion says "NOT Organic" or "NOT [attribute]", a product PASSES if its name does NOT contain that attribute. Absence of "Organic" in a product name means it is conventional (non-organic). Do not require explicit "non-organic" labeling.
+- When a criterion says a product should be a specific type (e.g., "tablet/caplet form"), check that the product name matches that type. It does NOT need to explicitly say "not liquid gel" — just verify the name says "Tablets" or "Caplet".
+- A "3lb Bag" at quantity 1 satisfies "approximately 3 lbs". Do not require quantity 6 for a 3lb bag.
+
 Return ONLY valid JSON, no markdown formatting."""
+
+# Map agent-specific action names to common vocabulary for the judge.
+# Anything not in this map passes through as-is.
+ACTION_NORMALIZE = {
+    "llm_call": "browser_action",
+    "act": "browser_action",
+    "action": "browser_action",
+    "navigate": "navigation",
+}
 
 
 def run_judge(scenario: Scenario, result: Dict[str, Any], telemetry_events: list) -> Dict[str, Any]:
@@ -112,11 +126,13 @@ Look for evidence that each action was performed and verified."""
     if errors_in_log:
         log_summary_parts.append(f"Errors detected: {'; '.join(errors_in_log)}")
     
-    # Add key events from telemetry (actions taken)
+    # Add key events from telemetry (actions taken, with normalized names)
     actions_taken = []
     for event in telemetry_events:
         if event.get('event_type') == 'step_start' and event.get('action_type'):
-            actions_taken.append(f"Step {event.get('step_index')}: {event.get('action_type')}")
+            raw_action = event.get('action_type')
+            normalized = ACTION_NORMALIZE.get(raw_action, raw_action)
+            actions_taken.append(f"Step {event.get('step_index')}: {normalized}")
     
     if actions_taken:
         # Only show first 10 and last 5 to keep context manageable
@@ -129,12 +145,19 @@ Look for evidence that each action was performed and verified."""
     log_summary = "\n".join(log_summary_parts)
     
     # Build the prompt for the judge
+    verification_section = ""
+    if scenario.verification_hint:
+        verification_section = f"""
+## VERIFICATION FOCUS
+{scenario.verification_hint}
+"""
+
     user_prompt = f"""## GOAL
 {scenario.goal}
 
 ## SUCCESS CRITERIA
 {criteria}
-
+{verification_section}
 ## AGENT LOG SUMMARY
 {log_summary}
 
@@ -439,6 +462,7 @@ def handle_skyvern_fire_and_forget(agent, result: Dict[str, Any], scenario: Scen
         f.write(f"Skyvern Task ID: {task_id}\n")
         f.write(f"Watch URL: {watch_url}\n")
         f.write(f"Goal: {scenario.goal}\n")
+        f.write(f"Agent Reported Success: submitted\n")
         f.write(f"Status: submitted (fire-and-forget)\n")
         f.write(f"Submitted at: {datetime.now().isoformat()}\n")
         f.write(f"\nTo get results later:\n")
@@ -518,7 +542,21 @@ Examples:
         type=str,
         help="Filter scenarios by tag (use with --list-scenarios)"
     )
-    
+
+    # Rindler-specific
+    parser.add_argument(
+        "--llm",
+        type=str,
+        default="gpt-4o",
+        help="LLM model for RINDLER agent (e.g., gpt-4o, gpt-4o-mini, claude-sonnet)"
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=25,
+        help="Max action steps for RINDLER agent"
+    )
+
     args = parser.parse_args()
     
     # Handle listing options
@@ -573,10 +611,16 @@ Examples:
     AgentClass = get_agent_class(agent_name)
     run_id = str(uuid.uuid4())
     
+    extra_kwargs = {}
+    if agent_name == "RINDLER":
+        extra_kwargs["llm"] = args.llm
+        extra_kwargs["max_steps"] = args.max_steps
+
     agent = AgentClass(
         run_id=run_id,
         goal=scenario.goal,
         lane=agent_name,
+        **extra_kwargs,
     )
     
     # Determine if we should wait (Skyvern-specific)
@@ -614,7 +658,8 @@ Examples:
         try:
             from adapters import SkyvernTelemetricAgent
             print("\n  Fetching Skyvern billing data...")
-            skyvern_billing = SkyvernTelemetricAgent.get_run_billing(
+            skyvern_billing = await asyncio.to_thread(
+                SkyvernTelemetricAgent.get_run_billing,
                 agent._task_id,
                 verbose=False
             )
@@ -622,9 +667,14 @@ Examples:
             print(f"  (Could not fetch Skyvern billing: {e})")
     
     # Run LLM judge to evaluate success
-    print("\n  🧑‍⚖️  Running judge evaluation...")
-    judge_result = run_judge(scenario, result, agent.telemetry_events)
-    print(f"  Judge verdict: {judge_result.get('verdict', 'N/A')}")
+    judge_result = {}
+    try:
+        print("\n  🧑‍⚖️  Running judge evaluation...")
+        judge_result = run_judge(scenario, result, agent.telemetry_events)
+        print(f"  Judge verdict: {judge_result.get('verdict', 'N/A')}")
+    except Exception as judge_err:
+        print(f"  ⚠️  Judge evaluation failed: {judge_err}")
+        judge_result = {"verdict": "error", "error": str(judge_err)}
     
     # Print summary and save log
     totals = print_summary(agent, result, elapsed, scenario, skyvern_billing, judge_result)

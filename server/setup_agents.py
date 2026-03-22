@@ -11,7 +11,6 @@ This script will:
 
 import os
 import sys
-import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -36,14 +35,6 @@ def check_env_var(var_name):
     """Check if an environment variable is set."""
     return bool(os.getenv(var_name))
 
-def check_node():
-    """Check if Node.js is installed."""
-    return shutil.which("node") is not None
-
-def check_npm_package(package_name):
-    """Check if an npm package is installed locally."""
-    node_modules_path = Path(__file__).parent / "node_modules" / package_name
-    return node_modules_path.exists()
 
 def main():
     print("=" * 60)
@@ -76,20 +67,11 @@ def main():
     
     print()
     
-    # Check Node.js for Stagehand
-    print("🟢 NODE.JS STATUS (for STAGEHAND)")
+    # Check stagehand Python package
+    print("🎭 STAGEHAND STATUS")
     print("-" * 60)
-    
-    node_installed = check_node()
-    print(f"{'✅' if node_installed else '❌'} Node.js installed")
-    
-    if node_installed:
-        stagehand_installed = check_npm_package("@browserbasehq")
-        print(f"{'✅' if stagehand_installed else '❌'} @browserbasehq/stagehand")
-    else:
-        stagehand_installed = False
-        print("❌ @browserbasehq/stagehand (requires Node.js)")
-    
+    stagehand_installed = check_package("stagehand", "stagehand")
+    print(f"{'✅' if stagehand_installed else '❌'} stagehand (Python SDK)")
     print()
     
     # Check environment variables
@@ -135,14 +117,10 @@ def main():
             print(f"  uv pip install {pkg}")
         print()
     
-    if not node_installed or not stagehand_installed:
-        print("🟢 INSTALL NODE.JS DEPENDENCIES (for STAGEHAND):")
+    if not stagehand_installed:
+        print("🎭 INSTALL STAGEHAND PYTHON SDK:")
         print("-" * 60)
-        if not node_installed:
-            print("  1. Install Node.js 18+ from https://nodejs.org/")
-        print("  2. In the clean-room directory, run:")
-        print("     npm init -y")
-        print("     npm install @browserbasehq/stagehand")
+        print("  pip install stagehand")
         print()
     
     if missing_env:
@@ -220,12 +198,12 @@ def main():
             ]
         },
         "STAGEHAND": {
-            "packages": ["browserbase"],
+            "packages": ["browserbase", "stagehand"],
             "env_vars": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID", "OPENAI_API_KEY"],
             "notes": [
-                "• TypeScript/JavaScript library (runs via Node.js subprocess)",
+                "• Python SDK for AI browser automation",
                 "• Uses Browserbase for cloud browsers",
-                "• Requires: npm install @browserbasehq/stagehand",
+                "• Install: pip install stagehand",
                 "• Reference: github.com/browserbase/stagehand"
             ]
         }
@@ -241,10 +219,6 @@ def main():
             for pkg in requirements["packages"]
         )
         env_ok = all(check_env_var(var) for var in requirements["env_vars"])
-        
-        # Special check for Stagehand (needs Node.js)
-        if agent_name == "STAGEHAND":
-            packages_ok = packages_ok and node_installed and stagehand_installed
         
         if packages_ok and env_ok:
             print("  ✅ Ready to use!")
@@ -277,9 +251,8 @@ def main():
     print()
     
     all_ready = (
-        not missing_packages and 
-        not missing_env and 
-        node_installed and 
+        not missing_packages and
+        not missing_env and
         stagehand_installed
     )
     

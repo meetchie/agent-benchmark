@@ -240,7 +240,7 @@ Interactive Elements:
         self.print_run_header(start_url)
         
         start_time = datetime.now()
-        result = {"success": False, "message": "", "steps": 0}
+        result = {"success": False, "message": "", "steps": 0, "final_extraction": None}
         
         try:
             # Create Steel session
@@ -300,6 +300,7 @@ Interactive Elements:
                     if action == "done":
                         result["success"] = True
                         result["message"] = params.get("result", "Task completed")
+                        result["final_extraction"] = result["message"]
                         result["steps"] = step + 1
                         break
                     

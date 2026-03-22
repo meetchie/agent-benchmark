@@ -1,0 +1,364 @@
+site: prose
+domain: prose.com
+base_url: https://www.prose.com
+
+tasks:
+  # --------------------------------------------------------------------------
+  # Task 1: Cart math — spend exactly $107
+  # --------------------------------------------------------------------------
+  - id: cart-exact-107
+    name: Build a cart totaling exactly $107.00
+    goal: |
+      Go to prose.com.
+
+      Your budget is exactly $107.00. Build a cart that totals EXACTLY $107.00 using accessories only.
+
+      1. Navigate to the accessories section.
+      2. Review all accessory products and their prices.
+      3. Figure out which combination of products totals exactly $107.00.
+      4. Add those products to your cart.
+      5. Navigate to the cart at /checkout/accessories to verify.
+
+      IMPORTANT: You must calculate the total yourself. Do NOT guess — list the products and their prices, verify the math, then add them.
+
+      VERIFICATION: Report the exact cart contents with product names, quantities, prices, and the total. The total must be exactly $107.00.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The cart total is exactly $107.00
+      2. Only accessories were added (brushes at $72, towel at $35, candle at $52)
+      3. The correct combination is: 1 brush ($72) + 1 hair towel ($35) = $107
+      4. The agent verified the cart contents
+
+      The task FAILS if:
+      - The total is not exactly $107
+      - The agent guessed without calculating
+      - The cart was never verified
+    max_steps: 35
+
+  # --------------------------------------------------------------------------
+  # Task 2: Add wrong brush, correct the mistake
+  # --------------------------------------------------------------------------
+  - id: fix-wrong-brush
+    name: Add a brush, realize it's wrong, fix the mistake
+    goal: |
+      Go to prose.com.
+
+      You are shopping for someone with THICK, CURLY hair. Follow these steps exactly:
+
+      1. Navigate to the brushes page.
+      2. Read the description of the first brush variant you see.
+      3. Add it to cart WITHOUT checking if it's the right one for thick, curly hair.
+      4. Now go back and read ALL brush variant descriptions carefully.
+      5. Determine which brush is actually recommended for thick, curly hair.
+      6. If the brush you already added is WRONG for thick/curly hair:
+         - Navigate to the cart at /checkout/accessories
+         - Remove the wrong brush
+         - Go back to the brushes page
+         - Select the correct brush variant for thick/curly hair
+         - Add the correct one to cart
+      7. Verify the cart contains ONLY the brush for thick/curly hair.
+
+      VERIFICATION: Report which brush you initially added, why it was wrong (or right), which brush is correct for thick/curly hair, and the final cart contents.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent first added a brush without checking suitability
+      2. The agent then reviewed all variants and identified the Tipped-Metal Bristle Brush as correct for thick/curly hair
+      3. If the first brush was wrong, the agent removed it from the cart
+      4. The final cart contains exactly 1 brush: the Tipped-Metal Bristle Brush (detangling)
+      5. The agent explained why each brush was or wasn't suitable
+
+      The task FAILS if:
+      - The agent skipped adding the first brush (cheated by reading descriptions first)
+      - The wrong brush is still in the cart at the end
+      - The agent didn't explain the hair type suitability
+    max_steps: 45
+
+  # --------------------------------------------------------------------------
+  # Task 3: Price per unit comparison
+  # --------------------------------------------------------------------------
+  - id: best-value-accessory
+    name: Determine the best value accessory by price-per-ounce
+    goal: |
+      Go to prose.com.
+
+      You need to determine which physical accessory (NOT gift cards) offers the best value. Navigate to each accessory product page and collect:
+      - Product name
+      - Price
+      - Weight or size (if listed)
+      - Material or key feature
+
+      For products that list a weight (like the candle at 8.6 oz), calculate the price per ounce.
+      For products without weight (like brushes, towel), note them as "no weight listed — cannot calculate per-unit price."
+
+      Then determine: Which product is the best value if you consider price-per-ounce for weighted items? Which product is the cheapest overall?
+
+      VERIFICATION: Report a table of all physical accessories with their prices, weights (if available), price-per-ounce (if calculable), and your conclusion about best value.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent visited at least 3 different accessory product pages
+      2. Prices were correctly noted for all products
+      3. The candle's weight (8.6 oz) and price ($52.00) were identified
+      4. Price-per-ounce was calculated for the candle (~$6.05/oz)
+      5. The agent correctly noted brushes and towel don't have weight info
+      6. The cheapest overall product was identified as the Hair Towel Wrap ($35)
+
+      The task FAILS if:
+      - The agent made up weights for products that don't list them
+      - Price-per-ounce math is wrong
+      - The agent only visited 1-2 product pages
+    max_steps: 30
+
+  # --------------------------------------------------------------------------
+  # Task 4: Full cart then selective removal
+  # --------------------------------------------------------------------------
+  - id: add-all-remove-expensive
+    name: Add all accessories then remove items over $50
+    goal: |
+      Go to prose.com.
+
+      1. Navigate to the accessories section.
+      2. Add ALL physical accessories to your cart (all 3 brush types, the hair towel, and the candle). That should be 5 items.
+      3. Navigate to the cart at /checkout/accessories.
+      4. Review each item's price in the cart.
+      5. Remove any item that costs MORE than $50.00 from the cart.
+      6. Verify the remaining cart contents.
+
+      VERIFICATION: Report what you added, what you removed and why, and the final cart contents with the total.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent initially added at least 4 accessories to cart
+      2. The agent navigated to the cart and identified item prices
+      3. All items over $50 were removed (brushes at $72 each, candle at $52)
+      4. Only the Hair Towel Wrap ($35) remains in the cart
+      5. The agent explained which items were removed and why
+
+      The task FAILS if:
+      - The agent removed items without checking prices
+      - Items over $50 remain in the cart
+      - The Hair Towel Wrap was incorrectly removed
+      - The agent never viewed the cart
+    max_steps: 50
+
+  # --------------------------------------------------------------------------
+  # Task 5: Cross-reference FAQ with product page
+  # --------------------------------------------------------------------------
+  - id: brush-faq-research
+    name: Answer brush FAQ questions from the product page
+    goal: |
+      Go to prose.com.
+
+      A customer has asked you 3 questions. You need to find the answers on the prose.com website:
+
+      1. "How do I choose the right brush for my hair type?"
+      2. "Can I get special characters in my monogram?"
+      3. "What is the return policy for brushes?"
+
+      Navigate to the brushes product page and find the FAQ section. Open each relevant FAQ accordion item and read the answers.
+
+      VERIFICATION: Report the exact answers to all 3 questions, quoting the website's text. Do NOT make up answers — only report what the website says.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the brushes product page
+      2. The agent found and expanded the FAQ accordion section
+      3. All 3 questions were answered with text from the website (not made up)
+      4. The answer about choosing a brush references hair type/texture
+      5. The monogramming answer addresses special characters
+      6. The return policy answer provides specific policy details
+
+      The task FAILS if:
+      - The agent fabricated answers without finding the FAQ section
+      - Any of the 3 questions went unanswered
+      - The agent confused consultation FAQs with brush FAQs
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 6: Multi-variant cart — one of each brush
+  # --------------------------------------------------------------------------
+  - id: all-three-brushes
+    name: Add all 3 brush variants to cart
+    goal: |
+      Go to prose.com.
+
+      Add one of EACH brush variant to your cart. There are exactly 3 brush types:
+      1. Boar Bristle Brush
+      2. Boar + Nylon Bristle Brush
+      3. Tipped-Metal Bristle Brush
+
+      For each brush:
+      - Navigate to the brushes page
+      - Select that specific variant by clicking its image
+      - Confirm the product name matches the variant you want
+      - Click "Add to cart"
+
+      After adding all 3, navigate to the cart at /checkout/accessories and verify you have exactly 3 brushes at $72 each ($216 total).
+
+      VERIFICATION: Report the final cart contents showing all 3 brush variants, their individual prices, and the total.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. All 3 distinct brush variants are in the cart
+      2. No duplicate brush variants
+      3. Each brush is $72.00
+      4. Total is $216.00
+      5. The cart was verified at /checkout/accessories
+
+      The task FAILS if:
+      - Fewer than 3 brushes in the cart
+      - Duplicate variants (e.g., 2 boar bristle instead of 1 of each)
+      - The agent didn't confirm each variant before adding
+      - Cart was never verified
+    max_steps: 45
+
+  # --------------------------------------------------------------------------
+  # Task 7: Gift card with exact amount
+  # --------------------------------------------------------------------------
+  - id: gift-card-setup
+    name: Set up a $75 gift card for a specific recipient
+    goal: |
+      Go to prose.com.
+
+      Set up a gift card with these exact details:
+      1. Navigate to the gift card page.
+      2. Set the gift card amount to $75.
+      3. Enter recipient name: "Maria Santos"
+      4. Read and report what the recipient will receive (how the gift process works).
+      5. Find and click the "Get Gifting" button or equivalent CTA.
+      6. Report what page or form you land on after clicking.
+
+      VERIFICATION: Report the gift card amount, recipient name entered, what the recipient gets, and what happened after clicking the CTA.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent navigated to the gift card page (/gift)
+      2. The gift amount was set to $75
+      3. "Maria Santos" was entered as the recipient name
+      4. The agent explained what the recipient gets (consultation + credits)
+      5. The "Get Gifting" CTA was clicked
+      6. The resulting page/form was described
+
+      The task FAILS if:
+      - The agent never reached the gift card page
+      - Wrong amount or recipient name
+      - The gifting process was not explained
+      - The CTA was never clicked
+    max_steps: 25
+
+  # --------------------------------------------------------------------------
+  # Task 8: Navigate the entire accessories section systematically
+  # --------------------------------------------------------------------------
+  - id: full-accessories-audit
+    name: Complete audit of every accessory product page
+    goal: |
+      Go to prose.com.
+
+      Perform a complete audit of EVERY accessory product page on prose.com. For each product:
+
+      1. Navigate to the accessories section.
+      2. Click into EACH individual product page (towel, candle, each brush variant, gift cards).
+      3. For each product page, record:
+         - Full product name
+         - Price
+         - Product description (first sentence)
+         - Whether an "Add to cart" button is present
+         - The URL of the page
+      4. Report how many total unique product pages you visited.
+
+      You must visit at least 6 unique product pages (towel, candle, 3 brush variants, gift cards).
+
+      VERIFICATION: Report a numbered list of every product page visited with the requested details.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. At least 6 unique product pages were visited
+      2. Hair Towel Wrap page was visited and described
+      3. Candle page was visited and described
+      4. At least 2 different brush variant pages were visited
+      5. Gift card page was visited and described
+      6. For each page: name, price, description snippet, add-to-cart presence, and URL were reported
+
+      The task FAILS if:
+      - Fewer than 6 product pages were visited
+      - The agent reported details without actually visiting the page
+      - Missing fields (price, URL, etc.) for any product
+    max_steps: 40
+
+  # --------------------------------------------------------------------------
+  # Task 9: Maximize cart value under $200
+  # --------------------------------------------------------------------------
+  - id: maximize-under-200
+    name: Build the most expensive cart under $200
+    goal: |
+      Go to prose.com.
+
+      Your goal is to build the MOST EXPENSIVE cart possible while staying STRICTLY UNDER $200.00. Only physical accessories count (no gift cards).
+
+      1. Navigate to the accessories section.
+      2. Note all product prices.
+      3. Calculate the optimal combination that maximizes total spending while staying under $200.
+      4. Add those items to cart.
+      5. Navigate to the cart at /checkout/accessories to verify.
+
+      Available products and prices:
+      - Brushes: $72.00 each (3 variants available)
+      - Hair Towel Wrap: $35.00
+      - Candle: $52.00
+
+      Show your math BEFORE adding items. What is the maximum possible total under $200?
+
+      VERIFICATION: Report your calculation, the items you chose, and verify the cart total is the maximum possible under $200.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent calculated the optimal combination before adding items
+      2. The optimal cart is: 2 brushes ($144) + candle ($52) = $196, OR brush ($72) + candle ($52) + towel ($35) = $159 — the correct maximum under $200 is $196 (2 brushes + candle)
+      3. The agent added the correct items
+      4. The cart total is $196.00
+      5. The cart was verified
+
+      The task FAILS if:
+      - The agent picked a suboptimal combination (e.g., $159 when $196 was possible)
+      - The total exceeds $200
+      - The agent didn't show the math
+      - Cart was never verified
+    max_steps: 40
+
+  # --------------------------------------------------------------------------
+  # Task 10: Compare accessory page to actual product pages
+  # --------------------------------------------------------------------------
+  - id: price-consistency-check
+    name: Verify prices match between accessories grid and product pages
+    goal: |
+      Go to prose.com.
+
+      You are doing a QA check. Verify that the prices shown on the accessories GRID page match the prices on each individual PRODUCT page.
+
+      1. Navigate to the accessories section (/products/accessories).
+      2. Record the name and price of every product shown on the grid.
+      3. Click into each product page one by one.
+      4. On each product page, record the price shown.
+      5. Compare grid price vs product page price for each item.
+      6. Report whether all prices are consistent or if any discrepancies exist.
+
+      You must check at least 4 products.
+
+      VERIFICATION: Report a comparison table with columns: Product Name | Grid Price | Product Page Price | Match (Yes/No). State whether all prices are consistent.
+    start_url: https://www.prose.com
+    success_criteria: |
+      The task is SUCCESSFUL if and only if ALL of these conditions are met:
+      1. The agent recorded prices from the accessories grid page
+      2. At least 4 individual product pages were visited
+      3. Product page prices were recorded and compared to grid prices
+      4. A comparison table was presented
+      5. The agent stated whether prices were consistent
+
+      The task FAILS if:
+      - Fewer than 4 products were checked
+      - The agent only checked the grid OR only checked product pages (must check both)
+      - No comparison was made
+      - The agent assumed prices match without verifying
+    max_steps: 40
