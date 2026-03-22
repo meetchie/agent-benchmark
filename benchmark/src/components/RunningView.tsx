@@ -222,26 +222,26 @@ export function RunningView({
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex gap-3 mb-6">
+            {/* Action text links */}
+            <div className="flex justify-center gap-4 mb-6">
               <button
                 onClick={onRunAgain}
-                className="flex-1 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a]"
+                className="text-sm font-semibold text-[#3c49ad] hover:text-[#2f3a8a]"
               >
-                Run Again
+                ↻ Run Again
               </button>
+              <span className="text-slate-300">|</span>
               <button
                 onClick={onNewTest}
-                className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold hover:border-[#3c49ad] hover:text-[#3c49ad]"
+                className="text-sm font-medium text-slate-500 hover:text-slate-700"
               >
                 New Test
               </button>
             </div>
 
             {/* CTA section */}
-            <div className="border-t border-slate-100 pt-5 text-center">
-              <div className="text-base font-semibold text-slate-900 mb-1">Want to make your site agent-ready?</div>
-              <div className="text-sm text-slate-500 mb-4">Rindler turns any website into a deterministic API for AI agents.</div>
+            <div className="bg-[#f0f4ff] border border-[#3c49ad]/10 p-5 text-center">
+              <div className="text-sm text-slate-600 mb-3">Want to make your site work seamlessly with AI agents?</div>
               <div className="flex gap-3">
                 <a
                   href="https://rindler.ai"
