@@ -136,3 +136,101 @@ def test_start_with_mocked_clerk_jwt(mock_verify):
     assert resp.status_code == 200
     assert "run_id" in resp.json()
     mock_verify.assert_called_once_with("fake-token")
+
+
+# --- Security tests ---
+
+def test_internal_key_rejects_wrong_key():
+    """When INTERNAL_API_KEY is set, requests with wrong key get 403."""
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch.object(server_module, "_INTERNAL_API_KEY", "correct-key"):
+        resp = client.post(
+            "/benchmark/start",
+            json={"url": "https://example.com", "goal": "Test"},
+            headers={"X-Internal-Key": "wrong-key"},
+        )
+    assert resp.status_code == 403
+
+
+def test_internal_key_rejects_missing_key():
+    """When INTERNAL_API_KEY is set, requests without key get 403."""
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch.object(server_module, "_INTERNAL_API_KEY", "correct-key"):
+        resp = client.post(
+            "/benchmark/start",
+            json={"url": "https://example.com", "goal": "Test"},
+        )
+    assert resp.status_code == 403
+
+
+def test_internal_key_skipped_when_not_set():
+    """When INTERNAL_API_KEY is empty, requests pass through."""
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch.object(server_module, "_INTERNAL_API_KEY", ""):
+        async def fake_run(state, url, goal):
+            state.status = "complete"
+        with patch("server.run_benchmark", side_effect=fake_run):
+            resp = client.post(
+                "/benchmark/start",
+                json={"url": "https://example.com", "goal": "Test"},
+            )
+    assert resp.status_code == 200
+
+
+def test_concurrency_limit():
+    """User exceeding max concurrent runs gets 429."""
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    server_module._active_runs["test-user-id"] = 5  # At limit
+    try:
+        resp = client.post(
+            "/benchmark/start",
+            json={"url": "https://example.com", "goal": "Test"},
+        )
+        assert resp.status_code == 429
+    finally:
+        server_module._active_runs.clear()
+
+
+def test_generate_tasks_rate_limit():
+    """Exceeding task generation rate limit gets 429."""
+    import time
+    now = time.time()
+    # Simulate 5 recent requests from same IP
+    server_module._task_gen_requests["testclient"] = [now] * 5
+    try:
+        with patch("server.fetch_and_generate", new_callable=AsyncMock, return_value=[]):
+            resp = client.post("/benchmark/generate-tasks", json={"url": "https://example.com"})
+        assert resp.status_code == 429
+    finally:
+        server_module._task_gen_requests.clear()
+
+
+def test_generate_tasks_error_no_internal_details():
+    """Error responses from generate-tasks must not leak internal details."""
+    with patch("server.fetch_and_generate", new_callable=AsyncMock,
+               side_effect=Exception("Internal error: DB connection to 10.0.0.5 failed")):
+        resp = client.post("/benchmark/generate-tasks", json={"url": "https://example.com"})
+    assert resp.status_code == 500
+    body = resp.json()
+    assert "10.0.0.5" not in str(body)
+    assert "DB connection" not in str(body)
+
+
+def test_status_not_found_no_id_leak():
+    """Status 404 must not echo back the run_id."""
+    resp = client.get("/benchmark/status/secret-run-id-12345")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert "secret-run-id-12345" not in str(body)
+
+
+def test_run_eviction():
+    """Completed runs should be evicted when store exceeds limit."""
+    from benchmark_runner import RunState
+    # Fill with completed runs
+    for i in range(210):
+        state = RunState(run_id=f"run-{i}", status="complete")
+        server_module._runs[f"run-{i}"] = state
+    assert len(server_module._runs) == 210
+    server_module._evict_stale_runs()
+    assert len(server_module._runs) < 210

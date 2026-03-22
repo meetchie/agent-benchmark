@@ -90,6 +90,47 @@ def test_validate_url_rejects_private_ip():
     assert validate_url("http://169.254.1.1") is False
 
 
+def test_validate_url_rejects_docker_range():
+    """172.16.0.0/12 (Docker default bridge) must be blocked."""
+    assert validate_url("http://172.16.0.1") is False
+    assert validate_url("http://172.31.255.255") is False
+
+
+def test_validate_url_rejects_cgnat():
+    """100.64.0.0/10 (CGNAT / cloud metadata) must be blocked."""
+    assert validate_url("http://100.64.0.1") is False
+    assert validate_url("http://100.100.100.100") is False
+
+
+def test_validate_url_rejects_zero_network():
+    """0.0.0.0/8 must be blocked."""
+    assert validate_url("http://0.0.0.0") is False
+
+
+def test_validate_url_rejects_ipv6_loopback():
+    """IPv6 loopback ::1 must be blocked."""
+    assert validate_url("http://[::1]") is False
+
+
+def test_validate_url_rejects_localhost_hostname():
+    """The hostname 'localhost' must be blocked."""
+    assert validate_url("http://localhost") is False
+    assert validate_url("http://localhost:8080") is False
+
+
+def test_validate_url_rejects_metadata_endpoint():
+    """Cloud metadata endpoints must be blocked."""
+    assert validate_url("http://metadata.google.internal") is False
+
+
+def test_validate_url_resolves_dns():
+    """Hostnames that resolve to private IPs must be blocked."""
+    import socket
+    with patch("task_generator.socket.getaddrinfo",
+               return_value=[(socket.AF_INET, None, None, None, ("127.0.0.1", 0))]):
+        assert validate_url("https://evil.example.com") is False
+
+
 def test_validate_url_rejects_non_http():
     assert validate_url("ftp://example.com") is False
     assert validate_url("file:///etc/passwd") is False
@@ -271,7 +312,10 @@ async def test_fetch_and_generate_non_html_content_type():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("task_generator.aiohttp.ClientSession", return_value=mock_session):
+    with (
+        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
+    ):
         with pytest.raises(ValueError, match="did not return HTML"):
             await fetch_and_generate("https://api.example.com/data")
 
@@ -289,6 +333,9 @@ async def test_fetch_and_generate_http_error():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("task_generator.aiohttp.ClientSession", return_value=mock_session):
+    with (
+        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
+    ):
         with pytest.raises(ConnectionError, match="HTTP 404"):
             await fetch_and_generate("https://example.com/gone")

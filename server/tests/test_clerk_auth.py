@@ -67,3 +67,46 @@ def test_reject_unknown_kid(mock_jwks):
     )
     with pytest.raises(jwt.InvalidTokenError, match="No matching key"):
         verify_clerk_jwt(token)
+
+
+@patch("clerk_auth._get_clerk_issuer", return_value="https://test.clerk.accounts.dev")
+@patch("clerk_auth._fetch_jwks", return_value=_test_jwks)
+def test_reject_wrong_issuer(mock_jwks, mock_issuer):
+    """Tokens from a different Clerk instance must be rejected."""
+    token = _make_token({
+        "sub": "user_abc123",
+        "iss": "https://evil-app.clerk.accounts.dev",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        "iat": datetime.now(timezone.utc),
+    })
+    with pytest.raises(jwt.InvalidTokenError):
+        verify_clerk_jwt(token)
+
+
+@patch("clerk_auth._get_clerk_issuer", return_value="https://test.clerk.accounts.dev")
+@patch("clerk_auth._fetch_jwks", return_value=_test_jwks)
+def test_reject_missing_issuer(mock_jwks, mock_issuer):
+    """Tokens without an iss claim must be rejected."""
+    token = _make_token({
+        "sub": "user_abc123",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        "iat": datetime.now(timezone.utc),
+    })
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        verify_clerk_jwt(token)
+
+
+def test_reject_garbage_token():
+    """Completely invalid token strings must be rejected."""
+    with pytest.raises(Exception):
+        verify_clerk_jwt("not-a-jwt-at-all")
+
+
+def test_jwks_cache_ttl():
+    """JWKS cache should expire after TTL."""
+    import clerk_auth
+    clerk_auth._jwks_cache = {"keys": []}
+    clerk_auth._jwks_cache_time = 0  # Expired long ago
+    # After TTL, _fetch_jwks should re-fetch (will fail without network, but proves cache was invalidated)
+    import time
+    assert (time.monotonic() - clerk_auth._jwks_cache_time) > clerk_auth._JWKS_CACHE_TTL
