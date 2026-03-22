@@ -1,22 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { startBenchmark, pollStatus, generateTasks, hasToken, getMe, clearToken } from "./lib/api";
+import { useAuth, useUser, useClerk } from "@clerk/clerk-react";
+import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
 import { SetupView } from "./components/SetupView";
 import { RunningView } from "./components/RunningView";
-import { SignInPage } from "./components/SignInPage";
-import { SignUpPage } from "./components/SignUpPage";
 
-type View = "signin" | "signup" | "setup" | "running";
+type View = "setup" | "running";
 
 const MAX_POLLS = 180;
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
-  const [view, setView] = useState<View>(hasToken() ? "setup" : "signin");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [remainingRuns, setRemainingRuns] = useState(3);
-  const [resetTime, setResetTime] = useState<string | null>(null);
+  const { isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  const clerk = useClerk();
+
+  const [view, setView] = useState<View>("setup");
 
   const [url, setUrl] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -37,38 +37,7 @@ export default function App() {
   const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
-  const canRun = isUrlValid && selectedTask !== null && runStatus !== "running" && remainingRuns > 0;
-
-  // Check auth on mount
-  useEffect(() => {
-    if (hasToken()) {
-      getMe()
-        .then((me) => {
-          setUserEmail(me.email);
-          setRemainingRuns(me.remaining_runs);
-          setResetTime(me.reset_time);
-        })
-        .catch(() => {
-          clearToken();
-          setView("signin");
-        });
-    }
-  }, []);
-
-  const handleSignedIn = useCallback(() => {
-    getMe().then((me) => {
-      setUserEmail(me.email);
-      setRemainingRuns(me.remaining_runs);
-      setResetTime(me.reset_time);
-      setView("setup");
-    });
-  }, []);
-
-  const handleSignOut = useCallback(() => {
-    clearToken();
-    setUserEmail(null);
-    setView("signin");
-  }, []);
+  const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
 
   const handleUrlSubmit = useCallback(async () => {
     const trimmed = url.trim();
@@ -99,7 +68,7 @@ export default function App() {
     if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
     if (tasksLoading) return;
 
-    lastGeneratedUrlRef.current = "";  // Clear so it regenerates even for same URL
+    lastGeneratedUrlRef.current = "";
     setTasksLoading(true);
     setTasksError(null);
     setTasks([]);
@@ -184,8 +153,19 @@ export default function App() {
     [stopPolling]
   );
 
-  const handleRun = useCallback(async () => {
-    if (!canRun || !selectedTask) return;
+  const doRun = useCallback(async () => {
+    if (!selectedTask) return;
+
+    let token: string | null = null;
+    if (!isSignedIn) {
+      clerk.openSignIn();
+      return;
+    }
+    token = await getToken();
+    if (!token) {
+      setErrorMsg("Could not get auth token. Please sign in again.");
+      return;
+    }
 
     setRunStatus("running");
     setSteps([]);
@@ -195,37 +175,29 @@ export default function App() {
     setView("running");
 
     try {
-      const data = await startBenchmark(url, selectedTask.goal);
-      if (data.remaining_runs !== undefined) {
-        setRemainingRuns(data.remaining_runs);
-      }
+      const data = await startBenchmark(url, selectedTask.goal, token);
       startPolling(data.run_id);
     } catch (e) {
+      if (e instanceof Error && e.message === "AUTH_EXPIRED") {
+        clerk.openSignIn();
+        setRunStatus("idle");
+        setView("setup");
+        return;
+      }
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [canRun, selectedTask, url, startPolling]);
+  }, [selectedTask, isSignedIn, getToken, clerk, url, startPolling]);
+
+  const handleRun = useCallback(async () => {
+    if (!canRun || !selectedTask) return;
+    await doRun();
+  }, [canRun, selectedTask, doRun]);
 
   const handleRunAgain = useCallback(async () => {
     if (!selectedTask) return;
-
-    setRunStatus("running");
-    setSteps([]);
-    setScreenshot(null);
-    setSummary(null);
-    setErrorMsg(null);
-
-    try {
-      const data = await startBenchmark(url, selectedTask.goal);
-      if (data.remaining_runs !== undefined) {
-        setRemainingRuns(data.remaining_runs);
-      }
-      startPolling(data.run_id);
-    } catch (e) {
-      setRunStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
-    }
-  }, [selectedTask, url, startPolling]);
+    await doRun();
+  }, [selectedTask, doRun]);
 
   const handleNewTest = useCallback(() => {
     stopPolling();
@@ -239,13 +211,6 @@ export default function App() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  if (view === "signin") {
-    return <SignInPage onSignedIn={handleSignedIn} onSwitchToSignUp={() => setView("signup")} />;
-  }
-  if (view === "signup") {
-    return <SignUpPage onSignedUp={handleSignedIn} onSwitchToSignIn={() => setView("signin")} />;
-  }
-
   if (view === "running") {
     return (
       <RunningView
@@ -258,7 +223,6 @@ export default function App() {
         errorMsg={errorMsg}
         onRunAgain={handleRunAgain}
         onNewTest={handleNewTest}
-        remainingRuns={remainingRuns}
       />
     );
   }
@@ -277,10 +241,6 @@ export default function App() {
       canRun={canRun}
       onRun={handleRun}
       onRegenerateTasks={handleRegenerateTasks}
-      remainingRuns={remainingRuns}
-      resetTime={resetTime}
-      userEmail={userEmail}
-      onSignOut={handleSignOut}
     />
   );
 }

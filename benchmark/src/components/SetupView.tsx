@@ -19,10 +19,6 @@ interface SetupViewProps {
   canRun: boolean;
   onRun: () => void;
   onRegenerateTasks: () => void;
-  remainingRuns?: number;
-  resetTime?: string | null;
-  userEmail?: string | null;
-  onSignOut?: () => void;
 }
 
 export function SetupView({
@@ -38,19 +34,13 @@ export function SetupView({
   canRun,
   onRun,
   onRegenerateTasks,
-  remainingRuns,
-  resetTime,
-  userEmail,
-  onSignOut,
 }: SetupViewProps) {
-  // Once shifted up, stay up — never go back down
   const hasShifted = useRef(false);
   if (tasks.length > 0 || tasksLoading) {
     hasShifted.current = true;
   }
   const shifted = hasShifted.current;
 
-  // Delay showing tasks so the fade-in triggers after mount
   const [tasksVisible, setTasksVisible] = useState(false);
   useEffect(() => {
     if (tasks.length > 0 && !tasksLoading) {
@@ -62,39 +52,21 @@ export function SetupView({
 
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
-      <BenchmarkHeader userEmail={userEmail} remainingRuns={remainingRuns} resetTime={resetTime} onSignOut={onSignOut} />
+      <BenchmarkHeader />
 
       <div
         className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out relative"
-        style={{
-          paddingTop: shifted ? "15vh" : "35vh",
-        }}
+        style={{ paddingTop: shifted ? "15vh" : "35vh" }}
       >
         <BackgroundGrid />
         <div className="w-full max-w-[560px] relative z-10">
-          {/* URL input */}
           <URLInput
             value={url}
             onChange={onUrlChange}
             onSubmit={onUrlSubmit}
-            disabled={runStatus === "running" || remainingRuns === 0}
+            disabled={runStatus === "running"}
           />
 
-          {remainingRuns === 0 && (
-            <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3 mt-4">
-              <p className="text-sm text-amber-700">
-                No remaining uses{resetTime ? ` — resets in ${(() => {
-                  const diff = new Date(resetTime).getTime() - Date.now();
-                  if (diff <= 0) return "a moment";
-                  const h = Math.floor(diff / 3600000);
-                  const m = Math.floor((diff % 3600000) / 60000);
-                  return `${h}h ${m}m`;
-                })()}` : ""}
-              </p>
-            </div>
-          )}
-
-          {/* Loading indicator — below URL */}
           <div
             className="flex items-center gap-2 transition-all duration-300"
             style={{
@@ -104,25 +76,19 @@ export function SetupView({
               overflow: "hidden",
             }}
           >
-            <svg
-              className="animate-spin h-4 w-4 text-[#3c49ad]"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
+            <svg className="animate-spin h-4 w-4 text-[#3c49ad]" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             <span className="text-sm text-slate-400">Generating tasks...</span>
           </div>
 
-          {/* Error — shows below URL without shifting anything */}
           {tasksError && !tasksLoading && (
             <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3 mt-4">
               <p className="text-sm text-amber-700">{tasksError}</p>
             </div>
           )}
 
-          {/* Tasks section — fades in */}
           <div
             className="transition-all duration-500 ease-in-out"
             style={{
@@ -135,14 +101,9 @@ export function SetupView({
           >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-                  Task
-                </label>
+                <label className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Task</label>
                 {tasks.length > 0 && (
-                  <button
-                    onClick={onRegenerateTasks}
-                    className="text-sm text-[#3c49ad] hover:text-[#2f3a8a] flex items-center gap-1"
-                  >
+                  <button onClick={onRegenerateTasks} className="text-sm text-[#3c49ad] hover:text-[#2f3a8a] flex items-center gap-1">
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -150,22 +111,14 @@ export function SetupView({
                   </button>
                 )}
               </div>
-
               {tasks.length > 0 && (
                 <div className="space-y-3">
                   {tasks.map((task: Task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      selected={taskId === task.id}
-                      onSelect={() => onTaskSelect(task.id)}
-                      disabled={runStatus === "running"}
-                    />
+                    <TaskCard key={task.id} task={task} selected={taskId === task.id} onSelect={() => onTaskSelect(task.id)} disabled={runStatus === "running"} />
                   ))}
                 </div>
               )}
             </div>
-
             {tasks.length > 0 && (
               <div className="mt-8">
                 <RunButton status={runStatus} disabled={!canRun} onClick={onRun} />
