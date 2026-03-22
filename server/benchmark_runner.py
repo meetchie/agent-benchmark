@@ -90,7 +90,7 @@ def _format_action(agent) -> str:
                 # next_goal is the best description of what the agent is doing
                 goal = getattr(mo, 'next_goal', '')
                 if goal:
-                    return str(goal)[:120]
+                    return str(goal)
 
         # Fallback: format from raw action data
         actions = agent.history.model_actions()
