@@ -29,6 +29,12 @@ _runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev 
 # Admin emails get unlimited runs
 ADMIN_EMAILS: set[str] = set()
 
+# Demo mode — returns fake data without calling OpenAI or launching a browser
+# Set DEMO_MODE=true in .env to enable
+def _check_demo_mode() -> bool:
+    import os
+    return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -175,6 +181,57 @@ async def auth_me(user: dict = Depends(get_current_user)):
     return {"user_id": user["user_id"], "email": user["email"], **info}
 
 
+async def _demo_run(state: RunState, url: str, goal: str):
+    """Simulate a benchmark run with fake steps for UI testing."""
+    import asyncio as _aio
+    import random
+    from datetime import datetime
+    from benchmark_runner import StepRecord
+
+    domain = url.split("//")[-1].split("/")[0].replace("www.", "")
+    demo_steps = [
+        f"Navigating to {url}",
+        f"Looking for address input on {domain}",
+        "Typing address: 1 Main St, Springfield, IL 62701",
+        "Selecting first autocomplete suggestion",
+        f"Browsing product categories on {domain}",
+        "Applying price filter: $15-$25",
+        "Scrolling through filtered results",
+        "Selecting item with 4.5 star rating",
+        "Choosing variant: Size Medium, Color Black",
+        "Adding item to cart",
+        "Checking cart subtotal",
+        "Looking for available promotions",
+        "Verifying cart contents and total",
+    ]
+
+    overall_start = datetime.now()
+    for i, desc in enumerate(demo_steps):
+        await _aio.sleep(random.uniform(1.5, 4.0))
+        elapsed = random.randint(800, 5000)
+        state.steps.append(StepRecord(
+            step=i + 1,
+            description=desc,
+            elapsed_ms=elapsed,
+        ))
+
+    total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+
+    # Randomly succeed or fail for demo purposes
+    success = random.random() > 0.3  # 70% success rate
+    state.status = "complete"
+    state.success = success
+    state.total_ms = total_ms
+    state.input_tokens = random.randint(8000, 25000)
+    state.output_tokens = random.randint(500, 3000)
+    state.total_tokens = state.input_tokens + state.output_tokens
+
+    if success:
+        state.summary = f"Successfully completed the task on {domain}. All items added to cart within budget constraints."
+    else:
+        state.summary = f"Agent got stuck trying to interact with the variant picker on {domain}. Could not select the correct size from the dropdown."
+
+
 @app.post("/benchmark/start")
 async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
     import uuid as uuid_mod
@@ -197,7 +254,11 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
     run_id = str(uuid_mod.uuid4())
     state = RunState(run_id=run_id)
     _runs[run_id] = state
-    asyncio.create_task(run_benchmark(state, req.url, req.goal))
+
+    if _check_demo_mode():
+        asyncio.create_task(_demo_run(state, req.url, req.goal))
+    else:
+        asyncio.create_task(run_benchmark(state, req.url, req.goal))
 
     return {
         "run_id": run_id,
@@ -215,6 +276,15 @@ async def get_status(run_id: str):
 
 @app.post("/benchmark/generate-tasks")
 async def generate_tasks_endpoint(req: GenerateTasksRequest):
+    if _check_demo_mode():
+        import asyncio as _aio
+        await _aio.sleep(1.5)  # Simulate generation delay
+        domain = req.url.split("//")[-1].split("/")[0].replace("www.", "")
+        return {"tasks": [
+            {"id": 1, "label": f"Build a $30-$40 cart from {domain}", "goal": f"Set delivery address to 1 Main St, Springfield, IL 62701.\nBrowse available products on {domain} and select a category.\nAdd 3-4 items to cart while keeping the subtotal between $30-$40.\nIf subtotal exceeds $40, remove the most expensive item and find a cheaper alternative.\nVerify: all items are in cart, subtotal is between $30-$40."},
+            {"id": 2, "label": f"Find cheapest option with filters on {domain}", "goal": f"Search for a popular product category on {domain}.\nApply at least two filters (e.g., price range, rating, availability).\nSort results by price low-to-high.\nSelect the cheapest item that has 4+ star reviews and is in stock.\nChoose a specific variant (size/color) if applicable.\nAdd to cart and verify: correct item, correct variant, price matches filter."},
+            {"id": 3, "label": f"Multi-item order with constraints on {domain}", "goal": f"Set delivery address to 1 Main St, Springfield, IL 62701.\nFind and add a main item priced between $15-$25 to cart.\nAdd a complementary item (accessory, side, or add-on) under $10.\nCheck if any promotions or deals apply and activate them.\nVerify the cart shows both items, total is under $35.\nCheck estimated delivery date and confirm it's within 5 business days."},
+        ]}
     try:
         tasks = await fetch_and_generate(req.url)
         return {"tasks": tasks}
