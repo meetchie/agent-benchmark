@@ -13,12 +13,14 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from benchmark_runner import RunState, run_benchmark
 from task_generator import fetch_and_generate
+from auth import signup, signin, decode_jwt
+from database import get_remaining_runs, try_record_run, get_pool, close_pool
 
 
 # In-memory run state store
@@ -27,7 +29,13 @@ _runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load env for DATABASE_URL and AUTH_SECRET
+    from dotenv import load_dotenv
+    import os
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
     yield
+    await close_pool()
 
 
 app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
@@ -38,6 +46,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def get_current_user(authorization: str = Header(None)) -> dict:
+    """Extract and validate JWT from Authorization header."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = decode_jwt(token)
+        return payload
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
 
 
 class StartRequest(BaseModel):
@@ -68,16 +93,55 @@ async def health():
     return {"ok": True}
 
 
+@app.post("/auth/signup")
+async def auth_signup(req: AuthRequest):
+    try:
+        result = await signup(req.email, req.password)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422 if "Invalid email" in str(e) or "8 characters" in str(e) else 409, detail=str(e))
+
+
+@app.post("/auth/signin")
+async def auth_signin(req: AuthRequest):
+    try:
+        result = await signin(req.email, req.password)
+        return result
+    except PermissionError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.get("/auth/me")
+async def auth_me(user: dict = Depends(get_current_user)):
+    import uuid as uuid_mod
+    user_id = uuid_mod.UUID(user["user_id"])
+    info = await get_remaining_runs(user_id)
+    return {"user_id": user["user_id"], "email": user["email"], **info}
+
+
 @app.post("/benchmark/start")
-async def start_benchmark(req: StartRequest):
-    run_id = str(uuid.uuid4())
+async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
+    import uuid as uuid_mod
+    user_id = uuid_mod.UUID(user["user_id"])
+
+    # Atomic rate limit check + record
+    run_record = await try_record_run(user_id)
+    if run_record is None:
+        info = await get_remaining_runs(user_id)
+        raise HTTPException(status_code=429, detail={
+            "error": "Rate limit exceeded",
+            "reset_time": info["reset_time"],
+        })
+
+    run_id = str(uuid_mod.uuid4())
     state = RunState(run_id=run_id)
     _runs[run_id] = state
-
-    # Start agent in the background — does not block this response
     asyncio.create_task(run_benchmark(state, req.url, req.goal))
 
-    return {"run_id": run_id}
+    return {
+        "run_id": run_id,
+        "remaining_runs": run_record["remaining_runs"],
+    }
 
 
 @app.get("/benchmark/status/{run_id}")

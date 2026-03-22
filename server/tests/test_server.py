@@ -1,17 +1,24 @@
+import os
+os.environ.setdefault("AUTH_SECRET", "test-secret-key-for-testing")
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
-from server import app
+from server import app, get_current_user
 import server as server_module
 
 client = TestClient(app)
+
+FAKE_USER = {"user_id": "00000000-0000-0000-0000-000000000001", "email": "test@test.com"}
 
 
 @pytest.fixture(autouse=True)
 def clear_runs():
     server_module._runs.clear()
+    app.dependency_overrides.pop(get_current_user, None)
     yield
     server_module._runs.clear()
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_health():
@@ -28,7 +35,9 @@ def test_start_returns_run_id():
         state.summary = "Done"
         state.total_ms = 1000
 
-    with patch("server.run_benchmark", side_effect=fake_run):
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}), \
+         patch("server.run_benchmark", side_effect=fake_run):
         resp = client.post(
             "/benchmark/start",
             json={"url": "https://example.com", "goal": "Test"},
@@ -37,6 +46,7 @@ def test_start_returns_run_id():
     data = resp.json()
     assert "run_id" in data
     assert isinstance(data["run_id"], str)
+    assert data["remaining_runs"] == 2
 
 
 def test_status_not_found():
@@ -45,12 +55,16 @@ def test_status_not_found():
 
 
 def test_start_missing_fields():
-    resp = client.post("/benchmark/start", json={"url": "https://example.com"})
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}):
+        resp = client.post("/benchmark/start", json={"url": "https://example.com"})
     assert resp.status_code == 422  # FastAPI validation error
 
 
 def test_start_invalid_url():
-    resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("server.try_record_run", new_callable=AsyncMock, return_value={"id": "run-1", "remaining_runs": 2, "reset_time": None}):
+        resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
     assert resp.status_code == 422
 
 
@@ -92,3 +106,40 @@ def test_generate_tasks_site_unreachable():
         resp = client.post("/benchmark/generate-tasks", json={"url": "https://unreachable-site.com"})
     assert resp.status_code == 502
     assert "detail" in resp.json()
+
+
+# --- Auth endpoint tests ---
+
+def test_auth_signup_success():
+    with patch("server.signup", new_callable=AsyncMock, return_value={"token": "fake-jwt"}):
+        resp = client.post("/auth/signup", json={"email": "test@example.com", "password": "password123"})
+    assert resp.status_code == 200
+    assert resp.json()["token"] == "fake-jwt"
+
+
+def test_auth_signup_bad_email():
+    with patch("server.signup", new_callable=AsyncMock, side_effect=ValueError("Invalid email format")):
+        resp = client.post("/auth/signup", json={"email": "bad", "password": "password123"})
+    assert resp.status_code == 422
+
+
+def test_auth_signin_success():
+    with patch("server.signin", new_callable=AsyncMock, return_value={"token": "fake-jwt"}):
+        resp = client.post("/auth/signin", json={"email": "test@example.com", "password": "password123"})
+    assert resp.status_code == 200
+
+
+def test_auth_signin_bad_creds():
+    with patch("server.signin", new_callable=AsyncMock, side_effect=PermissionError("Invalid email or password")):
+        resp = client.post("/auth/signin", json={"email": "test@example.com", "password": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_auth_me_no_token():
+    resp = client.get("/auth/me")
+    assert resp.status_code == 401
+
+
+def test_benchmark_start_no_token():
+    resp = client.post("/benchmark/start", json={"url": "https://example.com", "goal": "Test"})
+    assert resp.status_code == 401
