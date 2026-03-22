@@ -192,7 +192,7 @@ async def _demo_run(state: RunState, url: str, goal: str):
     demo_steps = [
         f"Navigating to {url}",
         f"Looking for address input on {domain}",
-        "Typing address: 1 Main St, Springfield, IL 62701",
+        "Typing address: 1 Times Square, New York, NY 10036",
         "Selecting first autocomplete suggestion",
         f"Browsing product categories on {domain}",
         "Applying price filter: $15-$25",
@@ -281,9 +281,9 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest):
         await _aio.sleep(1.5)  # Simulate generation delay
         domain = req.url.split("//")[-1].split("/")[0].replace("www.", "")
         return {"tasks": [
-            {"id": 1, "label": f"Build a $30-$40 cart from {domain}", "goal": f"Set delivery address to 1 Main St, Springfield, IL 62701.\nBrowse available products on {domain} and select a category.\nAdd 3-4 items to cart while keeping the subtotal between $30-$40.\nIf subtotal exceeds $40, remove the most expensive item and find a cheaper alternative.\nVerify: all items are in cart, subtotal is between $30-$40."},
+            {"id": 1, "label": f"Build a $30-$40 cart from {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036.\nBrowse available products on {domain} and select a category.\nAdd 3-4 items to cart while keeping the subtotal between $30-$40.\nIf subtotal exceeds $40, remove the most expensive item and find a cheaper alternative.\nVerify: all items are in cart, subtotal is between $30-$40."},
             {"id": 2, "label": f"Find cheapest option with filters on {domain}", "goal": f"Search for a popular product category on {domain}.\nApply at least two filters (e.g., price range, rating, availability).\nSort results by price low-to-high.\nSelect the cheapest item that has 4+ star reviews and is in stock.\nChoose a specific variant (size/color) if applicable.\nAdd to cart and verify: correct item, correct variant, price matches filter."},
-            {"id": 3, "label": f"Multi-item order with constraints on {domain}", "goal": f"Set delivery address to 1 Main St, Springfield, IL 62701.\nFind and add a main item priced between $15-$25 to cart.\nAdd a complementary item (accessory, side, or add-on) under $10.\nCheck if any promotions or deals apply and activate them.\nVerify the cart shows both items, total is under $35.\nCheck estimated delivery date and confirm it's within 5 business days."},
+            {"id": 3, "label": f"Multi-item order with constraints on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036.\nFind and add a main item priced between $15-$25 to cart.\nAdd a complementary item (accessory, side, or add-on) under $10.\nCheck if any promotions or deals apply and activate them.\nVerify the cart shows both items, total is under $35.\nCheck estimated delivery date and confirm it's within 5 business days."},
         ]}
     try:
         tasks = await fetch_and_generate(req.url)

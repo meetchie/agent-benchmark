@@ -159,9 +159,9 @@ def test_generate_tasks_truncates_to_three():
     mock_response = _make_openai_response(raw_tasks)
 
     metadata = {
-        "title": "Site",
-        "description": "",
-        "visible_text": "",
+        "title": "Site Shop",
+        "description": "Online store",
+        "visible_text": "Buy products here",
         "url": "https://site.com",
     }
 
@@ -192,9 +192,9 @@ def test_generate_tasks_strips_markdown_fences():
     mock_response.choices = [choice]
 
     metadata = {
-        "title": "Site",
-        "description": "",
-        "visible_text": "",
+        "title": "Site Shop",
+        "description": "Online store",
+        "visible_text": "Buy products here",
         "url": "https://site.com",
     }
 

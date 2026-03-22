@@ -38,7 +38,7 @@ RULES:
 - Include at least one step that requires interacting with a dropdown, modal, date picker, address form, or other complex UI widget
 - Include verification steps that check MULTIPLE criteria (not just "is it in the cart" but "is it the RIGHT item at the RIGHT price in the RIGHT quantity")
 - Do NOT include any steps that require login, payment, or submitting sensitive personal information
-- Use delivery address "1 Main St, Springfield, IL 62701" when address is needed
+- Use delivery address "1 Times Square, New York, NY 10036" when address is needed
 - Keep labels short (under 60 characters)
 - Write goals as multi-line step-by-step instructions
 - ALL tasks should be genuinely challenging — no trivial "search and add to cart" tasks
@@ -53,7 +53,7 @@ EXAMPLES of the complexity level expected:
 Example 1 (grocery/delivery aggregator — EXPERT):
   label: "Build a $30-$40 cart from a single store"
   goal: |
-    Set delivery address to 1 Main St, Springfield, IL 62701. Select the first autocomplete suggestion and confirm.
+    Set delivery address to 1 Times Square, New York, NY 10036. Select the first autocomplete suggestion and confirm.
     Browse available stores and select one that offers free delivery or the lowest delivery fee.
     Add a gallon of whole milk (must be whole, not 2% or skim) to cart.
     Add a dozen large eggs (not medium, not organic unless it's the only option) to cart.
@@ -65,7 +65,7 @@ Example 1 (grocery/delivery aggregator — EXPERT):
 Example 2 (food delivery — HARD):
   label: "Order dinner for 4 under $60 with drinks"
   goal: |
-    Set delivery address to 1 Main St, Springfield, IL 62701.
+    Set delivery address to 1 Times Square, New York, NY 10036.
     Find a restaurant that is currently open, has a rating of 4+ stars, and offers a delivery time under 45 minutes.
     Order an entree that serves 2 or more people (family size, sharing platter, or equivalent).
     Add a second, different entree suitable for someone who doesn't eat pork (check description/ingredients).
@@ -85,7 +85,10 @@ Example 3 (e-commerce — HARD):
     Add to cart and verify: the item is in cart, price is between $25-$50, and gift wrapping (if available) is applied.
     Check estimated delivery date — report whether it arrives within 5 business days.
 
-Respond with a JSON object with a "tasks" key containing an array of 3 objects, each with "label" (string) and "goal" (string) fields. No markdown, no explanation.
+IMPORTANT: This benchmark is ONLY for commerce/transactional websites — e-commerce stores, food delivery, grocery delivery, restaurant ordering, travel booking, ticket purchasing, etc. If the website is NOT a commerce site (e.g., a search engine, social media, news site, productivity tool, email, calendar, wiki, documentation), respond with:
+{{"error": "This website is not a commerce or transactional site. The benchmark is designed for e-commerce, food delivery, grocery, and similar shopping/ordering websites."}}
+
+If the website IS a commerce site, respond with a JSON object with a "tasks" key containing an array of 3 objects, each with "label" (string) and "goal" (string) fields. No markdown, no explanation.
 
 WEBSITE INFORMATION:
 Title: {title}
@@ -165,12 +168,58 @@ def validate_url(url: str) -> bool:
     return True
 
 
+# Domains that are obviously not commerce sites
+_NON_COMMERCE_DOMAINS = {
+    "google.com", "gmail.com", "youtube.com", "facebook.com", "twitter.com",
+    "x.com", "instagram.com", "linkedin.com", "reddit.com", "wikipedia.org",
+    "github.com", "stackoverflow.com", "calendar.google.com", "docs.google.com",
+    "drive.google.com", "notion.so", "slack.com", "discord.com", "twitch.tv",
+    "netflix.com", "spotify.com", "tiktok.com", "pinterest.com", "medium.com",
+}
+
+
+def _check_commerce_site(metadata: dict) -> None:
+    """Raise ValueError if the site doesn't look like a commerce site."""
+    url = metadata.get("url", "")
+    hostname = urlparse(url).hostname or ""
+    domain = hostname.replace("www.", "").lower()
+
+    # Block known non-commerce domains
+    if domain in _NON_COMMERCE_DOMAINS:
+        raise ValueError(
+            "This website is not a commerce site. The benchmark is designed for "
+            "e-commerce, food delivery, grocery, and similar shopping/ordering websites."
+        )
+
+    # Quick heuristic: check if any commerce signals exist in metadata
+    text = (
+        metadata.get("title", "") + " " +
+        metadata.get("description", "") + " " +
+        metadata.get("visible_text", "")
+    ).lower()
+
+    commerce_signals = [
+        "shop", "store", "cart", "buy", "order", "delivery", "checkout",
+        "price", "add to", "menu", "restaurant", "grocery", "shipping",
+        "product", "deal", "sale", "booking", "reserve", "ticket",
+        "subscribe", "purchase", "marketplace",
+    ]
+
+    if not any(signal in text for signal in commerce_signals):
+        raise ValueError(
+            "This website doesn't appear to be a commerce site. The benchmark is designed for "
+            "e-commerce, food delivery, grocery, and similar shopping/ordering websites."
+        )
+
+
 def generate_tasks(metadata: dict) -> list[dict]:
     """Call GPT-4o to generate 3 benchmark tasks for a website.
 
     Uses response_format={"type": "json_object"}.
     Returns list of dicts with keys: id, label, goal.
+    Raises ValueError if the site is not a commerce site.
     """
+    _check_commerce_site(metadata)
     client = OpenAI()
 
     prompt = PROMPT_TEMPLATE.format(
@@ -193,6 +242,11 @@ def generate_tasks(metadata: dict) -> list[dict]:
     raw = re.sub(r"\s*```$", "", raw.strip())
 
     data = json.loads(raw)
+
+    # GPT-4o may reject non-commerce sites
+    if "error" in data:
+        raise ValueError(data["error"])
+
     tasks_raw = data.get("tasks", [])
 
     # Truncate to 3 tasks and add sequential IDs
