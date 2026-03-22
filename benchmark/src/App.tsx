@@ -1,17 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
+import { startBenchmark, pollStatus, generateTasks, hasToken, getMe, clearToken } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
 import { SetupView } from "./components/SetupView";
 import { RunningView } from "./components/RunningView";
+import { SignInPage } from "./components/SignInPage";
+import { SignUpPage } from "./components/SignUpPage";
 
-type View = "setup" | "running";
+type View = "signin" | "signup" | "setup" | "running";
 
 const MAX_POLLS = 180;
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
-  const [view, setView] = useState<View>("setup");
+  const [view, setView] = useState<View>(hasToken() ? "setup" : "signin");
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [remainingRuns, setRemainingRuns] = useState(3);
+  const [resetTime, setResetTime] = useState<string | null>(null);
+
   const [url, setUrl] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -31,7 +37,38 @@ export default function App() {
   const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
-  const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
+  const canRun = isUrlValid && selectedTask !== null && runStatus !== "running" && remainingRuns > 0;
+
+  // Check auth on mount
+  useEffect(() => {
+    if (hasToken()) {
+      getMe()
+        .then((me) => {
+          setUserEmail(me.email);
+          setRemainingRuns(me.remaining_runs);
+          setResetTime(me.reset_time);
+        })
+        .catch(() => {
+          clearToken();
+          setView("signin");
+        });
+    }
+  }, []);
+
+  const handleSignedIn = useCallback(() => {
+    getMe().then((me) => {
+      setUserEmail(me.email);
+      setRemainingRuns(me.remaining_runs);
+      setResetTime(me.reset_time);
+      setView("setup");
+    });
+  }, []);
+
+  const handleSignOut = useCallback(() => {
+    clearToken();
+    setUserEmail(null);
+    setView("signin");
+  }, []);
 
   const handleUrlSubmit = useCallback(async () => {
     const trimmed = url.trim();
@@ -158,8 +195,11 @@ export default function App() {
     setView("running");
 
     try {
-      const { run_id } = await startBenchmark(url, selectedTask.goal);
-      startPolling(run_id);
+      const data = await startBenchmark(url, selectedTask.goal);
+      if (data.remaining_runs !== undefined) {
+        setRemainingRuns(data.remaining_runs);
+      }
+      startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
@@ -176,8 +216,11 @@ export default function App() {
     setErrorMsg(null);
 
     try {
-      const { run_id } = await startBenchmark(url, selectedTask.goal);
-      startPolling(run_id);
+      const data = await startBenchmark(url, selectedTask.goal);
+      if (data.remaining_runs !== undefined) {
+        setRemainingRuns(data.remaining_runs);
+      }
+      startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
@@ -196,6 +239,13 @@ export default function App() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
+  if (view === "signin") {
+    return <SignInPage onSignedIn={handleSignedIn} onSwitchToSignUp={() => setView("signup")} />;
+  }
+  if (view === "signup") {
+    return <SignUpPage onSignedUp={handleSignedIn} onSwitchToSignIn={() => setView("signin")} />;
+  }
+
   if (view === "running") {
     return (
       <RunningView
@@ -208,6 +258,7 @@ export default function App() {
         errorMsg={errorMsg}
         onRunAgain={handleRunAgain}
         onNewTest={handleNewTest}
+        remainingRuns={remainingRuns}
       />
     );
   }
@@ -226,6 +277,10 @@ export default function App() {
       canRun={canRun}
       onRun={handleRun}
       onRegenerateTasks={handleRegenerateTasks}
+      remainingRuns={remainingRuns}
+      resetTime={resetTime}
+      userEmail={userEmail}
+      onSignOut={handleSignOut}
     />
   );
 }

@@ -10,6 +10,12 @@ export default defineConfig({
     // This bypasses the Cloudflare Functions (functions/api/benchmark/) which are used in production only.
     // Reason: wrangler v3.114.17 conflicts when wrangler.toml has pages_build_output_dir set + proxy command.
     proxy: {
+      // Auth routes
+      "/api/auth": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace("/api/auth", "/auth"),
+      },
       // Rewrite Cloudflare function paths to Python container paths for local dev
       "/api/benchmark/status": {
         target: "http://localhost:8000",

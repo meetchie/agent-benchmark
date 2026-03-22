@@ -20,6 +20,7 @@ interface RunningViewProps {
   errorMsg: string | null;
   onRunAgain: () => void;
   onNewTest: () => void;
+  remainingRuns?: number;
 }
 
 export function RunningView({
@@ -32,6 +33,7 @@ export function RunningView({
   errorMsg,
   onRunAgain,
   onNewTest,
+  remainingRuns,
 }: RunningViewProps) {
   const isDone = !!summary || (!!errorMsg && !isRunning);
   const isError = !summary && !!errorMsg;
@@ -55,6 +57,7 @@ export function RunningView({
         isRunning={isRunning}
         totalMs={summary?.total_ms}
         onNewTest={onNewTest}
+        remainingRuns={remainingRuns}
       />
 
       <div className="flex-1 flex flex-col p-4 space-y-4 overflow-y-auto">

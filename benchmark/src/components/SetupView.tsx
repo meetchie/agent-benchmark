@@ -19,6 +19,10 @@ interface SetupViewProps {
   canRun: boolean;
   onRun: () => void;
   onRegenerateTasks: () => void;
+  remainingRuns?: number;
+  resetTime?: string | null;
+  userEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 export function SetupView({
@@ -34,6 +38,10 @@ export function SetupView({
   canRun,
   onRun,
   onRegenerateTasks,
+  remainingRuns,
+  resetTime,
+  userEmail,
+  onSignOut,
 }: SetupViewProps) {
   // Once shifted up, stay up — never go back down
   const hasShifted = useRef(false);
@@ -54,7 +62,7 @@ export function SetupView({
 
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
-      <BenchmarkHeader />
+      <BenchmarkHeader userEmail={userEmail} remainingRuns={remainingRuns} resetTime={resetTime} onSignOut={onSignOut} />
 
       <div
         className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out relative"
@@ -69,8 +77,22 @@ export function SetupView({
             value={url}
             onChange={onUrlChange}
             onSubmit={onUrlSubmit}
-            disabled={runStatus === "running"}
+            disabled={runStatus === "running" || remainingRuns === 0}
           />
+
+          {remainingRuns === 0 && (
+            <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3 mt-4">
+              <p className="text-sm text-amber-700">
+                No remaining uses{resetTime ? ` — resets in ${(() => {
+                  const diff = new Date(resetTime).getTime() - Date.now();
+                  if (diff <= 0) return "a moment";
+                  const h = Math.floor(diff / 3600000);
+                  const m = Math.floor((diff % 3600000) / 60000);
+                  return `${h}h ${m}m`;
+                })()}` : ""}
+              </p>
+            </div>
+          )}
 
           {/* Loading indicator — below URL */}
           <div

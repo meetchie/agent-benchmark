@@ -7,6 +7,7 @@ interface RunningHeaderProps {
   isRunning: boolean;
   totalMs?: number;
   onNewTest: () => void;
+  remainingRuns?: number;
 }
 
 export function RunningHeader({
@@ -15,6 +16,7 @@ export function RunningHeader({
   isRunning,
   totalMs,
   onNewTest,
+  remainingRuns,
 }: RunningHeaderProps) {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -63,6 +65,15 @@ export function RunningHeader({
         {displayTime && (
           <span className={`text-xs font-semibold ${isRunning ? "text-[#3c49ad]" : "text-slate-500"}`}>
             {isRunning ? "RUNNING " : ""}{displayTime}
+          </span>
+        )}
+        {remainingRuns !== undefined && (
+          <span className={`text-xs font-semibold px-2.5 py-1 border ${
+            remainingRuns > 0
+              ? "border-[#3c49ad] text-[#3c49ad] bg-[#3c49ad]/5"
+              : "border-amber-400 text-amber-600 bg-amber-50"
+          }`}>
+            Remaining: {remainingRuns}
           </span>
         )}
         <button

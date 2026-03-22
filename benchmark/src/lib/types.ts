@@ -44,3 +44,14 @@ export interface SummaryData {
   output_tokens: number;
   total_tokens: number;
 }
+
+export interface AuthResponse {
+  token: string;
+}
+
+export interface MeResponse {
+  user_id: string;
+  email: string;
+  remaining_runs: number;
+  reset_time: string | null;
+}
