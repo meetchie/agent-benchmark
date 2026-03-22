@@ -109,159 +109,157 @@ export function RunningView({
       />
 
       <div className="flex-1 flex p-4 gap-4 overflow-hidden">
-        {/* LEFT — screenshot + steps */}
-        <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-w-0">
-          {isDone ? (
-            <>
-              {/* Result header card */}
-              <div
-                className={`border-2 p-5 ${
-                  isPass
-                    ? "border-green-400 bg-green-50"
-                    : "border-red-400 bg-red-50"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className={`text-lg font-bold ${
-                      isPass ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
-                    {isPass ? "✓ PASS" : isError ? "✗ ERROR" : "✗ FAIL"}
-                  </span>
-                  {summary && (
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-slate-500 font-mono">
-                        {formatTimer(summary.total_ms)}
-                      </span>
-                      {summary.total_tokens > 0 && (
+        {/* LEFT — always same fixed layout: top section (55vh) + bottom section (rest) */}
+        <div className="flex-1 flex flex-col gap-4 min-w-0">
+          {/* TOP SECTION — fixed 55vh, screenshot or results */}
+          <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ height: "55vh", flexShrink: 0 }}>
+            {isDone ? (
+              /* Results inside the fixed box */
+              <div className="h-full overflow-y-auto p-5">
+                <div
+                  className={`border-2 p-5 mb-4 ${
+                    isPass
+                      ? "border-green-400 bg-green-50"
+                      : "border-red-400 bg-red-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span
+                      className={`text-lg font-bold ${
+                        isPass ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
+                      {isPass ? "✓ PASS" : isError ? "✗ ERROR" : "✗ FAIL"}
+                    </span>
+                    {summary && (
+                      <div className="flex items-center gap-4">
                         <span className="text-sm text-slate-500 font-mono">
-                          {formatCost(summary.input_tokens, summary.output_tokens)}
+                          {formatTimer(summary.total_ms)}
                         </span>
-                      )}
+                        {summary.total_tokens > 0 && (
+                          <span className="text-sm text-slate-500 font-mono">
+                            {formatCost(summary.input_tokens, summary.output_tokens)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {(isPass || isFail) && summary?.summary && (
+                    <p className="text-sm text-slate-700 leading-relaxed">
+                      {summary.summary}
+                    </p>
+                  )}
+
+                  {isError && (
+                    <p className="text-sm text-red-700 leading-relaxed">
+                      {errorMsg}
+                    </p>
+                  )}
+
+                  {isFail && stuckStep && (
+                    <div className="mt-3 pt-3 border-t border-red-200">
+                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
+                        Where it failed
+                      </p>
+                      <p className="text-sm text-red-700 font-medium">
+                        Step #{stuckStep.step}: {stuckStep.description}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Spent {formatMs(stuckStep.elapsed_ms)} on this step
+                      </p>
+                    </div>
+                  )}
+
+                  {slowSteps.length > 0 && (
+                    <div className={`mt-3 pt-3 ${isFail ? "border-t border-red-200" : "border-t border-green-200"}`}>
+                      <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">
+                        Slow Steps
+                      </p>
+                      <div className="space-y-1">
+                        {slowSteps.map((step) => (
+                          <div key={step.step} className="flex items-center gap-2">
+                            <span className="text-xs text-amber-500">⚠</span>
+                            <span className="flex-1 text-xs text-slate-600">
+                              <span className="text-slate-400 mr-1">#{step.step}</span>
+                              {step.description}
+                            </span>
+                            <span className="text-xs text-amber-600 font-mono font-medium">
+                              {formatMs(step.elapsed_ms)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {(isPass || isFail) && summary?.summary && (
-                  <p className="text-sm text-slate-700 leading-relaxed">
-                    {summary.summary}
-                  </p>
-                )}
-
-                {isError && (
-                  <p className="text-sm text-red-700 leading-relaxed">
-                    {errorMsg}
-                  </p>
-                )}
-
-                {isFail && stuckStep && (
-                  <div className="mt-3 pt-3 border-t border-red-200">
-                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
-                      Where it failed
-                    </p>
-                    <p className="text-sm text-red-700 font-medium">
-                      Step #{stuckStep.step}: {stuckStep.description}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Spent {formatMs(stuckStep.elapsed_ms)} on this step
-                    </p>
-                  </div>
-                )}
-
-                {slowSteps.length > 0 && (
-                  <div className={`mt-3 pt-3 ${isFail ? "border-t border-red-200" : "border-t border-green-200"}`}>
-                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2">
-                      Slow Steps
-                    </p>
-                    <div className="space-y-1">
-                      {slowSteps.map((step) => (
-                        <div key={step.step} className="flex items-center gap-2">
-                          <span className="text-xs text-amber-500">⚠</span>
-                          <span className="flex-1 text-xs text-slate-600">
-                            <span className="text-slate-400 mr-1">#{step.step}</span>
-                            {step.description}
-                          </span>
-                          <span className="text-xs text-amber-600 font-mono font-medium">
-                            {formatMs(step.elapsed_ms)}
-                          </span>
-                        </div>
-                      ))}
+                {/* Token breakdown */}
+                {summary && summary.total_tokens > 0 && (
+                  <div className="border-2 border-slate-200 bg-slate-50 p-4 mb-4">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usage</p>
+                    <div className="flex gap-6 text-sm text-slate-600 font-mono">
+                      <div>
+                        <span className="text-slate-400 text-xs block">Input</span>
+                        {summary.input_tokens.toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-xs block">Output</span>
+                        {summary.output_tokens.toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-xs block">Total</span>
+                        {summary.total_tokens.toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-xs block">Cost</span>
+                        {formatCost(summary.input_tokens, summary.output_tokens)}
+                      </div>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Token breakdown */}
-              {summary && summary.total_tokens > 0 && (
-                <div className="border-2 border-slate-200 bg-white p-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usage</p>
-                  <div className="flex gap-6 text-sm text-slate-600 font-mono">
-                    <div>
-                      <span className="text-slate-400 text-xs block">Input</span>
-                      {summary.input_tokens.toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs block">Output</span>
-                      {summary.output_tokens.toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs block">Total</span>
-                      {summary.total_tokens.toLocaleString()}
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs block">Cost</span>
-                      {formatCost(summary.input_tokens, summary.output_tokens)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <StepLog steps={steps} isRunning={false} />
-
-              <div className="flex gap-3">
-                <button
-                  onClick={onRunAgain}
-                  className="flex-1 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a]"
-                >
-                  Run Again
-                </button>
-                <button
-                  onClick={onNewTest}
-                  className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold hover:border-[#3c49ad] hover:text-[#3c49ad]"
-                >
-                  New Test
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Screenshot — fixed 55% of available height */}
-              <div className="border-2 border-slate-200 bg-white overflow-hidden flex items-center justify-center" style={{ height: "55vh", flexShrink: 0 }}>
-                {screenshot ? (
-                  <img
-                    src={screenshot}
-                    alt="Agent screenshot"
-                    className="max-w-full max-h-full object-contain"
-                  />
-                ) : (
-                  <svg
-                    className="animate-spin h-5 w-5 text-[#3c49ad]"
-                    fill="none"
-                    viewBox="0 0 24 24"
+                <div className="flex gap-3">
+                  <button
+                    onClick={onRunAgain}
+                    className="flex-1 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a]"
                   >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
+                    Run Again
+                  </button>
+                  <button
+                    onClick={onNewTest}
+                    className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold hover:border-[#3c49ad] hover:text-[#3c49ad]"
+                  >
+                    New Test
+                  </button>
+                </div>
               </div>
+            ) : screenshot ? (
+              /* Screenshot — fills container, crops to fit */
+              <img
+                src={screenshot}
+                alt="Agent screenshot"
+                className="w-full h-full object-cover object-top"
+              />
+            ) : (
+              /* Loading spinner */
+              <div className="w-full h-full flex items-center justify-center">
+                <svg
+                  className="animate-spin h-5 w-5 text-[#3c49ad]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            )}
+          </div>
 
-              {/* Steps — fills remaining space, scrolls internally */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <StepLog steps={steps} isRunning={isRunning} />
-              </div>
-            </>
-          )}
+          {/* BOTTOM SECTION — fills remaining space, scrolls internally */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <StepLog steps={steps} isRunning={isDone ? false : isRunning} />
+          </div>
         </div>
 
         {/* RIGHT — live stats sidebar (only while running) */}
