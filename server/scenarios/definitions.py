@@ -23,7 +23,8 @@ class Scenario:
     start_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     success_criteria: Optional[str] = None  # Explicit criteria for judge to evaluate
-    
+    verification_hint: Optional[str] = None  # Tells judge what to focus on in final extraction
+
     def __str__(self) -> str:
         return f"{self.name}: {self.description}"
 
@@ -50,20 +51,25 @@ register_scenario(Scenario(
     description="Set delivery address, search for product, add to cart on Shipt",
     start_url="https://shipt.com",
     tags=["e-commerce", "grocery", "cart"],
-    goal="""Go to shipt.com.
+    goal="""You are shopping on Shipt (shipt.com).
 
-First, you need to set a delivery address before you can search for products.
-Find the address input field (it says "Find stores near you") and enter: 1 Main St, Springfield, IL 62701
-Wait for the autocomplete dropdown and click the first suggestion.
+1. Go to shipt.com.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701".
+3. Search for "Organic Bananas".
+4. Add the first result to your cart.
+5. Navigate to the cart/bag page and verify the item is there.
 
-Once on the main shopping page, search for "Organic Bananas" and add the first result to your cart.
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The delivery address was set to San Mateo, CA
+2. A search for "Organic Bananas" was performed
+3. An organic bananas product was added to the cart
+4. The cart was viewed and contains at least one bananas product
 
-IMPORTANT - How to verify success:
-After clicking the add-to-cart button, look for ANY of these success indicators:
-1. The product card shows "X in cart" (e.g., "1 in cart") with a checkmark
-2. The cart icon in the top-right shows a number badge (like "1")
-3. A toast/notification appears saying the item was added
-"""
+The task FAILS if:
+- The cart is empty or does not contain bananas
+- The agent never verified the cart contents""",
+    verification_hint="Look for cart contents showing an organic bananas product with quantity and price. The agent should have navigated to the cart page or called view_cart."
 ))
 
 register_scenario(Scenario(
@@ -71,33 +77,32 @@ register_scenario(Scenario(
     description="Complex multi-item order with strict attribute and quantity logic",
     start_url="https://shipt.com",
     tags=["agentic-flow", "logic-test", "dirty-data"],
-    goal="""Go to shipt.com.
+    goal="""You are shopping on Shipt (shipt.com).
 
-1. **Setup:** Enter delivery address: 1 Main St, Springfield, IL 62701. Select the first autocomplete result.
+1. Go to shipt.com.
+2. Set the delivery address to "1 Main St, Springfield, IL 62701".
 
-2. **Task - Precision Search:**
-   - Search for "Granny Smith Apples".
-   - CRITICAL: Do NOT add the first result blindly. Find a loose individual apple (not a pre-bagged item) and add exactly **6 individual apples**.
-   - Note: If the site uses "lbs" instead of count, estimate 0.5 lbs per apple and add 3 lbs.
+3. Search for "Granny Smith Apples".
+   - PREFERRED: Add 6 loose individual Granny Smith apples.
+   - ACCEPTABLE SUBSTITUTE: A pre-bagged option totaling approximately 3 lbs (e.g., a 3lb bag) is an acceptable alternative.
 
-3. **Task - Ambiguity Resolution:**
-   - Search for "Milk".
-   - Find a "Gallon of Whole Milk" that is explicitly **NOT Organic**.
+4. Search for "Milk".
+   - Find a gallon of Whole Milk that is NOT Organic.
    - Add 1 to cart.
 
-4. **Task - Cross-Category Search:**
-   - Search for "Advil" (Brand search).
-   - Verify the result is actually "Ibuprofen" and represents a "Tablet" or "Caplet" form (avoid liquid gels if possible).
-   - Add the smallest pack size available (e.g., 20 or 50 count).
+5. Search for "Advil".
+   - Verify the result is Ibuprofen in tablet/caplet form (avoid liquid gels).
+   - Add the smallest pack size available.
 
-5. **Verification:**
-   - Go to checkout/cart view.
-   - Verify that the Apple count is 6 (or ~3lbs).
-   - Verify the Milk is strictly "Whole" and standard (not organic).
-   - Verify the total cart item count is 3 unique products.
-""",
+6. Navigate to the cart/bag page and verify:
+   - Cart contains 3 unique products
+   - Apple count is 6 (or ~3 lbs)
+   - Milk is Whole and NOT Organic
+   - Advil is in tablet/caplet form
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. Cart contains exactly 3 UNIQUE products (not 3 total items, but 3 different products)
+1. Cart contains exactly 3 UNIQUE products
 2. Cart contains Granny Smith Apples - either 6 individual apples OR approximately 3 lbs
 3. Cart contains a gallon of WHOLE milk that is NOT organic
 4. Cart contains Advil (Ibuprofen) in tablet or caplet form (smallest available pack size)
@@ -105,9 +110,9 @@ register_scenario(Scenario(
 The task FAILS if:
 - Any of the 3 products are missing from the cart
 - The milk is organic
-- The apple quantity is wrong (not 6 / not ~3lbs)
-- The agent hit rate limits and could not complete verification
-- The cart verification shows fewer than 3 distinct products"""
+- The apple quantity is wrong
+- The cart verification shows fewer than 3 distinct products""",
+    verification_hint="Look for cart contents showing exactly 3 unique products: Granny Smith Apples (6 count or ~3 lbs), whole non-organic milk (gallon), and Advil ibuprofen tablets/caplets. Check that milk is explicitly NOT organic."
 ))
 
 register_scenario(Scenario(
@@ -125,8 +130,18 @@ From the search results, click on the first product that:
 
 On the product page, scroll down to see the product description and customer reviews section.
 
-Report the product name and price.
-"""
+VERIFICATION: Report your findings clearly, including the product name, price, star rating, and Prime delivery status.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "wireless bluetooth headphones" was performed on Amazon
+2. The agent selected a product with at least 4 stars and Prime delivery
+3. The agent navigated to the product detail page
+4. The product name and price were reported
+
+The task FAILS if:
+- No product was selected from search results
+- The selected product does not have 4+ stars or Prime
+- The product name or price was not reported""",
+    verification_hint="Look for a reported product name and price from Amazon. Verify the agent confirmed the product has 4+ stars and Prime delivery."
 ))
 
 register_scenario(Scenario(
@@ -143,7 +158,18 @@ Find the nearest Target store and report:
 1. Store address
 2. Store hours for today
 3. Whether it has Order Pickup available
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The store locator was accessed on target.com
+2. ZIP code 02139 was entered
+3. At least one store result was found
+4. The store address, hours, and Order Pickup availability were reported
+
+The task FAILS if:
+- No store was found or reported
+- Store address or hours are missing from the report""",
+    verification_hint="Look for a Target store address near Cambridge, MA (ZIP 02139), today's store hours, and whether Order Pickup is available."
 ))
 
 register_scenario(Scenario(
@@ -168,7 +194,20 @@ After clicking add to cart, look for ANY of these success indicators:
 2. A slide-out cart panel appears showing the item
 3. A confirmation message appears saying the item was added
 4. You're taken to a cart page showing the jacket
-"""
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Better Sweater Fleece Jacket" was performed on Patagonia
+2. A Men's jacket was selected from results
+3. Size "M" was selected
+4. A color was selected
+5. The item was added to cart and a success indicator was observed
+
+The task FAILS if:
+- No jacket was found or selected
+- Size M was not selected
+- No add-to-cart confirmation was observed""",
+    verification_hint="Look for cart contents showing a Patagonia Better Sweater Fleece Jacket in size M with a color and price. Check for any add-to-cart confirmation."
 ))
 
 register_scenario(Scenario(
@@ -189,7 +228,20 @@ Wait for results to load and report:
 1. The number of results found
 2. The first 3 listings with: Year, Price, Mileage
 3. Any "Great Deal" or "Good Deal" badges on these listings
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search was performed on CarGurus for Toyota Camry near ZIP 02139
+2. Filters were applied (max $25,000, 2020 or newer)
+3. The total number of results was reported
+4. At least 3 listings were reported with year, price, and mileage
+5. Deal badges were mentioned if present
+
+The task FAILS if:
+- The search was not performed with the correct criteria
+- Fewer than 3 listings were reported
+- Year, price, or mileage is missing from listings""",
+    verification_hint="Look for at least 3 Toyota Camry listings (2020+, under $25k) with year, price, mileage, and any deal badges. Verify the total result count was reported."
 ))
 
 
@@ -219,7 +271,20 @@ After adding to cart, look for ANY of these success indicators:
 1. A cart icon shows the item count (e.g., "1")
 2. A cart summary appears at the bottom of the screen
 3. A "View Cart" or "Checkout" button appears with the item total
-"""
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The delivery address was set to San Mateo, CA
+2. A search for "pizza" restaurants was performed
+3. A pizza restaurant with 4+ stars was selected
+4. A pizza item was added to the cart
+5. A cart success indicator was observed (item count, cart summary, or checkout button)
+
+The task FAILS if:
+- No restaurant was selected
+- No item was added to cart
+- No cart confirmation was observed""",
+    verification_hint="Look for a cart summary or confirmation showing a pizza item from a DoorDash restaurant. The agent should have observed a cart icon count, cart summary, or checkout button."
 ))
 
 register_scenario(Scenario(
@@ -244,7 +309,20 @@ After adding to cart, look for ANY of these success indicators:
 1. A cart/bag icon shows the item count
 2. A cart panel appears on the side showing your order
 3. A "Checkout" or "View order" button becomes visible
-"""
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The delivery address was set to San Mateo, CA
+2. A search for "Chinese food" restaurants was performed
+3. A Chinese restaurant with good rating was selected
+4. A dish (e.g., General Tso's Chicken or similar) was added to the cart
+5. A cart success indicator was observed (item count, cart panel, or checkout button)
+
+The task FAILS if:
+- No restaurant was selected
+- No item was added to cart
+- No cart confirmation was observed""",
+    verification_hint="Look for a cart panel or confirmation showing a Chinese food dish from a Grubhub restaurant. The agent should have observed a cart icon count, order panel, or checkout button."
 ))
 
 register_scenario(Scenario(
@@ -269,7 +347,20 @@ After adding to cart, look for ANY of these success indicators:
 1. A cart icon appears with a number badge
 2. A cart summary shows at the bottom of the screen
 3. A "Go to checkout" or similar button appears
-"""
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The delivery address was set to San Mateo, CA
+2. A search for "burger" restaurants was performed
+3. A burger restaurant was selected
+4. A burger item was added to the cart
+5. A cart success indicator was observed (cart icon, cart summary, or checkout button)
+
+The task FAILS if:
+- No restaurant was selected
+- No item was added to cart
+- No cart confirmation was observed""",
+    verification_hint="Look for a cart summary or confirmation showing a burger item from an Uber Eats restaurant. The agent should have observed a cart icon badge, cart summary, or checkout button."
 ))
 
 register_scenario(Scenario(
@@ -295,7 +386,20 @@ After clicking add to cart, look for ANY of these success indicators:
 2. A "View cart" button appears
 3. The item shows "In cart" or similar confirmation
 4. A cart panel slides open showing the item
-"""
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The delivery address was set to San Mateo, CA
+2. A grocery store was selected
+3. Milk was searched for or found in the dairy section
+4. A gallon of whole or 2% milk was added to the cart
+5. A cart success indicator was observed (cart count, view cart button, or in-cart confirmation)
+
+The task FAILS if:
+- No store was selected
+- No milk product was added to cart
+- No cart confirmation was observed""",
+    verification_hint="Look for cart contents showing a gallon of milk (whole or 2%) from an Instacart store. The agent should have observed a cart icon count, view cart button, or in-cart status."
 ))
 
 register_scenario(Scenario(
@@ -325,7 +429,21 @@ Look for ANY of these success indicators:
 4. A guest information form appears
 
 NOTE: Do NOT complete the actual reservation - just get to the point where you would enter your details.
-"""
+
+VERIFICATION: Report the restaurant name, available time slot selected, party size, and date. Confirm you reached the reservation details form.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A restaurant search was performed in Boston, MA for Italian cuisine
+2. Party size was set to 2 and a date ~1 week out was selected
+3. A dinner time around 7:00 PM was targeted
+4. A restaurant with 4+ stars was selected
+5. An available time slot was clicked
+6. The agent reached a reservation form or confirmation page (without completing the booking)
+
+The task FAILS if:
+- No restaurant was found or selected
+- The agent did not reach the reservation details form
+- Search criteria were significantly wrong (wrong city, wrong cuisine)""",
+    verification_hint="Look for evidence the agent reached an OpenTable reservation form showing restaurant name, party size of 2, a date ~1 week out, and an evening time slot. The booking should NOT have been completed."
 ))
 
 
@@ -350,7 +468,19 @@ Report the top 3 trending Python repositories with:
 - Repository name
 - Number of stars
 - Brief description
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The agent navigated to GitHub trending repositories
+2. Results were filtered by Python language and "This week" timeframe
+3. At least 3 trending Python repositories were reported
+4. Each reported repository includes name, star count, and description
+
+The task FAILS if:
+- Fewer than 3 repositories were reported
+- Repository names, stars, or descriptions are missing
+- The results were not filtered by Python""",
+    verification_hint="Look for 3 trending Python repositories from GitHub with name, star count, and description. Verify the agent filtered by Python and weekly timeframe."
 ))
 
 register_scenario(Scenario(
@@ -367,7 +497,21 @@ Report:
 2. Current conditions (sunny, cloudy, etc.)
 3. High and low temperatures for today
 4. Tomorrow's forecast summary
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The agent navigated to weather.com
+2. Weather was searched for "San Francisco, CA"
+3. Current temperature was reported
+4. Current conditions (e.g., sunny, cloudy) were reported
+5. Today's high and low temperatures were reported
+6. Tomorrow's forecast summary was reported
+
+The task FAILS if:
+- The weather is for the wrong city
+- Current temperature or conditions are missing
+- Today's high/low or tomorrow's forecast are missing""",
+    verification_hint="Look for San Francisco weather data including current temperature, current conditions, today's high/low, and tomorrow's forecast. All four data points must be present."
 ))
 
 
@@ -393,7 +537,21 @@ Wait for results to load and report:
 1. The cheapest flight option
 2. The fastest flight option
 3. Price range shown
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A flight search was performed on Kayak for SFO to JFK round-trip
+2. Departure and return dates were approximately correct (~2 and ~3 weeks out)
+3. At least one flight result was found
+4. The cheapest flight option was reported with price
+5. The fastest flight option was reported
+6. A price range was mentioned
+
+The task FAILS if:
+- No flight results were found or reported
+- The route is wrong (not SFO to JFK)
+- Neither cheapest nor fastest option was reported""",
+    verification_hint="Look for Kayak flight search results for SFO to JFK round-trip. The agent should report the cheapest option, fastest option, and overall price range. Exact prices will vary - focus on whether results were found and reported."
 ))
 
 register_scenario(Scenario(
@@ -414,7 +572,19 @@ Report the top 3 results with:
 2. Rating
 3. Price range
 4. Neighborhood/location
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "sushi restaurants" in "Seattle, WA" was performed on Yelp
+2. Results were filtered to 4+ stars (or an attempt was made)
+3. At least 3 restaurant results were reported
+4. Each result includes name, rating, price range, and neighborhood/location
+
+The task FAILS if:
+- Fewer than 3 restaurants were reported
+- Results are not sushi restaurants in Seattle
+- Restaurant name or rating is missing from results""",
+    verification_hint="Look for at least 3 sushi restaurants in Seattle, WA from Yelp with name, rating (4+ stars), price range, and neighborhood. Exact restaurants will vary."
 ))
 
 
@@ -432,7 +602,16 @@ register_scenario(Scenario(
 Search for "best programming languages 2024".
 
 Report the first 3 search results with their titles.
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A Google search for "best programming languages 2024" was performed
+2. At least 3 search result titles were reported
+
+The task FAILS if:
+- The search was not performed
+- Fewer than 3 result titles were reported""",
+    verification_hint="Look for 3 Google search result titles related to 'best programming languages 2024'. The exact results will vary but should be relevant to the query."
 ))
 
 register_scenario(Scenario(
@@ -447,7 +626,18 @@ Search for "Artificial Intelligence".
 Report:
 1. The first paragraph of the article
 2. The number of sections in the table of contents
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The agent navigated to Wikipedia and searched for "Artificial Intelligence"
+2. The first paragraph of the article was reported
+3. The number of table of contents sections was reported
+
+The task FAILS if:
+- The article was not found
+- The first paragraph content is missing
+- The table of contents section count is missing""",
+    verification_hint="Look for the first paragraph of the Wikipedia 'Artificial Intelligence' article and a count of table of contents sections. Both data points must be present."
 ))
 
 register_scenario(Scenario(
@@ -461,7 +651,300 @@ Report the top 5 stories on the front page with:
 1. Title
 2. Points/score
 3. Number of comments
-"""
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The agent navigated to Hacker News front page
+2. At least 5 stories were reported
+3. Each story includes title, points/score, and number of comments
+
+The task FAILS if:
+- Fewer than 5 stories were reported
+- Story titles are missing
+- Points or comment counts are missing from most stories""",
+    verification_hint="Look for 5 Hacker News front page stories with title, points/score, and comment count. The exact stories will vary but all three data points should be present for each."
+))
+
+
+# -----------------------------------------------------------------------------
+# Multi-Step Form / Modal Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="costco_add_to_cart",
+    description="Search for a product on Costco and add to cart",
+    start_url="https://www.costco.com",
+    tags=["e-commerce", "cart", "warehouse"],
+    goal="""Go to costco.com.
+
+1. Search for "Kirkland Signature Olive Oil" using the search bar.
+2. From the search results, click on the first relevant product.
+3. On the product page, click "Add to Cart".
+4. If a modal or popup appears (e.g., warranty offer, membership prompt), dismiss it or click "No Thanks" / "Continue".
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart icon in the header shows an updated item count
+2. A confirmation modal says "Added to Cart" or similar
+3. The button changes to "Added" or shows a checkmark
+4. You are redirected to the cart page showing the item
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Kirkland Signature Olive Oil" was performed on Costco
+2. A relevant olive oil product was selected
+3. The item was added to cart
+4. A cart success indicator was observed (cart count, confirmation modal, or cart page)
+
+The task FAILS if:
+- No product was found or selected
+- The add-to-cart action was not performed
+- No cart confirmation was observed""",
+    verification_hint="Look for cart contents showing a Kirkland Signature Olive Oil product with price. The agent should have dismissed any warranty/membership popups and observed a cart confirmation."
+))
+
+register_scenario(Scenario(
+    name="bestbuy_add_to_cart",
+    description="Search for electronics on Best Buy and add to cart",
+    start_url="https://www.bestbuy.com",
+    tags=["e-commerce", "electronics", "cart"],
+    goal="""Go to bestbuy.com.
+
+1. Search for "USB-C cable" using the search bar.
+2. From the search results, click on the first product that is available for shipping (not "Sold Out").
+3. On the product page, click "Add to Cart".
+4. If a popup appears offering accessories or protection plans, dismiss it.
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A green "Added to Cart" confirmation appears
+2. The cart icon in the header updates with a count
+3. A slide-out cart panel shows the item
+4. A "Go to Cart" button appears
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "USB-C cable" was performed on Best Buy
+2. An available (not sold out) product was selected
+3. The item was added to cart
+4. A cart success indicator was observed (green confirmation, cart count, slide-out panel, or Go to Cart button)
+
+The task FAILS if:
+- No product was found or selected
+- A sold-out product was selected
+- No cart confirmation was observed""",
+    verification_hint="Look for cart contents showing a USB-C cable product from Best Buy with price. The agent should have observed an 'Added to Cart' confirmation or cart icon update."
+))
+
+register_scenario(Scenario(
+    name="walgreens_add_to_cart",
+    description="Find a product on Walgreens and add to cart",
+    start_url="https://www.walgreens.com",
+    tags=["e-commerce", "pharmacy", "cart"],
+    goal="""Go to walgreens.com.
+
+1. Search for "Advil 50 count" using the search bar.
+2. From the results, click on the first Advil Ibuprofen product (tablets or caplets).
+3. On the product page, click "Add to Cart" or the cart/bag button.
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. The cart icon shows an updated count
+2. A "View Cart" or confirmation message appears
+3. The product shows "In Cart" status
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Advil 50 count" was performed on Walgreens
+2. An Advil Ibuprofen product (tablets or caplets) was selected
+3. The item was added to cart
+4. A cart success indicator was observed (cart count, view cart button, or in-cart status)
+
+The task FAILS if:
+- No Advil product was found or selected
+- The add-to-cart action was not performed
+- No cart confirmation was observed""",
+    verification_hint="Look for cart contents showing an Advil Ibuprofen product from Walgreens with price. The agent should have observed a cart icon update, View Cart button, or In Cart status."
+))
+
+
+# -----------------------------------------------------------------------------
+# Quantity / Size Selection Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="nike_add_to_cart",
+    description="Find shoes on Nike, select size, and add to cart",
+    start_url="https://www.nike.com",
+    tags=["e-commerce", "apparel", "cart", "size-selection"],
+    goal="""Go to nike.com.
+
+1. Search for "Air Force 1" using the search bar.
+2. Click on the first Men's shoe result.
+3. On the product page:
+   - Select size "10" (US Men's)
+   - Click "Add to Bag"
+
+IMPORTANT - How to verify success:
+After clicking "Add to Bag", look for ANY of these success indicators:
+1. A slide-out cart panel shows the shoe with size 10
+2. The bag icon in the header shows an item count
+3. A confirmation message appears
+4. A "View Bag" or "Checkout" button becomes visible
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Air Force 1" was performed on Nike
+2. A Men's shoe was selected from results
+3. Size 10 (US Men's) was selected
+4. The item was added to bag
+5. A cart success indicator was observed (slide-out cart, bag icon count, confirmation, or View Bag button)
+
+The task FAILS if:
+- No shoe was found or selected
+- Size 10 was not selected
+- No add-to-bag confirmation was observed""",
+    verification_hint="Look for cart/bag contents showing Nike Air Force 1 Men's shoe in size 10 with price. The agent should have observed a slide-out cart, bag icon update, or View Bag button."
+))
+
+register_scenario(Scenario(
+    name="uniqlo_add_to_cart",
+    description="Find clothing on Uniqlo, select size and color, add to cart",
+    start_url="https://www.uniqlo.com/us/en/",
+    tags=["e-commerce", "apparel", "cart", "size-selection"],
+    goal="""Go to uniqlo.com.
+
+1. Search for "Airism T-Shirt" using the search bar.
+2. Click on the first Men's t-shirt result.
+3. On the product page:
+   - Select color: any available color
+   - Select size: "M" (Medium)
+   - Click "Add to Cart" or "Add to Bag"
+
+IMPORTANT - How to verify success:
+After adding to cart, look for ANY of these success indicators:
+1. A cart confirmation slide-out or modal appears
+2. The cart icon in the header updates with a count
+3. A "View Cart" or "Checkout" button appears
+
+VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Airism T-Shirt" was performed on Uniqlo
+2. A Men's t-shirt was selected from results
+3. A color was selected
+4. Size M (Medium) was selected
+5. The item was added to cart/bag
+6. A cart success indicator was observed (confirmation modal, cart count, or View Cart button)
+
+The task FAILS if:
+- No t-shirt was found or selected
+- Size M was not selected
+- No add-to-cart confirmation was observed""",
+    verification_hint="Look for cart contents showing a Uniqlo Airism T-Shirt in size M with a color and price. The agent should have observed a cart confirmation or cart icon update."
+))
+
+
+# -----------------------------------------------------------------------------
+# Multi-Step Navigation Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="home_depot_store_pickup",
+    description="Find a product on Home Depot and check store pickup availability",
+    start_url="https://www.homedepot.com",
+    tags=["e-commerce", "store-locator", "availability"],
+    goal="""Go to homedepot.com.
+
+1. Search for "Phillips screwdriver set" using the search bar.
+2. Click on the first relevant product from the results.
+3. On the product page, look for store pickup availability.
+4. If prompted, enter ZIP code: 94403 to check local store availability.
+5. Report whether the item is available for pickup, and at which store.
+
+IMPORTANT - How to verify success:
+Look for ANY of these indicators:
+1. A store name appears with "Available" or "In Stock" status
+2. A "Free Pickup" badge is shown
+3. Store pickup details are displayed with a specific store location
+
+VERIFICATION: Report your findings clearly, including the product name, pickup availability status, and store name/location.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "Phillips screwdriver set" was performed on Home Depot
+2. A relevant product was selected from results
+3. Store pickup availability was checked for ZIP 94403
+4. The agent reported whether the item is available for pickup and at which store
+
+The task FAILS if:
+- No product was found or selected
+- Store pickup availability was not checked
+- No store name or availability status was reported""",
+    verification_hint="Look for a Home Depot product page showing store pickup availability for a Phillips screwdriver set near ZIP 94403. The agent should report the store name and availability status (in stock or not)."
+))
+
+register_scenario(Scenario(
+    name="zillow_home_search",
+    description="Search for homes on Zillow with filters",
+    start_url="https://www.zillow.com",
+    tags=["real-estate", "search", "filters"],
+    goal="""Go to zillow.com.
+
+1. Search for homes in "San Mateo, CA" using the search bar.
+2. Apply filters:
+   - For Sale
+   - Price: Max $1,500,000
+   - Bedrooms: 3+
+3. Wait for results to load.
+
+Report the first 3 listings with:
+1. Address
+2. Price
+3. Number of bedrooms and bathrooms
+4. Square footage (if shown)
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for homes in "San Mateo, CA" was performed on Zillow
+2. Filters were applied (For Sale, max $1,500,000, 3+ bedrooms)
+3. At least 3 home listings were reported
+4. Each listing includes address, price, and bedroom/bathroom counts
+
+The task FAILS if:
+- Fewer than 3 listings were reported
+- Listings are not in San Mateo, CA
+- Address or price is missing from most listings""",
+    verification_hint="Look for at least 3 Zillow home listings in San Mateo, CA with address, price (under $1.5M), bedrooms (3+), bathrooms, and optionally square footage. Exact listings will vary."
+))
+
+register_scenario(Scenario(
+    name="linkedin_job_search",
+    description="Search for jobs on LinkedIn",
+    start_url="https://www.linkedin.com/jobs",
+    tags=["jobs", "search", "professional"],
+    goal="""Go to linkedin.com/jobs.
+
+1. Search for "Software Engineer" in the job search field.
+2. Set location to "San Francisco Bay Area".
+3. Apply filter: "Past week" for date posted (if available).
+
+Report the first 3 job listings with:
+1. Job title
+2. Company name
+3. Location
+4. Whether it's Remote, Hybrid, or On-site (if shown)
+
+VERIFICATION: Report your findings clearly, including all requested data points.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A job search for "Software Engineer" was performed on LinkedIn
+2. Location was set to "San Francisco Bay Area"
+3. Date filter "Past week" was applied (or attempted)
+4. At least 3 job listings were reported
+5. Each listing includes job title, company name, and location
+
+The task FAILS if:
+- Fewer than 3 job listings were reported
+- Job title or company name is missing from most listings
+- The search was not for Software Engineer roles""",
+    verification_hint="Look for at least 3 LinkedIn job listings for Software Engineer in the San Francisco Bay Area with job title, company name, location, and optionally remote/hybrid/on-site status. Exact listings will vary."
 ))
 
 

@@ -17,6 +17,7 @@ from browserbase import Browserbase
 from browserbase._exceptions import RateLimitError
 
 from .base_agent import BaseAgent
+from constants import COST_RATES
 
 
 # Patterns that indicate the agent failed even if no exception was thrown
@@ -121,9 +122,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                     if isinstance(latest_action, dict):
                         action_type = list(latest_action.keys())[0] if latest_action else None
                         action_data = latest_action
-            except:
+            except Exception:
                 pass
-            
+
             self.log_step_start(action_type=action_type, action_data=action_data)
             print(f"[Step {self._current_step_index}] START - Action: {action_type or 'N/A'}")
         
@@ -135,9 +136,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                     extracted = agent.history.extracted_content()
                     if extracted:
                         observation = {'extracted_content': extracted[-1] if isinstance(extracted, list) else extracted}
-            except:
+            except Exception:
                 pass
-            
+
             event_dict = self.log_step_end(observation=observation)
             duration_str = f"{event_dict.get('duration_ms', 0):.2f}ms"
             print(f"[Step {self._current_step_index}] END   - Duration: {duration_str}")
@@ -160,11 +161,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
         result = {"success": False, "message": "", "steps": 0, "history": None, "judge_result": None, 
                   "errors_detected": [], "final_extraction": None}
         
-        # Capture stdout/stderr to detect failure patterns
-        captured_output: List[str] = []
-        
         try:
             history = await agent.run(
+                max_steps=30,
                 on_step_start=on_step_start,
                 on_step_end=on_step_end
             )
@@ -265,9 +264,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 event['tokens_input'] = tokens_per_step_input + extra_in
                 event['tokens_output'] = tokens_per_step_output + extra_out
                 
-                # Calculate cost ($5/M in, $15/M out)
-                input_cost = (event['tokens_input'] / 1_000_000) * 5.00
-                output_cost = (event['tokens_output'] / 1_000_000) * 15.00
+                rates = COST_RATES["gpt-4o"]
+                input_cost = (event['tokens_input'] / 1_000_000) * rates["input"]
+                output_cost = (event['tokens_output'] / 1_000_000) * rates["output"]
                 event['cost_usd'] = input_cost + output_cost
                 
                 step_count += 1

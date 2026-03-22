@@ -10,7 +10,6 @@ API Docs: https://www.skyvern.com/docs/api-reference/api-reference/agent/run-tas
 """
 
 import os
-import time
 import asyncio
 import aiohttp
 import requests
@@ -359,33 +358,6 @@ class SkyvernTelemetricAgent(BaseAgent):
             print(f"  🔗 View details: {app_url}")
         print("=" * 60)
     
-    async def submit_task(self, start_url: Optional[str] = None) -> Dict[str, Any]:
-        """Submit a task to Skyvern and return immediately (fire-and-forget)."""
-        if not self._api_key:
-            raise ValueError("SKYVERN_API_KEY not found in environment variables")
-        
-        payload = {"prompt": self.goal, "engine": "skyvern-2.0"}
-        if start_url:
-            payload["url"] = start_url
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.BASE_URL}/run/tasks",
-                headers=self._get_headers(),
-                json=payload
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                self._task_id = data.get("run_id") or data.get("task_id") or data.get("id")
-        
-        task_url = f"https://app.skyvern.com/tasks/{self._task_id}"
-        self.log_artifact("skyvern_task", task_url)
-        
-        print(f"🚀 Task submitted: {self._task_id}")
-        print(f"🔗 Watch at: {task_url}")
-        
-        return {"task_id": self._task_id, "watch_url": task_url, "status": "submitted"}
-    
     async def run(
         self,
         start_url: Optional[str] = None,
@@ -416,7 +388,7 @@ class SkyvernTelemetricAgent(BaseAgent):
         self.print_run_header(start_url)
         
         start_time = datetime.now()
-        result = {"success": False, "message": "", "steps": 0}
+        result = {"success": False, "message": "", "steps": 0, "final_extraction": None}
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -499,6 +471,7 @@ class SkyvernTelemetricAgent(BaseAgent):
                     if run_status.lower() in ["completed", "done", "success", "finished"]:
                         result["success"] = True
                         result["message"] = status_data.get("output") or status_data.get("extracted_information") or "Task completed"
+                        result["final_extraction"] = result["message"]
                         result["steps"] = self._logged_step_count
                         self._capture_skyvern_telemetry(status_data)
                         break
@@ -546,7 +519,3 @@ class SkyvernTelemetricAgent(BaseAgent):
         
         return result
     
-    # Alias for backwards compatibility
-    async def arun(self, start_url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        """Alias for run() for backwards compatibility."""
-        return await self.run(start_url=start_url, **kwargs)

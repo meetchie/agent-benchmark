@@ -78,6 +78,87 @@ export interface ParsedLog {
   filename: string;
 }
 
+export interface LogFileMeta {
+  filename: string;
+  agent: string;
+  isMcp: boolean;
+  scenario: string;
+  promptType: "simple" | "complex" | "unknown";
+  site: string;
+  verdict: "PASS" | "FAIL" | "UNKNOWN";
+  date: Date | null;
+  dateLabel: string;
+  timeLabel: string;
+}
+
+export function parseLogMeta(raw: string, filename: string): LogFileMeta {
+  const telemetryIdx = raw.indexOf("Telemetry Events:");
+  const header = telemetryIdx >= 0 ? raw.slice(0, telemetryIdx) : raw;
+
+  const agent = extractField(header, "Agent") ?? "Unknown";
+  const scenario = extractField(header, "Scenario") ?? "Unknown";
+  const isMcp =
+    agent.toUpperCase().includes("MCP") || filename.includes("_mcp_");
+
+  let promptType: "simple" | "complex" | "unknown" = "unknown";
+  if (scenario.includes("add_to_cart")) promptType = "simple";
+  else if (scenario.includes("complex")) promptType = "complex";
+
+  const sitePart = scenario.split("_")[0];
+  const site = sitePart.charAt(0).toUpperCase() + sitePart.slice(1);
+
+  const judge = extractJudge(header);
+  let verdict: "PASS" | "FAIL" | "UNKNOWN" = "UNKNOWN";
+  if (judge) {
+    verdict = judge.verdict === "PASS" ? "PASS" : "FAIL";
+  } else {
+    const successRaw =
+      extractField(header, "Agent Reported Success") ??
+      extractField(header, "Success") ??
+      "";
+    if (successRaw.toLowerCase() === "true") verdict = "PASS";
+    else if (successRaw.toLowerCase() === "false") verdict = "FAIL";
+  }
+
+  const dateMatch = filename.match(
+    /(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.log/
+  );
+  let date: Date | null = null;
+  let dateLabel = "";
+  let timeLabel = "";
+  if (dateMatch) {
+    const [, year, month, day, hour, minute] = dateMatch;
+    date = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute)
+    );
+    dateLabel = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    timeLabel = date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return {
+    filename,
+    agent,
+    isMcp,
+    scenario,
+    promptType,
+    site,
+    verdict,
+    date,
+    dateLabel,
+    timeLabel,
+  };
+}
+
 // ─── Parser ──────────────────────────────────────────────────────────────────
 
 export function parseLog(raw: string, filename: string = ""): ParsedLog {

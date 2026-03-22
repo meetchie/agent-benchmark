@@ -33,7 +33,7 @@ def save_arena_log(billing: dict, run_id: str) -> str:
         try:
             dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
             timestamp = dt.strftime("%Y%m%d_%H%M%S")
-        except:
+        except (ValueError, AttributeError):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -40,6 +40,7 @@ class StepRecord:
 @dataclass
 class RunState:
     run_id: str
+    user_id: str = ""
     status: str = "running"  # "running" | "complete" | "error"
     steps: list[StepRecord] = field(default_factory=list)
     success: bool = False

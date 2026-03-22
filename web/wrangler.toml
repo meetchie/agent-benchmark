@@ -1,0 +1,9 @@
+name = "rindler-benchmark"
+pages_build_output_dir = "./dist"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment variables for production
+# Set secrets via the Cloudflare dashboard or CLI:
+#   npx wrangler pages secret put CLERK_SECRET_KEY --project-name rindler-benchmark
+#   npx wrangler pages secret put AGENT_CONTAINER_URL --project-name rindler-benchmark
