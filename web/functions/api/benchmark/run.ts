@@ -59,6 +59,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
         "X-User-Id": userId,
+        "X-Internal-Key": context.env.INTERNAL_API_KEY || "",
       },
       body: JSON.stringify({ url: body.url, goal: body.goal }),
       signal: AbortSignal.timeout(5000),
@@ -75,9 +76,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const data = await res.json();
     return Response.json(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
     return Response.json(
-      { error: "Failed to reach container", detail: msg },
+      { error: "Service temporarily unavailable" },
       { status: 502 }
     );
   }

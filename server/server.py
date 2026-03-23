@@ -10,10 +10,12 @@ Endpoints:
 """
 
 import asyncio
+import os
+import time as _time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -22,7 +24,10 @@ from task_generator import fetch_and_generate
 from clerk_auth import verify_clerk_jwt
 
 # In-memory run state store
-_runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev sessions only
+_runs: dict[str, RunState] = {}
+
+# Run eviction settings
+_MAX_STORED_RUNS = 200
 
 # Per-user concurrency limit (max active runs)
 _active_runs: dict[str, int] = {}  # user_id -> count
@@ -31,18 +36,53 @@ _MAX_CONCURRENT_RUNS = 5
 # Admin emails get unlimited runs (bypass concurrency limit)
 ADMIN_EMAILS: set[str] = set()
 
+# Internal API key for edge-to-backend auth
+_INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
+# Rate limiting for task generation
+_task_gen_requests: dict[str, list[float]] = {}  # ip -> list of timestamps
+_TASK_GEN_MAX_PER_MINUTE = 5
+
 # Demo mode — returns fake data without calling OpenAI or launching a browser
 # Set DEMO_MODE=true in .env to enable
 def _check_demo_mode() -> bool:
-    import os
     return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
+
+def _evict_stale_runs():
+    """Remove completed/errored runs when store exceeds limit."""
+    if len(_runs) < _MAX_STORED_RUNS:
+        return
+    to_delete = [rid for rid, s in _runs.items() if s.status in ("complete", "error")]
+    for rid in to_delete:
+        _runs.pop(rid, None)
+
+
+def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key")) -> None:
+    """Verify the request comes from our Cloudflare edge functions."""
+    if not _INTERNAL_API_KEY:
+        return  # Not configured (local dev) — skip check
+    if x_internal_key != _INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _check_task_gen_rate(request: Request):
+    """Rate limit task generation by IP."""
+    ip = request.client.host if request.client else "unknown"
+    now = _time.time()
+    timestamps = _task_gen_requests.get(ip, [])
+    # Remove old entries
+    timestamps = [t for t in timestamps if now - t < 60]
+    if len(timestamps) >= _TASK_GEN_MAX_PER_MINUTE:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a minute.")
+    timestamps.append(now)
+    _task_gen_requests[ip] = timestamps
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load .env files
     from dotenv import load_dotenv
-    import os
     load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
     yield
@@ -50,9 +90,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
 
+_ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5180,http://localhost:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Local dev only
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -150,7 +195,7 @@ async def _demo_run(state: RunState, url: str, goal: str):
 
 
 @app.post("/benchmark/start")
-async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
+async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
     user_id = user["user_id"]
     user_email = user.get("email", "").lower()
     is_admin = user_email in ADMIN_EMAILS
@@ -160,6 +205,8 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
         raise HTTPException(status_code=429, detail={
             "error": "Too many runs in progress. Wait for one to finish.",
         })
+
+    _evict_stale_runs()
 
     _active_runs[user_id] = active + 1
     run_id = str(uuid.uuid4())
@@ -181,15 +228,16 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
 
 
 @app.get("/benchmark/status/{run_id}")
-async def get_status(run_id: str):
+async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     state = _runs.get(run_id)
     if not state:
-        raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        raise HTTPException(status_code=404, detail="Not found")
     return state.to_response()
 
 
 @app.post("/benchmark/generate-tasks")
-async def generate_tasks_endpoint(req: GenerateTasksRequest):
+async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _: None = Depends(verify_internal_key)):
+    _check_task_gen_rate(request)
     if _check_demo_mode():
         import asyncio as _aio
         await _aio.sleep(1.5)  # Simulate generation delay
@@ -205,6 +253,6 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest):
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail={"error": "Could not access site", "detail": str(e)})
+        raise HTTPException(status_code=502, detail="Could not access site")
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": "Task generation failed", "detail": str(e)[:200]})
+        raise HTTPException(status_code=500, detail="Task generation failed")
