@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
+import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
 import { RunningView } from "./components/RunningView";
 
@@ -13,7 +14,6 @@ const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
   const { isSignedIn, getToken } = useAuth();
-  const clerk = useClerk();
 
   const [view, setView] = useState<View>("setup");
 
@@ -155,12 +155,7 @@ export default function App() {
   const doRun = useCallback(async () => {
     if (!selectedTask) return;
 
-    let token: string | null = null;
-    if (!isSignedIn) {
-      clerk.openSignIn();
-      return;
-    }
-    token = await getToken();
+    const token = await getToken();
     if (!token) {
       setErrorMsg("Could not get auth token. Please sign in again.");
       return;
@@ -177,16 +172,10 @@ export default function App() {
       const data = await startBenchmark(url, selectedTask.goal, token);
       startPolling(data.run_id);
     } catch (e) {
-      if (e instanceof Error && e.message === "AUTH_EXPIRED") {
-        clerk.openSignIn();
-        setRunStatus("idle");
-        setView("setup");
-        return;
-      }
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [selectedTask, isSignedIn, getToken, clerk, url, startPolling]);
+  }, [selectedTask, getToken, url, startPolling]);
 
   const handleRun = useCallback(async () => {
     if (!canRun || !selectedTask) return;
@@ -209,6 +198,28 @@ export default function App() {
   }, [stopPolling]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
+
+  if (!isSignedIn) {
+    return (
+      <>
+        <SetupView
+          url={url}
+          onUrlChange={setUrl}
+          onUrlSubmit={handleUrlSubmit}
+          tasks={tasks}
+          tasksLoading={tasksLoading}
+          tasksError={tasksError}
+          taskId={taskId}
+          onTaskSelect={(id) => setTaskId(id)}
+          runStatus={runStatus}
+          canRun={false}
+          onRun={() => {}}
+          onRegenerateTasks={handleRegenerateTasks}
+        />
+        <SignInModal />
+      </>
+    );
+  }
 
   if (view === "running") {
     return (
