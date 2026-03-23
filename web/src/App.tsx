@@ -244,6 +244,7 @@ export default function App() {
         canRun={canRun}
         onRun={handleRun}
         onRegenerateTasks={handleRegenerateTasks}
+        onSignInClick={() => setShowSignIn(true)}
       />
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
     </>

@@ -1,6 +1,10 @@
-import { SignedIn, UserButton } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 
-export function BenchmarkHeader() {
+interface BenchmarkHeaderProps {
+  onSignInClick?: () => void;
+}
+
+export function BenchmarkHeader({ onSignInClick }: BenchmarkHeaderProps) {
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -15,6 +19,16 @@ export function BenchmarkHeader() {
       <SignedIn>
         <UserButton afterSignOutUrl="/" />
       </SignedIn>
+      <SignedOut>
+        {onSignInClick && (
+          <button
+            onClick={onSignInClick}
+            className="text-sm font-medium text-[#3c49ad] border border-[#3c49ad] px-4 py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors"
+          >
+            Sign in
+          </button>
+        )}
+      </SignedOut>
     </header>
   );
 }

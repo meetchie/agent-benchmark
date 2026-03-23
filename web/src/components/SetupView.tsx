@@ -19,6 +19,7 @@ interface SetupViewProps {
   canRun: boolean;
   onRun: () => void;
   onRegenerateTasks: () => void;
+  onSignInClick?: () => void;
 }
 
 export function SetupView({
@@ -34,6 +35,7 @@ export function SetupView({
   canRun,
   onRun,
   onRegenerateTasks,
+  onSignInClick,
 }: SetupViewProps) {
   const hasShifted = useRef(false);
   if (tasks.length > 0 || tasksLoading) {
@@ -52,7 +54,7 @@ export function SetupView({
 
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
-      <BenchmarkHeader />
+      <BenchmarkHeader onSignInClick={onSignInClick} />
 
       <div
         className="flex-1 flex flex-col items-center px-6 transition-all duration-500 ease-in-out relative"
