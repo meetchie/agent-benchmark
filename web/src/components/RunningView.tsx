@@ -12,7 +12,7 @@ function formatCost(inputTokens: number, outputTokens: number): string {
   return "$" + cost.toFixed(2);
 }
 
-function LiveStats({ steps, isRunning }: { steps: StepRecord[]; isRunning: boolean }) {
+function LiveStats({ steps, isRunning, finalMs }: { steps: StepRecord[]; isRunning: boolean; finalMs?: number }) {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -30,6 +30,9 @@ function LiveStats({ steps, isRunning }: { steps: StepRecord[]; isRunning: boole
     };
   }, [isRunning]);
 
+  // Use backend time when available, otherwise live counter
+  const displayMs = finalMs ?? elapsed;
+
   // Estimate tokens from steps (rough: ~3000 tokens per step for GPT-4o)
   const estimatedTokens = steps.length * 3000;
   const estimatedCost = formatCost(estimatedTokens * 0.8, estimatedTokens * 0.2);
@@ -39,7 +42,7 @@ function LiveStats({ steps, isRunning }: { steps: StepRecord[]; isRunning: boole
       {/* Time elapsed */}
       <div className="border-2 border-slate-200 bg-white p-4">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time Elapsed</p>
-        <p className="text-2xl font-bold text-slate-900 font-mono">{formatTimer(elapsed)}</p>
+        <p className="text-2xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</p>
       </div>
 
       {/* Steps completed */}
@@ -122,7 +125,7 @@ export function RunningView({
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
-        <LiveStats steps={steps} isRunning={isRunning} />
+        <LiveStats steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
       </div>
 
       {/* View Results button */}
