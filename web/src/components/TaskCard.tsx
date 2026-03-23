@@ -15,7 +15,7 @@ export function TaskCard({ task, selected, onSelect, disabled }: TaskCardProps) 
       className={`w-full text-left rounded-none border-2 p-4 transition-all
         ${
           selected
-            ? "border-[#3c49ad] bg-[#f0f4ff]"
+            ? "border-[#3c49ad] bg-white"
             : "border-slate-200 bg-white hover:border-[#3c49ad]/50"
         }
         ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
