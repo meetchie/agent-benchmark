@@ -190,7 +190,7 @@ export default function App() {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [selectedTask, getToken, url, startPolling]);
+  }, [selectedTask, isSignedIn, getToken, url, startPolling]);
 
   const handleRun = useCallback(async () => {
     if (!canRun || !selectedTask) return;
@@ -216,6 +216,13 @@ export default function App() {
 
   const [showSignIn, setShowSignIn] = useState(false);
 
+  // Close modal when user signs in
+  useEffect(() => {
+    if (isSignedIn && showSignIn) {
+      setShowSignIn(false);
+    }
+  }, [isSignedIn, showSignIn]);
+
   // Handle SSO callback (Google OAuth redirect)
   if (window.location.pathname === "/sso-callback") {
     return <AuthenticateWithRedirectCallback />;
@@ -236,13 +243,6 @@ export default function App() {
       />
     );
   }
-
-  // Close modal when user signs in
-  useEffect(() => {
-    if (isSignedIn && showSignIn) {
-      setShowSignIn(false);
-    }
-  }, [isSignedIn, showSignIn]);
 
   return (
     <>
