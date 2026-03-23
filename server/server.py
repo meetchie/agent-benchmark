@@ -28,6 +28,9 @@ _runs: dict[str, RunState] = {}  # No eviction — intended for short-lived dev 
 _active_runs: dict[str, int] = {}  # user_id -> count
 _MAX_CONCURRENT_RUNS = 5
 
+# Admin emails get unlimited runs (bypass concurrency limit)
+ADMIN_EMAILS: set[str] = set()
+
 # Demo mode — returns fake data without calling OpenAI or launching a browser
 # Set DEMO_MODE=true in .env to enable
 def _check_demo_mode() -> bool:
@@ -149,9 +152,11 @@ async def _demo_run(state: RunState, url: str, goal: str):
 @app.post("/benchmark/start")
 async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user)):
     user_id = user["user_id"]
+    user_email = user.get("email", "").lower()
+    is_admin = user_email in ADMIN_EMAILS
 
     active = _active_runs.get(user_id, 0)
-    if active >= _MAX_CONCURRENT_RUNS:
+    if active >= _MAX_CONCURRENT_RUNS and not is_admin:
         raise HTTPException(status_code=429, detail={
             "error": "Too many runs in progress. Wait for one to finish.",
         })
