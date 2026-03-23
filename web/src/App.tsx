@@ -35,10 +35,20 @@ export default function App() {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [analyzingStats, setAnalyzingStats] = useState<{
+    total_ms: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  } | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
+  const analyzingStatsRef = useRef(analyzingStats);
+  const stepsRef = useRef(steps);
+  useEffect(() => { analyzingStatsRef.current = analyzingStats; }, [analyzingStats]);
+  useEffect(() => { stepsRef.current = steps; }, [steps]);
   const lastGeneratedUrlRef = useRef(
     (() => { try { return JSON.parse(sessionStorage.getItem("bench_tasks") || "[]").length > 0 ? sessionStorage.getItem("bench_url") || "" : ""; } catch { return ""; } })()
   );
@@ -113,8 +123,19 @@ export default function App() {
 
         if (pollCountRef.current > MAX_POLLS) {
           stopPolling();
-          setRunStatus("error");
-          setErrorMsg("Timed out after 3 minutes.");
+          setRunStatus("complete");
+          const currentStats = analyzingStatsRef.current;
+          const currentSteps = stepsRef.current;
+          setSummary({
+            success: false,
+            summary: "The agent ran out of time before completing the task.",
+            result_state: "too_slow",
+            total_ms: currentStats?.total_ms ?? currentSteps.reduce((sum, s) => sum + s.elapsed_ms, 0),
+            input_tokens: currentStats?.input_tokens ?? 0,
+            output_tokens: currentStats?.output_tokens ?? 0,
+            total_tokens: currentStats?.total_tokens ?? 0,
+            phases: [],
+          });
           return;
         }
 
@@ -135,16 +156,29 @@ export default function App() {
             setScreenshot(latest.screenshot_b64);
           }
 
+          if (data.status === "analyzing") {
+            setRunStatus("analyzing");
+            setAnalyzingStats({
+              total_ms: data.total_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              total_tokens: data.total_tokens,
+            });
+            // Don't stop polling — wait for "complete"
+          }
+
           if (data.status === "complete") {
             stopPolling();
             setRunStatus("complete");
             setSummary({
               success: data.success,
               summary: data.summary,
+              result_state: data.result_state,
               total_ms: data.total_ms,
               input_tokens: data.input_tokens,
               output_tokens: data.output_tokens,
               total_tokens: data.total_tokens,
+              phases: data.phases ?? [],
             });
           }
 
@@ -181,6 +215,7 @@ export default function App() {
     setScreenshot(null);
     setSummary(null);
     setErrorMsg(null);
+    setAnalyzingStats(null);
     setView("running");
 
     try {
@@ -209,6 +244,7 @@ export default function App() {
     setScreenshot(null);
     setSummary(null);
     setErrorMsg(null);
+    setAnalyzingStats(null);
     setView("setup");
   }, [stopPolling]);
 
@@ -234,6 +270,8 @@ export default function App() {
         url={url}
         taskLabel={selectedTask?.label ?? ""}
         isRunning={runStatus === "running"}
+        isAnalyzing={runStatus === "analyzing"}
+        analyzingStats={analyzingStats}
         steps={steps}
         screenshot={screenshot}
         summary={summary}
