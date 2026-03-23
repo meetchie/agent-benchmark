@@ -65,9 +65,9 @@ export function ResultsOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[#3c49ad]/15 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-[680px] max-h-[90vh] overflow-y-auto border-2 border-slate-200 bg-white p-8 m-4 shadow-2xl">
+      <div className="relative w-full max-w-[520px] max-h-[90vh] overflow-y-auto border-2 border-slate-200 bg-white p-8 m-4 shadow-2xl">
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
