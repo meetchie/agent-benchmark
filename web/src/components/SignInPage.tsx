@@ -179,7 +179,7 @@ function SignInForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full mt-2 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
@@ -289,7 +289,7 @@ function SignUpForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a] disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full mt-2 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#2f3a8a] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Creating account..." : "Sign up"}
       </button>
