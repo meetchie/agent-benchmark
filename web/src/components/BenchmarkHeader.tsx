@@ -36,7 +36,7 @@ export function BenchmarkHeader({ onSignInClick }: BenchmarkHeaderProps) {
           rel="noopener noreferrer"
           className="text-sm font-medium text-slate-900 border-2 border-slate-900 px-5 py-1.5 hover:bg-slate-900 hover:text-white transition-colors"
         >
-          Main Site
+          Learn More
         </a>
       </div>
     </header>
