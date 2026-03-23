@@ -237,6 +237,15 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
         except asyncio.TimeoutError:
             timed_out = True
             logging.info("Agent timed out after %ds", _AGENT_TIMEOUT)
+            # Try to extract token usage from the agent even on timeout
+            try:
+                if hasattr(agent, 'history') and agent.history:
+                    usage = agent.history.usage
+                    state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
+                    state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
+                    state.total_tokens = getattr(usage, 'total_tokens', 0)
+            except Exception:
+                pass
 
         # --- Agent finished or timed out — always run the judge ---
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)

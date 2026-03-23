@@ -80,7 +80,7 @@ export function PhaseList({ phases, steps, isLastPhaseIncomplete }: PhaseListPro
                 </span>
                 <div className="flex items-center gap-3">
                   <span className={`font-mono text-xs ${timeClass}`}>
-                    {formatTimer(phase.total_ms)}{isIncomplete ? " ..." : ""}
+                    {formatTimer(phase.total_ms)}{isIncomplete ? " +" : ""}
                   </span>
                   <span className="text-slate-400 text-[10px]">
                     {isExpanded ? "▲" : "▼"}
