@@ -41,15 +41,18 @@ class StepRecord:
 class RunState:
     run_id: str
     user_id: str = ""
-    status: str = "running"  # "running" | "complete" | "error"
+    status: str = "running"  # "running" | "analyzing" | "complete" | "error"
     steps: list[StepRecord] = field(default_factory=list)
     success: bool = False
     summary: str = ""
+    result_state: str = ""  # "pass" | "fail" | "too_slow" | "error"
     total_ms: int = 0
     message: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    phases: list[dict] = field(default_factory=list)
+    goal: str = ""  # Stored so the judge can access it
 
     def to_response(self) -> dict:
         """Serialize for API response. Only latest step includes screenshot_b64."""
@@ -60,19 +63,34 @@ class RunState:
 
         if self.status == "running":
             return {"status": "running", "steps": steps_data}
+        elif self.status == "analyzing":
+            return {
+                "status": "analyzing",
+                "steps": steps_data,
+                "total_ms": self.total_ms,
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "total_tokens": self.total_tokens,
+            }
         elif self.status == "complete":
             return {
                 "status": "complete",
                 "steps": steps_data,
                 "success": self.success,
                 "summary": self.summary,
+                "result_state": self.result_state,
                 "total_ms": self.total_ms,
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "total_tokens": self.total_tokens,
+                "phases": self.phases,
             }
         else:
-            return {"status": "error", "message": self.message}
+            return {
+                "status": "error",
+                "message": self.message,
+                "steps": steps_data,
+            }
 
 
 def _format_action(agent) -> str:
@@ -199,42 +217,8 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
             on_step_end=on_step_end,
         )
 
+        # --- After agent.run() completes ---
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
-
-        # Determine success from agent's self-report at run end
-        success = False
-        summary = ""
-        try:
-            # Try is_successful() first (available in some browser_use versions)
-            if hasattr(history, 'is_successful') and callable(history.is_successful):
-                success = bool(history.is_successful())
-            else:
-                # Fall back: inspect the done action's success field
-                actions = history.model_actions() if hasattr(history, 'model_actions') else []
-                for action in reversed(actions):
-                    if isinstance(action, dict) and 'done' in action:
-                        done_data = action['done']
-                        if isinstance(done_data, dict):
-                            success = bool(done_data.get('success', False))
-                        break
-                    elif hasattr(action, 'done') and action.done is not None:
-                        done_action = action.done
-                        success = bool(getattr(done_action, 'success', False))
-                        break
-
-            # Get summary from final result
-            if hasattr(history, 'final_result') and callable(history.final_result):
-                result = history.final_result()
-                if result:
-                    summary = str(result)[:300]
-            elif hasattr(history, 'final_result') and history.final_result:
-                summary = str(history.final_result)[:300]
-
-        except Exception as e:
-            logging.debug(f"Success determination failed: {e}")
-
-        if not summary:
-            summary = "Agent completed the task." if success else "Agent did not complete the task."
 
         # Extract token usage
         try:
@@ -245,11 +229,24 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
         except Exception as e:
             logging.debug(f"Token usage extraction failed: {e}")
 
-        state.status = "complete"
-        state.success = success
-        state.summary = summary
         state.total_ms = total_ms
+        state.status = "analyzing"
+
+        # Call GPT-4o judge
+        from run_judge import judge_run
+        steps_for_judge = [
+            {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+            for s in state.steps
+        ]
+        judgment = judge_run(state.goal, steps_for_judge)
+
+        state.success = judgment["success"]
+        state.summary = judgment["summary"]
+        state.phases = judgment["phases"]
+        state.result_state = "pass" if judgment["success"] else "fail"
+        state.status = "complete"
 
     except Exception as e:
         state.status = "error"
         state.message = str(e)[:200]
+        state.result_state = "error"
