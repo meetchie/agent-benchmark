@@ -3,25 +3,31 @@ import { useSignIn, useSignUp } from "@clerk/clerk-react";
 
 type AuthView = "signin" | "signup";
 
-export function SignInModal() {
+interface SignInModalProps {
+  onClose?: () => void;
+}
+
+export function SignInModal({ onClose }: SignInModalProps) {
   const [authView, setAuthView] = useState<AuthView>("signin");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c49ad]/30 backdrop-blur-md">
       <div className="w-full max-w-[420px] mx-4">
-        {/* Header */}
-        <div className="text-center mb-5">
-          <div className="flex items-center justify-center gap-2.5 mb-2">
-            <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />
-            <span className="text-lg font-semibold text-white">Rindler</span>
-          </div>
-          <h1 className="text-xl font-bold text-white">
-            {authView === "signin" ? "Welcome back" : "Create your account"}
-          </h1>
-        </div>
-
-        {/* Card */}
         <div className="bg-white border-2 border-slate-200 p-6">
+          {/* Logo + heading inside card */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center gap-2.5 mb-3">
+              <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />
+              <span className="text-lg font-semibold text-slate-900">Rindler</span>
+            </div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {authView === "signin" ? "Welcome back" : "Create your account"}
+            </h1>
+            {authView === "signup" && (
+              <p className="text-sm text-slate-500 mt-1">Enter your details to get started.</p>
+            )}
+          </div>
+
           {authView === "signin" ? (
             <SignInForm />
           ) : (
@@ -45,6 +51,15 @@ export function SignInModal() {
               </>
             )}
           </p>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 mt-4"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>

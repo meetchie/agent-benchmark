@@ -155,6 +155,11 @@ export default function App() {
   const doRun = useCallback(async () => {
     if (!selectedTask) return;
 
+    if (!isSignedIn) {
+      setShowSignIn(true);
+      return;
+    }
+
     const token = await getToken();
     if (!token) {
       setErrorMsg("Could not get auth token. Please sign in again.");
@@ -199,27 +204,7 @@ export default function App() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  if (!isSignedIn) {
-    return (
-      <>
-        <SetupView
-          url={url}
-          onUrlChange={setUrl}
-          onUrlSubmit={handleUrlSubmit}
-          tasks={tasks}
-          tasksLoading={tasksLoading}
-          tasksError={tasksError}
-          taskId={taskId}
-          onTaskSelect={(id) => setTaskId(id)}
-          runStatus={runStatus}
-          canRun={false}
-          onRun={() => {}}
-          onRegenerateTasks={handleRegenerateTasks}
-        />
-        <SignInModal />
-      </>
-    );
-  }
+  const [showSignIn, setShowSignIn] = useState(false);
 
   if (view === "running") {
     return (
@@ -237,20 +222,30 @@ export default function App() {
     );
   }
 
+  // Close modal when user signs in
+  useEffect(() => {
+    if (isSignedIn && showSignIn) {
+      setShowSignIn(false);
+    }
+  }, [isSignedIn, showSignIn]);
+
   return (
-    <SetupView
-      url={url}
-      onUrlChange={setUrl}
-      onUrlSubmit={handleUrlSubmit}
-      tasks={tasks}
-      tasksLoading={tasksLoading}
-      tasksError={tasksError}
-      taskId={taskId}
-      onTaskSelect={(id) => setTaskId(id)}
-      runStatus={runStatus}
-      canRun={canRun}
-      onRun={handleRun}
-      onRegenerateTasks={handleRegenerateTasks}
-    />
+    <>
+      <SetupView
+        url={url}
+        onUrlChange={setUrl}
+        onUrlSubmit={handleUrlSubmit}
+        tasks={tasks}
+        tasksLoading={tasksLoading}
+        tasksError={tasksError}
+        taskId={taskId}
+        onTaskSelect={(id) => setTaskId(id)}
+        runStatus={runStatus}
+        canRun={canRun}
+        onRun={handleRun}
+        onRegenerateTasks={handleRegenerateTasks}
+      />
+      {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
+    </>
   );
 }
