@@ -17,75 +17,81 @@ import aiohttp
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
-PROMPT_TEMPLATE = """You are a benchmark task generator that creates HARD, realistic tasks to stress-test AI browser automation agents on real websites. Your goal is to expose the real weaknesses of AI agents — the kinds of failures that cost businesses money.
+PROMPT_TEMPLATE = """You generate benchmark tasks that test whether AI browser agents can actually USE a website properly. The tasks should be very specific instructions — pick exact products the site definitely sells, use exact UI interactions the site requires, and tell the agent exactly what to do. The agent should NOT need to think hard about WHAT to do — the task tells it. The challenge is whether it can actually DO it on the website.
 
-Given information about a website, generate exactly 3 benchmark tasks. These tasks should be the kind of thing a real customer does — but that AI agents consistently mess up.
+WHAT YOU'RE TESTING:
+You're testing the WEBSITE'S compatibility with AI agents, not the agent's intelligence. Tasks should expose where websites break agents:
+- Address autocomplete dropdowns that agents can't interact with
+- Size/color pickers that require clicking specific swatches or dropdowns
+- Quantity selectors (plus/minus buttons, or typing into small number fields)
+- Multi-step forms where the next field only appears after filling the previous one
+- Modals and popups that block the page until dismissed
+- "Add to cart" flows that require selecting mandatory options first
+- Customization screens (pizza toppings, burger modifications, product personalization)
+- Store/location selection before browsing is allowed
 
-DESIGN PHILOSOPHY:
-You are testing for Rindler, a company building infrastructure to make the web agent-ready. The benchmark should expose WHY agents fail today:
-- Agents ignore shipping costs and order from multiple stores when one would be cheaper
-- Agents can't handle complex forms with dropdowns, modals, date pickers, and address autocomplete
-- Agents lose context in multi-step workflows (customize → add to cart → continue shopping → add another)
-- Agents don't comparison shop — they grab the first result instead of the best match
-- Agents struggle with conditional UI (options that appear only after selecting something else)
-- Agents can't handle quantity selectors, size/color matrices, or variant pickers properly
-- Agents skip important details like delivery time windows, special instructions, or substitution preferences
+WHAT NOT TO TEST:
+- Do NOT ask the agent to make decisions (like "find the cheapest" or "build a $40 cart")
+- Do NOT ask the agent to compare options or optimize anything
+- Do NOT create vague tasks — be extremely specific about what product to get
+- Do NOT test agent reasoning — test website navigation and interaction
 
 RULES:
-- Tasks must be specific to THIS website — reference actual features, sections, or products visible on the site
-- Each task should have 5-10 concrete steps with SPECIFIC constraints the agent must satisfy
-- Include precise numeric constraints (prices, quantities, sizes, distances) that require the agent to compare and choose — not just grab the first result
-- Include at least one step that requires interacting with a dropdown, modal, date picker, address form, or other complex UI widget
-- Include verification steps that check MULTIPLE criteria (not just "is it in the cart" but "is it the RIGHT item at the RIGHT price in the RIGHT quantity")
-- Do NOT include any steps that require login, payment, or submitting sensitive personal information
-- Use delivery address "1 Times Square, New York, NY 10036" when address is needed
+- Pick SPECIFIC products the site definitely has (based on the site metadata you're given)
+- Name exact items: "Large pepperoni pizza" not "a pizza", "Men's black polo shirt in size M" not "a shirt"
+- Each task should be a clear chain of specific UI interactions
+- Include the exact address "1 Times Square, New York, NY 10036" when delivery address is needed
+- Tell the agent exactly what autocomplete suggestion to pick, what size to select, etc.
+- End each task with verification: tell the agent exactly what to look for (cart badge count, "in cart" text, slide-out cart panel, etc.)
+- Do NOT require login, payment, or sensitive personal info
 - Keep labels short (under 60 characters)
-- Write goals as multi-line step-by-step instructions
-- ALL tasks should be genuinely challenging — no trivial "search and add to cart" tasks
+- Generate 3 tasks with increasing complexity
 
-TASK DIFFICULTY LEVELS (generate one of each):
-1. MEDIUM: Multi-step with constraints (5-7 steps). Requires comparing options, using filters correctly, and making a specific choice based on criteria.
-2. HARD: Complex workflow with state management (7-9 steps). Requires maintaining context across multiple pages, handling complex forms, and satisfying multiple constraints simultaneously.
-3. EXPERT: Multi-item workflow with optimization (8-10 steps). Requires building a cart with multiple items that satisfy overlapping constraints (budget limits, same-store preference, delivery windows, etc.)
+DIFFICULTY LEVELS:
+1. SIMPLE INTERACTION: Search for a specific item, select its options (size/color), add to cart. Tests basic site navigation and UI widgets (3-5 steps).
+2. MULTI-STEP CHAIN: Set address, browse to a section, customize a product (toppings, modifications), add to cart, then add a second specific item. Tests maintaining context across multiple interactions (5-7 steps).
+3. FULL WORKFLOW: Set address, select a store/restaurant, add a specific customized item, go back to menu, add a different item with different customizations, verify both items in cart with correct options. Tests the complete shopping flow with multiple products (7-10 steps).
 
-EXAMPLES of the complexity level expected:
+EXAMPLES:
 
-Example 1 (grocery/delivery aggregator — EXPERT):
-  label: "Build a $30-$40 cart from a single store"
+Example 1 (clothing store — SIMPLE):
+  label: "Add a men's black polo in size M to cart"
   goal: |
-    Set delivery address to 1 Times Square, New York, NY 10036. Select the first autocomplete suggestion and confirm.
-    Browse available stores and select one that offers free delivery or the lowest delivery fee.
-    Add a gallon of whole milk (must be whole, not 2% or skim) to cart.
-    Add a dozen large eggs (not medium, not organic unless it's the only option) to cart.
-    Add a loaf of sliced bread (white or wheat, not specialty/artisan) to cart.
-    Add one bunch of bananas to cart.
-    Check the cart subtotal. If under $30, add one more item from the same store. If over $40, remove the most expensive item and find a cheaper alternative.
-    Verify: all items are from the SAME store, subtotal is between $30-$40, and delivery fee is shown.
+    Go to the Men's section.
+    Search for "polo shirt" or browse to Polo Shirts.
+    Click on the first black polo shirt result.
+    On the product page, select size "M" (Medium).
+    Select color "Black" if not already selected.
+    Click "Add to Cart" or "Add to Bag".
+    VERIFY: Look for a cart icon badge showing "1", or a slide-out cart panel showing the polo shirt in Black, size M.
 
-Example 2 (food delivery — HARD):
-  label: "Order dinner for 4 under $60 with drinks"
+Example 2 (pizza delivery — MULTI-STEP):
+  label: "Order a custom large pizza with 2-liter Coke"
   goal: |
-    Set delivery address to 1 Times Square, New York, NY 10036.
-    Find a restaurant that is currently open, has a rating of 4+ stars, and offers a delivery time under 45 minutes.
-    Order an entree that serves 2 or more people (family size, sharing platter, or equivalent).
-    Add a second, different entree suitable for someone who doesn't eat pork (check description/ingredients).
-    Add 4 drinks — at least 2 different types (e.g., 2 sodas and 2 waters, not 4 of the same).
-    Check if there are any available promotions, coupons, or deals and apply the best one.
-    Verify: the order total (before tip) is under $60, there are at least 2 entrees and 4 drinks, delivery time is shown as under 45 minutes.
+    Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete dropdown and select the first suggestion.
+    Navigate to the Menu section.
+    Select "Build Your Own" or "Create Your Own" pizza.
+    Choose size: Large. Choose crust: Hand Tossed (or default if not available).
+    Add toppings: Pepperoni and Mushrooms. Do NOT add other toppings.
+    Click "Add to Order" or "Add to Cart".
+    Go back to the menu. Find "Drinks" or "Beverages" section.
+    Add a 2-Liter Coca-Cola (regular, not diet or zero).
+    VERIFY: Cart should show 2 items — one custom large pizza with pepperoni and mushrooms, and one 2-Liter Coca-Cola.
 
-Example 3 (e-commerce — HARD):
-  label: "Find a gift set under $50 with gift wrapping"
+Example 3 (grocery — FULL WORKFLOW):
+  label: "Add 6 Granny Smith apples and whole milk"
   goal: |
-    Search for "gift set" or browse the gifts/holiday section.
-    Filter results to show only items priced between $25 and $50.
-    Sort by customer rating (highest first) or best sellers.
-    Select an item that has at least 4-star reviews and is in stock for delivery (not pickup-only or backordered).
-    Choose a specific variant if applicable (color, size, scent — pick the most popular or first available option).
-    If the site offers gift wrapping or a gift message option, enable it and enter the message "Happy Birthday!".
-    Add to cart and verify: the item is in cart, price is between $25-$50, and gift wrapping (if available) is applied.
-    Check estimated delivery date — report whether it arrives within 5 business days.
+    Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete and select the first suggestion.
+    Once stores load, select the first available grocery store.
+    Search for "Granny Smith Apples".
+    Find loose individual Granny Smith apples (not a pre-bagged item). Set quantity to 6 (or if sold by weight, approximately 3 lbs).
+    Add to cart.
+    Search for "Whole Milk".
+    Find a gallon of Whole milk — must say "Whole" (not 2%, not Skim, not Organic unless only option).
+    Add 1 gallon to cart.
+    VERIFY: Go to cart. Confirm it shows Granny Smith Apples (qty 6 or ~3 lbs) AND Whole Milk (1 gallon). Cart should show 2 distinct products.
 
-IMPORTANT: This benchmark is ONLY for commerce/transactional websites — e-commerce stores, food delivery, grocery delivery, restaurant ordering, travel booking, ticket purchasing, etc. If the website is NOT a commerce site (e.g., a search engine, social media, news site, productivity tool, email, calendar, wiki, documentation), respond with:
+IMPORTANT: This benchmark is ONLY for commerce/transactional websites. If the website is NOT a commerce site (search engine, social media, news, productivity tool, etc.), respond with:
 {{"error": "This website is not a commerce or transactional site. The benchmark is designed for e-commerce, food delivery, grocery, and similar shopping/ordering websites."}}
 
 If the website IS a commerce site, respond with a JSON object with a "tasks" key containing an array of 3 objects, each with "label" (string) and "goal" (string) fields. No markdown, no explanation.
