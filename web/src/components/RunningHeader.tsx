@@ -50,7 +50,7 @@ export function RunningHeader({
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2.5 min-w-0">
-        <a href="https://rindlerapp.com" className="flex items-center gap-2.5 shrink-0">
+        <a href="https://benchmark.rindler.ai" className="flex items-center gap-2.5 shrink-0">
           <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />
           <span className="text-lg font-semibold text-slate-900">Rindler</span>
         </a>
