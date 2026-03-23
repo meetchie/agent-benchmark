@@ -111,7 +111,9 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
     try:
         claims = verify_clerk_jwt(token)
         return {"user_id": claims["sub"]}
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"AUTH FAILED: {type(e).__name__}: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -179,19 +181,32 @@ async def _demo_run(state: RunState, url: str, goal: str):
 
     total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
 
-    # Randomly succeed or fail for demo purposes
     success = random.random() > 0.3  # 70% success rate
-    state.status = "complete"
-    state.success = success
+    state.status = "analyzing"
     state.total_ms = total_ms
     state.input_tokens = random.randint(8000, 25000)
     state.output_tokens = random.randint(500, 3000)
     state.total_tokens = state.input_tokens + state.output_tokens
 
+    # Simulate GPT-4o analysis delay
+    await _aio.sleep(2.0)
+
+    state.phases = [
+        {"name": "Set delivery address", "steps": [1, 2, 3, 4], "total_ms": sum(s.elapsed_ms for s in state.steps[0:4]), "failed": False, "slow": False},
+        {"name": "Browse and select product", "steps": [5, 6, 7, 8], "total_ms": sum(s.elapsed_ms for s in state.steps[4:8]), "failed": False, "slow": True},
+        {"name": "Configure and add to cart", "steps": [9, 10, 11], "total_ms": sum(s.elapsed_ms for s in state.steps[8:11]), "failed": not success, "slow": False},
+        {"name": "Verify cart contents", "steps": [12, 13], "total_ms": sum(s.elapsed_ms for s in state.steps[11:13]), "failed": False, "slow": False},
+    ]
+
     if success:
         state.summary = f"Successfully completed the task on {domain}. All items added to cart within budget constraints."
+        state.result_state = "pass"
     else:
         state.summary = f"Agent got stuck trying to interact with the variant picker on {domain}. Could not select the correct size from the dropdown."
+        state.result_state = "fail"
+
+    state.success = success
+    state.status = "complete"
 
 
 @app.post("/benchmark/start")
@@ -210,7 +225,7 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
 
     _active_runs[user_id] = active + 1
     run_id = str(uuid.uuid4())
-    state = RunState(run_id=run_id, user_id=user_id)
+    state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
     _runs[run_id] = state
 
     async def _run_and_decrement(state, url, goal, uid):
@@ -253,6 +268,8 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Could not access site")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=502, detail=f"Could not access site: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Task generation failed")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Task generation failed: {e}")
