@@ -5,6 +5,7 @@ Manages in-memory run state, captures screenshots after each agent action,
 and provides step descriptions for the benchmark UI.
 """
 
+import asyncio
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -200,6 +201,9 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
             )
         )
 
+    _AGENT_TIMEOUT = 180  # 3 minutes
+
+    timed_out = False
     try:
         llm = get_llm_by_name("openai_gpt-4o")
 
@@ -212,41 +216,76 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
             # No Browserbase keys → uses local Playwright browser
         )
 
-        history = await agent.run(
-            on_step_start=on_step_start,
-            on_step_end=on_step_end,
-        )
-
-        # --- After agent.run() completes ---
-        total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
-
-        # Extract token usage
         try:
-            usage = history.usage
-            state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
-            state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
-            state.total_tokens = getattr(usage, 'total_tokens', 0)
-        except Exception as e:
-            logging.debug(f"Token usage extraction failed: {e}")
+            history = await asyncio.wait_for(
+                agent.run(
+                    on_step_start=on_step_start,
+                    on_step_end=on_step_end,
+                ),
+                timeout=_AGENT_TIMEOUT,
+            )
 
+            # Extract token usage from completed run
+            try:
+                usage = history.usage
+                state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
+                state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
+                state.total_tokens = getattr(usage, 'total_tokens', 0)
+            except Exception as e:
+                logging.debug(f"Token usage extraction failed: {e}")
+
+        except asyncio.TimeoutError:
+            timed_out = True
+            logging.info("Agent timed out after %ds", _AGENT_TIMEOUT)
+
+        # --- Agent finished or timed out — always run the judge ---
+        total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
         state.total_ms = total_ms
         state.status = "analyzing"
 
-        # Call GPT-4o judge
+        # Call GPT-4o judge on whatever steps we have
         from run_judge import judge_run
         steps_for_judge = [
             {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
             for s in state.steps
         ]
-        judgment = judge_run(state.goal, steps_for_judge)
+        # Pass result_state hint so judge knows whether agent timed out
+        rs_hint = "too_slow" if timed_out else "unknown"
+        judgment = judge_run(state.goal, steps_for_judge, result_state=rs_hint)
 
         state.success = judgment["success"]
         state.summary = judgment["summary"]
         state.phases = judgment["phases"]
-        state.result_state = "pass" if judgment["success"] else "fail"
+
+        if timed_out:
+            state.result_state = "too_slow"
+            state.summary = judgment["summary"] or "The agent ran out of time before completing the task."
+        else:
+            state.result_state = "pass" if judgment["success"] else "fail"
+
         state.status = "complete"
 
     except Exception as e:
+        # Still try to run judge if we have steps
+        if state.steps:
+            try:
+                state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+                state.status = "analyzing"
+                from run_judge import judge_run
+                steps_for_judge = [
+                    {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+                    for s in state.steps
+                ]
+                judgment = judge_run(state.goal, steps_for_judge)
+                state.success = False
+                state.summary = judgment["summary"]
+                state.phases = judgment["phases"]
+                state.result_state = "error"
+                state.message = str(e)[:200]
+                state.status = "complete"
+                return
+            except Exception:
+                pass
         state.status = "error"
         state.message = str(e)[:200]
         state.result_state = "error"

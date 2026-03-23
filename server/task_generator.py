@@ -14,6 +14,8 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+import ssl
+import certifi
 import aiohttp
 from bs4 import BeautifulSoup
 from openai import OpenAI
@@ -28,18 +30,24 @@ AGENT FAILURE PATTERNS (design tasks that trigger these):
 5. CUSTOMIZATION FLOWS: Agents fail on pizza topping selectors, burger modification checkboxes, product personalization fields. They skip required customizations or add wrong ones.
 6. ADDRESS/LOCATION FORMS: Agents can't properly interact with address autocomplete (type, wait for dropdown, click suggestion), or they skip the location step entirely and get blocked.
 7. MODAL/POPUP HANDLING: Agents get stuck on cookie banners, newsletter popups, age verification gates, or "choose your store" modals that block the page.
+8. PAGINATION & SCROLL: Agents fail to scroll down to see more products, miss "Load More" buttons, or can't navigate beyond the first page of results.
+9. CONDITIONAL UI ELEMENTS: Agents miss elements that only appear after a prior action (e.g., "Add to Cart" button only visible after selecting a size, delivery time slots only shown after entering address).
+10. FILTER & SORT CONTROLS: Agents struggle with sidebar filters, multi-select checkboxes, price range sliders, and sort dropdowns that require precise interaction sequences.
 
 TASK DESIGN RULES:
 - Each task MUST trigger at least 2-3 of the failure patterns above
-- Pick SPECIFIC products the site sells — name exact items with exact attributes
-- Include TRAPS: situations where the agent must NOT pick the first/obvious result
-  Examples: "Add whole milk (NOT organic, NOT 2%)", "Select the 12-pack (NOT 6-pack)", "Choose Hand Tossed crust (NOT the default Pan)"
+- Pick SPECIFIC products the site actually sells — name exact items with exact attributes (sizes, colors, flavors, pack counts)
+- Create situations where the agent must find a particular variant among similar options. Specify what IS wanted with precise attributes (e.g., "Select the chisel tip markers in the 4-pack with assorted colors" rather than "must NOT pick the fine tip")
 - Require specific QUANTITIES > 1 to test quantity manipulation
 - Require MULTIPLE items added in one session to test cart building flow
 - Include detailed VERIFICATION: agent must go to cart and confirm exact items, quantities, variants, and customizations
 - Use address "1 Times Square, New York, NY 10036" when needed
 - Do NOT require login or payment
 - Keep labels under 60 characters
+- The label and goal text should read naturally, like instructions a human would give. Avoid dramatic language like "CRITICAL", "TRAP", "must NOT", "DO NOT pick". Instead, specify what IS wanted clearly: "Select the 1/2 inch thick mat in purple" rather than "must NOT select the 1/4 inch, must NOT select black". Use positive phrasing to specify the correct choice.
+- Do NOT use words like "trap", "trick", or "gotcha" in labels or goals
+- Only reference products and customizations that actually exist on the site. For grocery/delivery sites, stick to grocery items. For pizza sites, stick to pizza/sides/drinks. For shoe sites, stick to shoes/apparel/accessories. Do not invent product categories the site does not have.
+- Steps should be specific enough that success/failure is unambiguous, but written in plain instructional language
 
 GENERATE 3 TASKS AT THESE LEVELS:
 
@@ -47,36 +55,36 @@ LEVEL 1 — PRODUCT + VARIANT (5-7 steps):
 Search for a specific product. Navigate through results to find the CORRECT variant (not just first result). Select specific size/color/option. Set quantity > 1. Add to cart. Verify correct item with correct options in cart.
 
 LEVEL 2 — CUSTOMIZATION + SECOND ITEM (7-9 steps):
-Set delivery address (with autocomplete interaction). Find a product that requires customization (toppings, modifications, personalization). Complete customization with specific choices. Add to cart. Navigate BACK to shopping. Find and add a completely different product. Verify BOTH items in cart with correct details.
+Set delivery address (with autocomplete interaction). Find a product that requires customization or variant selection. Complete customization with specific choices. Add to cart. Navigate BACK to shopping. Find and add a completely different product. Verify BOTH items in cart with correct details.
 
-LEVEL 3 — FULL WORKFLOW WITH TRAPS (9-12 steps):
-Set delivery address. Navigate to a specific section. Add a product with specific variant, but CRITICAL: must NOT be the first result — must find the specific one (e.g., "the 1lb bag, not the 2lb bag"). Set quantity to a specific number > 1. Add to cart. Go back and search for a second product in a different category. This product requires selecting from a confusing set of options. Add to cart. Go to cart. Verify: correct 2 products, correct quantities, correct variants/options, correct customizations. Report the subtotal.
+LEVEL 3 — FULL WORKFLOW (9-12 steps):
+Set delivery address. Navigate to a specific section. Add a product with a specific variant — the agent must look past similar options to find the right one (e.g., "the 1lb bag" among 1lb, 2lb, and 5lb options). Set quantity to a specific number > 1. Add to cart. Go back and search for a second product in a different category. This product requires selecting from a set of options (size, color, flavor, etc.). Add to cart. Go to cart. Verify: correct 2 products, correct quantities, correct variants/options, correct customizations. Report the subtotal.
 
 EXAMPLES:
 
 Example 1 (Amazon — LEVEL 1):
-  label: "Add 3 specific Expo markers to cart"
+  label: "Add 3 chisel-tip Expo marker packs to cart"
   goal: |
     Search for "Expo dry erase markers".
-    From the results, find the "EXPO Low-Odor Dry Erase Markers, Chisel Tip" — must be the CHISEL tip (not fine tip, not ultra-fine). Must be the 4-pack with assorted colors (not single color packs, not 8-pack, not 12-pack).
+    From the results, find the "EXPO Low-Odor Dry Erase Markers, Chisel Tip" in the 4-pack with assorted colors (not single color packs, not the 8-pack or 12-pack, and not fine tip or ultra-fine).
     Click on the correct product.
     On the product page, set quantity to 3.
     Click "Add to Cart".
-    VERIFY: Go to cart. Confirm it shows EXPO markers, Chisel Tip, 4-pack assorted colors, quantity 3. NOT fine tip, NOT single color.
+    VERIFY: Go to cart. Confirm it shows EXPO markers, Chisel Tip, 4-pack assorted colors, quantity 3.
 
 Example 2 (Domino's — LEVEL 2):
-  label: "Order customized pizza and cinnamon twists"
+  label: "Order a custom pizza and cinnamon twists"
   goal: |
     Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete dropdown, select the first suggestion, and confirm.
     Go to Menu.
     Select "Build Your Own" pizza.
-    Choose: Medium size, Hand Tossed crust (NOT Pan, NOT Thin, NOT Brooklyn).
-    Add exactly 3 toppings: Pepperoni, Green Peppers, and Black Olives. Do NOT add any other toppings.
+    Choose: Medium size, Hand Tossed crust (not Pan, Thin, or Brooklyn style).
+    Add exactly 3 toppings: Pepperoni, Green Peppers, and Black Olives. No other toppings.
     Click "Add to Order".
-    IMPORTANT: Navigate back to the menu (do not go to checkout).
-    Find "Sides" or "Bread" section.
-    Add "Cinnamon Bread Twists" (NOT regular Bread Twists, NOT Parmesan).
-    VERIFY: Go to cart/order summary. Confirm: 1 Medium Hand Tossed pizza with exactly Pepperoni + Green Peppers + Black Olives, AND 1 Cinnamon Bread Twists. Should be exactly 2 items.
+    Navigate back to the menu (do not go to checkout).
+    Find the "Sides" or "Bread" section.
+    Add "Cinnamon Bread Twists" (not regular Bread Twists or Parmesan).
+    VERIFY: Go to cart/order summary. Confirm: 1 Medium Hand Tossed pizza with exactly Pepperoni + Green Peppers + Black Olives, and 1 Cinnamon Bread Twists. Should be exactly 2 items.
 
 Example 3 (Instacart — LEVEL 3):
   label: "Build a 3-item grocery cart from one store"
@@ -84,16 +92,16 @@ Example 3 (Instacart — LEVEL 3):
     Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete and select the first suggestion.
     When stores load, select the first major grocery store available.
     Search for "Granny Smith Apples".
-    CRITICAL: Find LOOSE individual Granny Smith apples — do NOT select a pre-bagged item (bags typically say "3lb bag" or "5ct bag"). Select the individual/per-lb option.
-    Set quantity to 6 individual apples (or if sold by weight, set to approximately 3 lbs).
+    Find loose individual Granny Smith apples (not a pre-bagged item like "3lb bag" or "5ct bag"). Select the individual/per-lb option.
+    Set quantity to 6 individual apples (or approximately 3 lbs if sold by weight).
     Add to cart.
     Search for "Milk".
-    CRITICAL: Find a GALLON of WHOLE milk. It must say "Whole" — do NOT select 2%, Skim, Fat-Free, or Organic (unless organic whole milk is the only whole milk available).
+    Find a gallon of whole milk. It should say "Whole" (not 2%, Skim, Fat-Free, or Organic unless that's the only whole milk option).
     Add 1 gallon to cart.
     Search for "Advil".
-    Find Advil (Ibuprofen) in TABLET or CAPLET form — do NOT select Advil Liqui-Gels or Advil PM. Select the smallest pack size available (e.g., 24ct or 50ct, not 100ct+).
+    Find Advil (Ibuprofen) in tablet or caplet form (not Liqui-Gels or Advil PM). Select the smallest pack size available (e.g., 24ct or 50ct, not 100ct+).
     Add to cart.
-    VERIFY: Go to cart. Confirm exactly 3 distinct products: (1) Granny Smith Apples, qty 6 or ~3lbs, (2) Whole Milk, 1 gallon, (3) Advil tablets/caplets, smallest size. All items should be from the SAME store.
+    VERIFY: Go to cart. Confirm exactly 3 distinct products: (1) Granny Smith Apples, qty 6 or ~3lbs, (2) Whole Milk, 1 gallon, (3) Advil tablets/caplets, smallest size. All from the same store.
 
 IMPORTANT: This benchmark is ONLY for commerce/transactional websites. If the website is NOT a commerce site, respond with:
 {{"error": "This website is not a commerce or transactional site. The benchmark is designed for e-commerce, food delivery, grocery, and similar shopping/ordering websites."}}
@@ -286,11 +294,17 @@ async def fetch_and_generate(url: str) -> list[dict]:
     if not validate_url(url):
         raise ValueError(f"Invalid or disallowed URL: {url}")
 
-    timeout = aiohttp.ClientTimeout(total=5)
-    connector = aiohttp.TCPConnector()
+    timeout = aiohttp.ClientTimeout(total=10)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
     try:
-        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-            async with session.get(url) as response:
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
+            async with session.get(url, allow_redirects=True) as response:
                 if response.status >= 400:
                     raise ConnectionError(
                         f"Failed to fetch the site: HTTP {response.status}"

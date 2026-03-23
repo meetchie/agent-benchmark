@@ -17,6 +17,9 @@ JUDGE_PROMPT = """You are a benchmark judge analyzing an AI browser agent's perf
 TASK THE AGENT WAS GIVEN:
 {goal}
 
+RESULT STATE: {result_state}
+(If "too_slow", the agent hit the timeout and did not finish. If "fail" or "pass", the agent ran to completion.)
+
 STEPS THE AGENT TOOK (with timing):
 {steps_text}
 
@@ -27,7 +30,7 @@ Analyze the agent's performance and respond with a JSON object:
   "summary": "2-3 sentence summary of what happened and why it succeeded or failed",
   "phases": [
     {{
-      "name": "Short descriptive phase name (e.g. 'Input delivery address', 'Search for product')",
+      "name": "Descriptive phase name describing user intent (e.g. 'Find the right yoga mat', 'Set delivery address')",
       "steps": [1, 2, 3],
       "failed": false,
       "slow": false
@@ -36,13 +39,28 @@ Analyze the agent's performance and respond with a JSON object:
 }}
 
 RULES:
-- "success": true only if the agent fully completed the task as described, including verification
-- "summary": Be specific about what went right/wrong. Name the actual products/actions.
-- "phases": Group the steps into 3-6 high-level phases. Each step number must appear in exactly one phase. Steps within a phase must be consecutive.
-- "failed": Set to true on the ONE phase where the task actually went wrong (wrong product selected, couldn't find element, etc.). Only set this if success is false. At most one phase should have failed=true.
-- "slow": Set to true on phases where the agent struggled — took unusually long for the action, made unnecessary retries, or seemed confused. Consider the nature of the task: 60s is reasonable for building a custom pizza but excessive for clicking "add to cart". Can be set on any phase regardless of success.
 
-For very short runs (1-3 steps), 1-2 phases are fine. Do not create phases with 0 steps.
+SUCCESS:
+- "success": true only if the agent fully completed the task as described, including verification.
+- "summary": Be specific about what went right/wrong. Name the actual products/actions.
+
+PHASE GROUPING:
+- Group steps into 3-6 high-level phases. Each step number must appear in exactly one phase. Steps within a phase must be consecutive.
+- Phase names should describe the USER INTENT, not technical actions. Good: "Find the right yoga mat", "Verify cart contents". Bad: "Search and click results", "Step 7-10".
+- For very short runs (1-3 steps), 1-2 phases are fine. Do not create phases with 0 steps.
+
+SLOW FLAG — absolute 45-second threshold:
+- Set "slow" to true on ANY phase where the total step time exceeds 45 seconds, regardless of how other phases performed.
+- Also set "slow" to true on phases where the agent made unnecessary retries or seemed confused, even if the phase completed in under 45 seconds.
+- Every run should have SOME highlighting. If no phase exceeds 45 seconds and the agent did not make obvious mistakes, still flag the single slowest phase as "slow" so the user always sees useful performance data.
+- When in doubt about whether to flag, flag it — it is better to over-highlight than under-highlight.
+
+FAILED FLAG — only on actual mistakes:
+- Only set "failed" on a phase if the result state is "fail" AND you can specifically identify the phase where the agent did the wrong thing (selected wrong product, entered wrong info, clicked wrong element, etc.).
+- Do NOT default to marking the last phase as failed just because it was the last one. Identify the actual phase where the mistake occurred.
+- If the result state is "too_slow" (the agent timed out), do NOT set any phase as "failed". The agent did not do anything wrong — it just ran out of time.
+- At most one phase should have failed=true.
+
 Respond with ONLY the JSON object. No markdown, no explanation."""
 
 
@@ -102,12 +120,15 @@ def validate_phases(phases: list[dict], steps: list[dict]) -> list[dict] | None:
     return enriched
 
 
-def judge_run(goal: str, steps: list[dict]) -> dict:
+def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> dict:
     """Call GPT-4o to judge a benchmark run.
 
     Args:
         goal: The task goal the agent was given.
         steps: List of step dicts with keys: step, description, elapsed_ms.
+        result_state: One of "pass", "fail", "too_slow", "error", or "unknown".
+            Tells the judge whether the agent timed out so it can avoid
+            marking phases as failed on timeout runs.
 
     Returns:
         Dict with keys: success, summary, phases.
@@ -121,7 +142,7 @@ def judge_run(goal: str, steps: list[dict]) -> dict:
         }
 
     steps_text = _format_steps_for_prompt(steps)
-    prompt = JUDGE_PROMPT.format(goal=goal, steps_text=steps_text)
+    prompt = JUDGE_PROMPT.format(goal=goal, steps_text=steps_text, result_state=result_state)
 
     try:
         client = OpenAI()
@@ -141,6 +162,7 @@ def judge_run(goal: str, steps: list[dict]) -> dict:
 
         raw_phases = data.get("phases", [])
         validated = validate_phases(raw_phases, steps)
+        print(f"JUDGE OK: success={success}, phases={len(validated or [])}, summary={summary[:80]}")
 
         return {
             "success": success,
@@ -149,7 +171,8 @@ def judge_run(goal: str, steps: list[dict]) -> dict:
         }
 
     except Exception as e:
-        logging.error(f"judge_run failed: {type(e).__name__}: {e}")
+        import traceback; traceback.print_exc()
+        print(f"JUDGE FAILED: {type(e).__name__}: {e}")
         return {
             "success": False,
             "summary": "Could not analyze the run. The agent may have completed the task, but results are unavailable.",
