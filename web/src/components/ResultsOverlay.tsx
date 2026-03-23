@@ -97,22 +97,15 @@ export function ResultsOverlay({
             <div className="text-center">
               <span className="text-xs text-slate-400 block">Tokens</span>
               <span className="text-base font-bold font-mono text-slate-900">
-                {(() => {
-                  const tokens = stats.total_tokens || steps.length * 3000;
-                  const prefix = stats.total_tokens ? "" : "~";
-                  return tokens >= 1000 ? prefix + (tokens / 1000).toFixed(1) + "k" : prefix + tokens;
-                })()}
+                {stats.total_tokens >= 1000
+                  ? (stats.total_tokens / 1000).toFixed(1) + "k"
+                  : stats.total_tokens || 0}
               </span>
             </div>
             <div className="text-center">
               <span className="text-xs text-slate-400 block">Cost</span>
               <span className="text-base font-bold font-mono text-slate-900">
-                {(() => {
-                  const inp = stats.input_tokens || steps.length * 2400;
-                  const out = stats.output_tokens || steps.length * 600;
-                  const prefix = stats.input_tokens ? "" : "~";
-                  return prefix + formatCost(inp, out);
-                })()}
+                {formatCost(stats.input_tokens, stats.output_tokens)}
               </span>
             </div>
           </div>
