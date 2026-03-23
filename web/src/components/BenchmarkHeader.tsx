@@ -16,19 +16,29 @@ export function BenchmarkHeader({ onSignInClick }: BenchmarkHeaderProps) {
         <span className="text-sm font-medium text-[#3c49ad]">Benchmark</span>
       </div>
 
-      <SignedIn>
-        <UserButton afterSignOutUrl="/" />
-      </SignedIn>
-      <SignedOut>
-        {onSignInClick && (
-          <button
-            onClick={onSignInClick}
-            className="text-sm font-medium text-[#3c49ad] border border-[#3c49ad] px-4 py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors"
-          >
-            Sign in
-          </button>
-        )}
-      </SignedOut>
+      <div className="flex items-center gap-4">
+        <SignedIn>
+          <UserButton afterSignOutUrl="/" />
+        </SignedIn>
+        <SignedOut>
+          {onSignInClick && (
+            <button
+              onClick={onSignInClick}
+              className="text-sm font-medium text-[#3c49ad] hover:text-[#2f3a8a]"
+            >
+              Sign in
+            </button>
+          )}
+        </SignedOut>
+        <a
+          href="https://rindler.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-white bg-[#3c49ad] px-4 py-1.5 hover:bg-[#2f3a8a] transition-colors"
+        >
+          Main Site
+        </a>
+      </div>
     </header>
   );
 }
