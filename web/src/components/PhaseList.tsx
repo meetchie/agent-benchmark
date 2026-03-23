@@ -29,7 +29,7 @@ export function PhaseList({ phases, steps, isLastPhaseIncomplete }: PhaseListPro
         <div className="space-y-1">
           {steps.map((step) => (
             <div key={step.step} className="flex items-start gap-2 text-xs text-slate-600">
-              <span className="text-green-500 shrink-0 mt-0.5">✓</span>
+              <span className="text-green-600 shrink-0 mt-0.5">✓</span>
               <span className="text-slate-400 shrink-0">#{step.step}</span>
               <span className="flex-1">{step.description}</span>
               <span className="text-slate-400 font-mono shrink-0">{formatMs(step.elapsed_ms)}</span>
@@ -55,13 +55,13 @@ export function PhaseList({ phases, steps, isLastPhaseIncomplete }: PhaseListPro
           let prefix = "";
 
           if (phase.failed) {
-            nameClass = "text-red-500";
-            timeClass = "text-red-500";
-            borderClass = "border-red-300";
+            nameClass = "text-red-600";
+            timeClass = "text-red-600";
+            borderClass = "border-red-600";
           } else if (phase.slow || isIncomplete) {
             nameClass = "text-amber-600";
             timeClass = "text-amber-600";
-            borderClass = "border-amber-300";
+            borderClass = "border-amber-600";
             prefix = "⚠ ";
           }
 
@@ -98,10 +98,10 @@ export function PhaseList({ phases, steps, isLastPhaseIncomplete }: PhaseListPro
                       <div
                         key={step.step}
                         className={`flex items-start gap-2 py-1 text-xs ${
-                          isFailedStep ? "text-red-500" : "text-slate-500"
+                          isFailedStep ? "text-red-600" : "text-slate-500"
                         }`}
                       >
-                        <span className={isFailedStep ? "text-red-300" : "text-slate-400"}>
+                        <span className={isFailedStep ? "text-red-600" : "text-slate-400"}>
                           #{step.step}
                         </span>
                         <span className="flex-1">{step.description}</span>

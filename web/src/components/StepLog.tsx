@@ -54,7 +54,7 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
             <div className="divide-y divide-slate-100">
               {completedSteps.map((step) => (
                 <div key={step.step} className="flex items-center gap-2 px-3 py-1.5">
-                  <svg className="h-3 w-3 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-3 w-3 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span className="flex-1 text-xs text-slate-600">

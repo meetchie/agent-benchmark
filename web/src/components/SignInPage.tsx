@@ -117,8 +117,8 @@ function SignInForm() {
   return (
     <div className="space-y-4">
       {error && (
-        <div className="border-2 border-red-300 bg-red-50 px-4 py-3">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="border-2 border-red-600 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
 
@@ -238,8 +238,8 @@ function SignUpForm() {
     <form onSubmit={handleSubmit}>
       <div className="space-y-4">
         {error && (
-          <div className="border-2 border-red-300 bg-red-50 px-4 py-3">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="border-2 border-red-600 bg-red-50 px-4 py-3">
+            <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 

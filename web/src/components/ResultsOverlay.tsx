@@ -130,8 +130,8 @@ export function ResultsOverlay({
             )}
 
             {resultState === "error" && errorMsg && (
-              <div className="bg-red-50 border border-red-200 px-4 py-3 mb-5 rounded">
-                <p className="text-sm text-red-700">{errorMsg}</p>
+              <div className="bg-red-50 border border-red-600 px-4 py-3 mb-5 rounded">
+                <p className="text-sm text-red-600">{errorMsg}</p>
               </div>
             )}
 

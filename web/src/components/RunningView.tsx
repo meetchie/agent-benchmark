@@ -12,19 +12,23 @@ function formatCost(inputTokens: number, outputTokens: number): string {
   return "$" + cost.toFixed(2);
 }
 
-function LiveStats({ steps }: { steps: StepRecord[] }) {
+function LiveStats({ steps, isRunning }: { steps: StepRecord[]; isRunning: boolean }) {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    setElapsed(0);
-    intervalRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1000);
-    }, 1000);
+    if (isRunning) {
+      setElapsed(0);
+      intervalRef.current = setInterval(() => {
+        setElapsed((prev) => prev + 1000);
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [isRunning]);
 
   // Estimate tokens from steps (rough: ~3000 tokens per step for GPT-4o)
   const estimatedTokens = steps.length * 3000;
@@ -118,7 +122,7 @@ export function RunningView({
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
-        <LiveStats steps={steps} />
+        <LiveStats steps={steps} isRunning={isRunning} />
       </div>
 
       {/* View Results button */}

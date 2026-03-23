@@ -71,7 +71,7 @@ export function RunningHeader({
           <span className={`text-xs font-semibold px-2.5 py-1 border ${
             remainingRuns > 0
               ? "border-[#3c49ad] text-[#3c49ad] bg-[#3c49ad]/5"
-              : "border-amber-400 text-amber-600 bg-amber-50"
+              : "border-amber-600 text-amber-600 bg-amber-50"
           }`}>
             Remaining: {remainingRuns}
           </span>

@@ -86,8 +86,8 @@ export function SetupView({
           </div>
 
           {tasksError && !tasksLoading && (
-            <div className="border-2 border-amber-300 bg-amber-50 px-4 py-3 mt-4">
-              <p className="text-sm text-amber-700">{tasksError}</p>
+            <div className="border-2 border-amber-600 bg-amber-50 px-4 py-3 mt-4">
+              <p className="text-sm text-amber-600">{tasksError}</p>
             </div>
           )}
 

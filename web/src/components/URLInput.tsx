@@ -29,12 +29,12 @@ export function URLInput({ value, onChange, onSubmit, disabled }: URLInputProps)
         disabled={disabled}
         placeholder="https://your-site.com"
         className={`w-full rounded-none border-2 px-4 py-3 text-base outline-none transition-colors
-          ${isValid ? "border-slate-300 focus:border-[#3c49ad]" : "border-red-400"}
+          ${isValid ? "border-slate-300 focus:border-[#3c49ad]" : "border-red-600"}
           ${disabled ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-slate-900"}
         `}
       />
       {!isValid && (
-        <p className="text-xs text-red-500">URL must start with http:// or https://</p>
+        <p className="text-xs text-red-600">URL must start with http:// or https://</p>
       )}
     </div>
   );
