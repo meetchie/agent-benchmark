@@ -152,7 +152,7 @@ function SignInForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
               required
-              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#3c49ad] bg-white text-slate-900"
+              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none hover:border-[#3c49ad]/50 focus:border-[#3c49ad] bg-white text-slate-900 transition-colors"
             />
           </div>
 
@@ -165,7 +165,7 @@ function SignInForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 required
-                className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#3c49ad] bg-white text-slate-900 pr-10"
+                className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none hover:border-[#3c49ad]/50 focus:border-[#3c49ad] bg-white text-slate-900 transition-colors pr-10"
               />
               <button
                 type="button"
@@ -251,7 +251,7 @@ function SignUpForm() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email"
             required
-            className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#3c49ad] bg-white text-slate-900"
+            className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none hover:border-[#3c49ad]/50 focus:border-[#3c49ad] bg-white text-slate-900 transition-colors"
           />
         </div>
 
@@ -264,7 +264,7 @@ function SignUpForm() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Create a password"
               required
-              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#3c49ad] bg-white text-slate-900 pr-10"
+              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none hover:border-[#3c49ad]/50 focus:border-[#3c49ad] bg-white text-slate-900 transition-colors pr-10"
             />
             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               <EyeIcon show={showPassword} />
@@ -281,7 +281,7 @@ function SignUpForm() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm your password"
               required
-              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#3c49ad] bg-white text-slate-900 pr-10"
+              className="w-full border-2 border-slate-300 px-3 py-2.5 text-sm outline-none hover:border-[#3c49ad]/50 focus:border-[#3c49ad] bg-white text-slate-900 transition-colors pr-10"
             />
             <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               <EyeIcon show={showConfirm} />
