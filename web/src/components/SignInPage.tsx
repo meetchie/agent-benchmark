@@ -21,7 +21,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
               <span className="text-lg font-semibold text-slate-900">Rindler</span>
             </div>
             <h1 className="text-xl font-bold text-slate-900">
-              {authView === "signin" ? "Welcome back" : "Create your account"}
+              {authView === "signin" ? "Sign in to Rindler" : "Create your account"}
             </h1>
             {authView === "signup" && (
               <p className="text-sm text-slate-500 mt-1">Enter your details to get started.</p>
