@@ -13,7 +13,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c49ad]/15 backdrop-blur-sm">
       <div className="w-full max-w-[420px] mx-4">
-        <div className="bg-white border-2 border-slate-200 p-6">
+        <div className="bg-white border-2 border-slate-200 p-6 relative">
           {/* Logo + heading inside card */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2.5 mb-3">
@@ -55,9 +55,11 @@ export function SignInModal({ onClose }: SignInModalProps) {
           {onClose && (
             <button
               onClick={onClose}
-              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 mt-4"
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
             >
-              Cancel
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
         </div>
