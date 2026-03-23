@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
 import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
@@ -215,6 +215,11 @@ export default function App() {
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   const [showSignIn, setShowSignIn] = useState(false);
+
+  // Handle SSO callback (Google OAuth redirect)
+  if (window.location.pathname === "/sso-callback") {
+    return <AuthenticateWithRedirectCallback />;
+  }
 
   if (view === "running") {
     return (

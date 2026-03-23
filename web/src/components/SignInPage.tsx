@@ -106,8 +106,8 @@ function SignInForm() {
     try {
       await signIn.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/",
+        redirectUrl: window.location.origin + "/sso-callback",
+        redirectUrlComplete: window.location.origin + "/",
       });
     } catch {
       setError("Google sign in failed. Please try again.");
