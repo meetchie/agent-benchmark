@@ -17,11 +17,19 @@ export default function App() {
 
   const [view, setView] = useState<View>("setup");
 
-  const [url, setUrl] = useState("");
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // Persist URL, tasks, and selection in sessionStorage so they survive sign-in
+  const [url, setUrl] = useState(() => sessionStorage.getItem("bench_url") || "");
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try { return JSON.parse(sessionStorage.getItem("bench_tasks") || "[]"); } catch { return []; }
+  });
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
-  const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(() => sessionStorage.getItem("bench_taskId"));
+
+  // Sync to sessionStorage on change
+  useEffect(() => { sessionStorage.setItem("bench_url", url); }, [url]);
+  useEffect(() => { sessionStorage.setItem("bench_tasks", JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { if (taskId) sessionStorage.setItem("bench_taskId", taskId); else sessionStorage.removeItem("bench_taskId"); }, [taskId]);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [steps, setSteps] = useState<StepRecord[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -31,7 +39,9 @@ export default function App() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
-  const lastGeneratedUrlRef = useRef("");
+  const lastGeneratedUrlRef = useRef(
+    (() => { try { return JSON.parse(sessionStorage.getItem("bench_tasks") || "[]").length > 0 ? sessionStorage.getItem("bench_url") || "" : ""; } catch { return ""; } })()
+  );
 
   const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
