@@ -9,7 +9,7 @@ import { RunningView } from "./components/RunningView";
 
 type View = "setup" | "running";
 
-const MAX_POLLS = 180;
+const MAX_POLLS = 300; // 5 min — backend handles 3-min agent timeout + judge
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
@@ -123,19 +123,8 @@ export default function App() {
 
         if (pollCountRef.current > MAX_POLLS) {
           stopPolling();
-          setRunStatus("complete");
-          const currentStats = analyzingStatsRef.current;
-          const currentSteps = stepsRef.current;
-          setSummary({
-            success: false,
-            summary: "The agent ran out of time before completing the task.",
-            result_state: "too_slow",
-            total_ms: currentStats?.total_ms ?? currentSteps.reduce((sum, s) => sum + s.elapsed_ms, 0),
-            input_tokens: currentStats?.input_tokens ?? 0,
-            output_tokens: currentStats?.output_tokens ?? 0,
-            total_tokens: currentStats?.total_tokens ?? 0,
-            phases: [],
-          });
+          setRunStatus("error");
+          setErrorMsg("Lost connection — the run may still be processing on the server.");
           return;
         }
 
@@ -245,6 +234,10 @@ export default function App() {
     setSummary(null);
     setErrorMsg(null);
     setAnalyzingStats(null);
+    setUrl("");
+    setTasks([]);
+    setTaskId(null);
+    lastGeneratedUrlRef.current = "";
     setView("setup");
   }, [stopPolling]);
 
