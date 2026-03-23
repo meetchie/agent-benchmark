@@ -11,7 +11,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
   const [authView, setAuthView] = useState<AuthView>("signin");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c49ad]/30 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c49ad]/15 backdrop-blur-sm">
       <div className="w-full max-w-[420px] mx-4">
         <div className="bg-white border-2 border-slate-200 p-6">
           {/* Logo + heading inside card */}
@@ -140,7 +140,7 @@ function SignInForm() {
         <div className="flex-1 border-t border-slate-200" />
       </div>
 
-      <form onSubmit={handleEmailPassword} className="space-y-3">
+      <form onSubmit={handleEmailPassword} className="space-y-4">
         <div className="space-y-1">
           <label className="text-sm font-semibold text-slate-700">Email</label>
           <input
