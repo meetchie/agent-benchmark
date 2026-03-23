@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { StepRecord, SummaryData } from "../lib/types";
 import { formatTimer } from "../lib/utils";
 import { RunningHeader } from "./RunningHeader";
@@ -12,8 +12,27 @@ function formatCost(inputTokens: number, outputTokens: number): string {
   return "$" + cost.toFixed(2);
 }
 
-function LiveStats({ steps, finalMs }: { steps: StepRecord[]; finalMs?: number }) {
-  const displayMs = finalMs ?? steps.reduce((sum, s) => sum + s.elapsed_ms, 0);
+function LiveStats({ steps, isRunning, finalMs }: { steps: StepRecord[]; isRunning: boolean; finalMs?: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (isRunning) {
+      setElapsed(0);
+      intervalRef.current = setInterval(() => {
+        setElapsed((prev) => prev + 1000);
+      }, 1000);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isRunning]);
+
+  // Smooth counter while running, snap to real data when done
+  const displayMs = finalMs ?? elapsed;
 
   // Estimate tokens from steps (rough: ~3000 tokens per step for GPT-4o)
   const estimatedTokens = steps.length * 3000;
@@ -107,7 +126,7 @@ export function RunningView({
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
-        <LiveStats steps={steps} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
+        <LiveStats steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
       </div>
 
       {/* View Results button */}
