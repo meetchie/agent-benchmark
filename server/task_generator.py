@@ -46,7 +46,7 @@ TASK DESIGN RULES:
 - Keep labels under 60 characters
 - The label and goal text should read naturally, like instructions a human would give. Avoid dramatic language like "CRITICAL", "TRAP", "must NOT", "DO NOT pick". Instead, specify what IS wanted clearly: "Select the 1/2 inch thick mat in purple" rather than "must NOT select the 1/4 inch, must NOT select black". Use positive phrasing to specify the correct choice.
 - Do NOT use words like "trap", "trick", or "gotcha" in labels or goals
-- Only reference products and customizations that actually exist on the site. For grocery/delivery sites, stick to grocery items. For pizza sites, stick to pizza/sides/drinks. For shoe sites, stick to shoes/apparel/accessories. Do not invent product categories the site does not have.
+- Only reference products and customizations that actually exist on the site. For grocery/delivery sites (Instacart, Shipt, Walmart Grocery), stick to grocery items — do NOT generate "build your own sandwich" or "customize a pizza" tasks since these sites deliver packaged products, not made-to-order food. For restaurant ordering sites (Domino's, Chipotle), customization is appropriate. For general retail (Amazon, Target, Best Buy), stick to variant selection (size, color, quantity) not food customization. Do not invent product categories the site does not have.
 - Steps should be specific enough that success/failure is unambiguous, but written in plain instructional language
 
 GENERATE 3 TASKS AT THESE LEVELS:
