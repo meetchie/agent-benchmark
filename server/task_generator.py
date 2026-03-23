@@ -305,9 +305,13 @@ async def fetch_and_generate(url: str) -> list[dict]:
     try:
         async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
             async with session.get(url, allow_redirects=True) as response:
+                if response.status == 403:
+                    raise ConnectionError(
+                        "This site is blocking automated access. Try a different website."
+                    )
                 if response.status >= 400:
                     raise ConnectionError(
-                        f"Failed to fetch the site: HTTP {response.status}"
+                        f"Could not reach this site (HTTP {response.status}). Try a different URL."
                     )
 
                 content_type = response.headers.get("Content-Type", "")
@@ -318,7 +322,7 @@ async def fetch_and_generate(url: str) -> list[dict]:
 
                 html = await response.text()
     except (aiohttp.ClientError, TimeoutError) as exc:
-        raise ConnectionError("Failed to fetch the site. It may be unreachable or blocking automated access.") from exc
+        raise ConnectionError("This site took too long to respond or is unreachable. Try a different URL.") from exc
 
     metadata = extract_metadata(html, url)
     return generate_tasks(metadata)

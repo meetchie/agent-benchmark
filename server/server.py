@@ -268,8 +268,7 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ConnectionError as e:
-        import traceback; traceback.print_exc()
-        raise HTTPException(status_code=502, detail=f"Could not access site: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Task generation failed: {e}")
