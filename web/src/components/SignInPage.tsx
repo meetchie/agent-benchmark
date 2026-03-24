@@ -11,9 +11,24 @@ export function SignInModal({ onClose }: SignInModalProps) {
   const [authView, setAuthView] = useState<AuthView>("signin");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c49ad]/15 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
       <div className="w-full max-w-[420px] mx-4">
-        <div className="bg-white border-2 border-slate-200 p-6 relative">
+        <div className="bg-white border-2 border-slate-200 max-h-[90vh] flex flex-col">
+          {/* Close button row */}
+          {onClose && (
+            <div className="shrink-0 flex justify-end p-4 pb-0 bg-white">
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="modal-scroll px-6 pb-6" style={onClose ? undefined : { paddingTop: '1.5rem' }}>
           {/* Logo + heading inside card */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2.5 mb-3">
@@ -51,17 +66,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
               </>
             )}
           </p>
-
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+          </div>
         </div>
       </div>
     </div>
@@ -181,7 +186,7 @@ function SignInForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full mt-8 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#4f5cbf] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full mt-8 border-2 border-transparent bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#4f5cbf] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
@@ -293,7 +298,7 @@ function SignUpForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full mt-8 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#4f5cbf] disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full mt-8 border-2 border-transparent bg-[#3c49ad] text-white py-2.5 text-sm font-semibold hover:bg-[#4f5cbf] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Creating account..." : "Sign up"}
       </button>

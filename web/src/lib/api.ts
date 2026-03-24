@@ -40,6 +40,14 @@ export async function cancelBenchmark(runId: string): Promise<void> {
   await fetch(`/api/benchmark/cancel/${runId}`, { method: "POST" }).catch(() => {});
 }
 
+export async function fetchQuota(token: string): Promise<{ remaining: number; resets_in: number; limit: number }> {
+  const res = await fetch("/api/benchmark/quota", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return { remaining: 3, resets_in: 0, limit: 3 };
+  return res.json();
+}
+
 export async function generateTasks(
   url: string,
   signal?: AbortSignal

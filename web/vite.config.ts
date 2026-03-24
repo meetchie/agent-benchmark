@@ -35,6 +35,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => "/benchmark/generate-tasks",
       },
+      "/api/benchmark/quota": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: () => "/benchmark/quota",
+      },
     },
   },
 });

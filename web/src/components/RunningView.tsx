@@ -4,6 +4,7 @@ import { formatTimer } from "../lib/utils";
 import { RunningHeader } from "./RunningHeader";
 import { StepLog } from "./StepLog";
 import { ResultsOverlay } from "./ResultsOverlay";
+import { DemoModal } from "./DemoModal";
 
 /** GPT-4o pricing: $2.50/1M input, $10/1M output */
 function formatCost(inputTokens: number, outputTokens: number): string {
@@ -46,58 +47,64 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   return (
     <div className="w-[300px] shrink-0 flex flex-col gap-4">
       {/* Stats card */}
-      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex flex-col" style={{ height: "55vh" }}>
+      <div className="bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden flex flex-col" style={{ height: "55vh" }}>
         {/* Site + task info */}
         <div className="px-4 py-4 border-b border-slate-100">
-          <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
-          <p className="text-xs text-slate-400 mt-1 leading-relaxed">{taskLabel}</p>
+          <p className="text-base font-semibold text-[#3c49ad]">{domain}</p>
+          <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{taskLabel}</p>
         </div>
 
         {/* Time elapsed */}
-        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
-          <span className="text-xs text-slate-400 uppercase tracking-wider">Time</span>
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center flex-1">
+          <span className="text-xs text-slate-600 uppercase tracking-wider">Time</span>
           <span className="text-xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
         </div>
 
         {/* Steps completed */}
-        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
-          <span className="text-xs text-slate-400 uppercase tracking-wider">Steps</span>
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center flex-1">
+          <span className="text-xs text-slate-600 uppercase tracking-wider">Steps</span>
           <span className="text-xl font-bold text-slate-900 font-mono">{steps.length}</span>
         </div>
 
         {/* Estimated cost */}
-        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
-          <span className="text-xs text-slate-400 uppercase tracking-wider">Cost</span>
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center flex-1">
+          <span className="text-xs text-slate-600 uppercase tracking-wider">Cost</span>
           <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
         </div>
 
         {/* Estimated tokens */}
-        <div className="px-4 py-4 flex justify-between items-baseline flex-1">
-          <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
+        <div className="px-4 py-4 flex justify-between items-center flex-1">
+          <span className="text-xs text-slate-600 uppercase tracking-wider">Tokens</span>
           <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
         </div>
       </div>
 
-      {/* CTA card — fills remaining height to match step log */}
-      <div className="flex-1 bg-[#f0f4ff] border border-[#3c49ad]/15 rounded-lg p-5 flex flex-col justify-center items-center text-center">
-        <p className="text-sm text-slate-600 mb-4">Want your site to work seamlessly with AI agents?</p>
+      {/* CTA card — I5 style: left-aligned, divider accent */}
+      <div className="flex-1 bg-white border-t-[3px] border-t-[#3c49ad] p-5 flex flex-col justify-center">
+        <p className="text-base font-bold text-slate-900 mb-1.5">Make your site agent-accessible</p>
+        <p className="text-xs text-slate-500 mb-5 leading-relaxed">No website changes needed.</p>
         <div className="flex flex-col gap-2 w-full">
           <a
             href="https://rindler.ai"
             target="_blank"
             rel="noopener noreferrer"
-            className="border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold text-center hover:bg-[#2f3a8a] transition-colors"
+            className="group border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all"
           >
-            Check out Rindler →
+            <span className="relative inline-flex items-center">
+              <span className="transition-transform duration-200 group-hover:-translate-x-2">Check out Rindler</span>
+              <span className="absolute left-full ml-1 opacity-0 translate-x-[-6px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">→</span>
+            </span>
           </a>
-          <a
-            href="https://cal.com/example/demo"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] transition-colors"
-          >
-            Book a Demo →
-          </a>
+          <DemoModal>
+            <button
+              className="group border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all w-full"
+            >
+              <span className="relative inline-flex items-center">
+                <span className="transition-transform duration-200 group-hover:-translate-x-2">Book a Demo</span>
+                <span className="absolute left-full ml-1 opacity-0 translate-x-[-6px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">→</span>
+              </span>
+            </button>
+          </DemoModal>
         </div>
       </div>
     </div>
@@ -122,16 +129,28 @@ interface RunningViewProps {
   onRunAgain: () => void;
   onNewTest: () => void;
   remainingRuns?: number;
+  resetsIn?: number;
 }
 
 export function RunningView({
   url, taskLabel, isRunning, isAnalyzing, analyzingStats,
-  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns,
+  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns, resetsIn,
 }: RunningViewProps) {
   const isDone = !!summary || (!!errorMsg && !isRunning && !isAnalyzing);
   const showOverlayTrigger = isDone || isAnalyzing;
 
   const [showOverlay, setShowOverlay] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const handleViewResults = () => {
+    setBannerDismissed(true);
+    setShowOverlay(true);
+  };
+
+  // Reset banner when a new run starts
+  useEffect(() => {
+    if (!showOverlayTrigger) setBannerDismissed(false);
+  }, [showOverlayTrigger]);
 
   useEffect(() => {
     if (showOverlayTrigger) setShowOverlay(true);
@@ -141,13 +160,13 @@ export function RunningView({
     <div className="h-screen bg-[#f0f4ff] flex flex-col overflow-hidden">
       <RunningHeader
         isRunning={isRunning}
-        totalMs={summary?.total_ms} onNewTest={onNewTest} remainingRuns={remainingRuns}
+        onNewTest={onNewTest} remainingRuns={remainingRuns} resetsIn={resetsIn}
       />
 
       {/* Running view — always visible */}
       <div className="flex-1 flex p-4 gap-4 overflow-hidden">
         <div className="flex-1 flex flex-col gap-4 min-w-0">
-          <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ height: "55vh", flexShrink: 0 }}>
+          <div className="relative bg-white overflow-hidden" style={{ height: "55vh", flexShrink: 0 }}>
             {screenshot ? (
               <img src={screenshot} alt="Agent screenshot" className="w-full h-full object-cover object-top" />
             ) : (
@@ -158,30 +177,42 @@ export function RunningView({
                 </svg>
               </div>
             )}
+            {/* Dim overlay when run is done */}
+            {isDone && (
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom, rgba(60,73,173,0.1) 0%, rgba(60,73,173,0.3) 100%)" }} />
+            )}
+            {/* Bottom bar — slides up when results are ready, slides down on dismiss */}
+            {showOverlayTrigger && (
+              <div
+                className={`absolute bottom-0 left-0 right-0 flex items-center justify-between px-5 py-3 bg-white ${
+                  bannerDismissed ? "animate-[slideDown_0.3s_ease-in_forwards]" : "animate-[slideUp_0.3s_ease-out]"
+                }`}
+                style={bannerDismissed ? { pointerEvents: "none" } : undefined}
+              >
+                <div className="text-left">
+                  <div className="text-[13px] font-semibold text-slate-900">Benchmark complete</div>
+                  <div className="text-[11px] text-slate-500">{steps.length} steps{summary?.total_ms ? ` · ${formatTimer(summary.total_ms)}` : ""}</div>
+                </div>
+                <button onClick={handleViewResults} className="group bg-[#3c49ad] text-white px-5 py-2 text-[13px] font-semibold hover:bg-[#5563c9] transition-colors relative inline-flex items-center">
+                  <span className="transition-transform duration-200 group-hover:-translate-x-2">View Results</span>
+                  <span className="absolute left-full ml-[-22px] opacity-0 translate-x-[-6px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">→</span>
+                </button>
+              </div>
+            )}
           </div>
-          <div className="flex-1 min-h-0 border-2 border-slate-200 bg-white overflow-hidden">
+          <div className="flex-1 min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
         <LiveStats url={url} taskLabel={taskLabel} steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
       </div>
 
-      {/* View Results button */}
-      {showOverlayTrigger && !showOverlay && (
-        <button
-          onClick={() => setShowOverlay(true)}
-          className="fixed bottom-6 right-6 bg-[#3c49ad] text-white px-5 py-3 rounded-full shadow-lg text-sm font-semibold hover:bg-[#2f3a8a] transition-colors z-40"
-        >
-          View Results
-        </button>
-      )}
-
       {/* Results overlay */}
       {showOverlayTrigger && showOverlay && (
         <ResultsOverlay
           url={url} taskLabel={taskLabel} summary={summary} errorMsg={errorMsg}
           steps={steps} isAnalyzing={isAnalyzing} analyzingStats={analyzingStats}
-          onClose={() => setShowOverlay(false)} onRunAgain={onRunAgain} onNewTest={onNewTest}
+          onClose={() => { setShowOverlay(false); setBannerDismissed(false); }} onRunAgain={onRunAgain} onNewTest={onNewTest}
         />
       )}
     </div>

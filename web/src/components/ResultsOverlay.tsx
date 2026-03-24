@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { StepRecord, SummaryData, ResultState } from "../lib/types";
 import { formatTimer } from "../lib/utils";
 import { PhaseList } from "./PhaseList";
+import { DemoModal } from "./DemoModal";
 
 function formatCost(inputTokens: number, outputTokens: number): string {
   const cost = (inputTokens / 1_000_000) * 2.5 + (outputTokens / 1_000_000) * 10;
@@ -65,15 +66,19 @@ export function ResultsOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-[#3c49ad]/15 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 modal-backdrop" onClick={onClose} />
 
-      <div className="relative w-full max-w-[520px] max-h-[90vh] overflow-y-auto border-2 border-slate-200 bg-white p-8 m-4 shadow-2xl">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      <div className="relative w-full max-w-[520px] max-h-[90vh] border-2 border-slate-200 bg-white m-4 shadow-2xl flex flex-col">
+        {/* Close button row */}
+        <div className="shrink-0 flex justify-end p-4 pb-0 bg-white">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
+        <div className="modal-scroll px-8 pb-8">
         <div className="text-center mb-6">
           <div className="text-xs text-slate-400 uppercase tracking-widest mb-1">Benchmark Result</div>
           {isAnalyzing ? (
@@ -128,7 +133,7 @@ export function ResultsOverlay({
             )}
 
             {resultState === "error" && errorMsg && (
-              <div className="bg-red-50 border border-red-600 px-4 py-3 mb-5 rounded">
+              <div className="bg-red-50 border border-red-600 px-4 py-3 mb-5">
                 <p className="text-sm text-red-600">{errorMsg}</p>
               </div>
             )}
@@ -161,17 +166,20 @@ export function ResultsOverlay({
               <div className="text-sm text-slate-600 mb-3">Want to make your site work seamlessly with AI agents?</div>
               <div className="flex gap-3">
                 <a href="https://rindler.ai" target="_blank" rel="noopener noreferrer"
-                  className="flex-1 border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold text-center hover:bg-[#2f3a8a]">
+                  className="flex-1 border-2 border-transparent bg-[#3c49ad] text-white py-2.5 text-sm font-semibold text-center hover:bg-[#5563c9]">
                   Check out Rindler →
                 </a>
-                <a href="https://cal.com/example/demo" target="_blank" rel="noopener noreferrer"
-                  className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad]">
-                  Book a Demo →
-                </a>
+                <DemoModal>
+                  <button
+                    className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad]">
+                    Book a Demo →
+                  </button>
+                </DemoModal>
               </div>
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

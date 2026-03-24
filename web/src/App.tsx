@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
-import { startBenchmark, pollStatus, generateTasks, cancelBenchmark } from "./lib/api";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
 import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
 import { RunningView } from "./components/RunningView";
+import { ExhaustedOverlay } from "./components/ExhaustedOverlay";
 
 type View = "setup" | "running";
 
@@ -42,6 +43,23 @@ export default function App() {
     total_tokens: number;
   } | null>(null);
 
+  // Usage quota
+  const [quota, setQuota] = useState<{ remaining: number; resets_in: number }>({ remaining: 3, resets_in: 0 });
+
+  // Fetch quota on sign-in
+  useEffect(() => {
+    if (!isSignedIn) return;
+    (async () => {
+      const token = await getToken();
+      if (token) {
+        const q = await fetchQuota(token);
+        setQuota({ remaining: q.remaining, resets_in: q.resets_in });
+      }
+    })();
+  }, [isSignedIn, getToken]);
+
+  const [showExhausted, setShowExhausted] = useState(false);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
@@ -60,6 +78,18 @@ export default function App() {
   const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
 
   const taskGenAbortRef = useRef<AbortController | null>(null);
+
+  // Clear tasks when user deletes 3+ characters from the generated URL
+  useEffect(() => {
+    const genUrl = lastGeneratedUrlRef.current;
+    if (!genUrl || tasks.length === 0) return;
+    if (url.length <= genUrl.length - 3) {
+      setTasks([]);
+      setTaskId(null);
+      setTasksError(null);
+      lastGeneratedUrlRef.current = "";
+    }
+  }, [url, tasks.length]);
 
   const handleUrlSubmit = useCallback(async () => {
     const trimmed = url.trim();
@@ -221,6 +251,16 @@ export default function App() {
       return;
     }
 
+    // Check quota before starting
+    if (quota.remaining <= 0) {
+      const q = await fetchQuota(token);
+      setQuota({ remaining: q.remaining, resets_in: q.resets_in });
+      if (q.remaining <= 0) {
+        setShowExhausted(true);
+        return;
+      }
+    }
+
     setRunStatus("running");
     setSteps([]);
     setScreenshot(null);
@@ -235,8 +275,9 @@ export default function App() {
       // Width: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
       const vpWidth = Math.round(window.innerWidth - 300 - 16 * 2 - 16 - 4);
       const vpHeight = Math.round(window.innerHeight * 0.55);
-      const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight });
+      const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight }) as { run_id: string; remaining?: number; resets_in?: number };
       currentRunIdRef.current = data.run_id;
+      if (data.remaining !== undefined) setQuota({ remaining: data.remaining, resets_in: data.resets_in ?? 0 });
       startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
@@ -291,19 +332,24 @@ export default function App() {
 
   if (view === "running") {
     return (
-      <RunningView
-        url={url}
-        taskLabel={selectedTask?.label ?? ""}
-        isRunning={runStatus === "running"}
-        isAnalyzing={runStatus === "analyzing"}
-        analyzingStats={analyzingStats}
-        steps={steps}
-        screenshot={screenshot}
-        summary={summary}
-        errorMsg={errorMsg}
-        onRunAgain={handleRunAgain}
-        onNewTest={handleNewTest}
-      />
+      <>
+        <RunningView
+          url={url}
+          taskLabel={selectedTask?.label ?? ""}
+          isRunning={runStatus === "running"}
+          isAnalyzing={runStatus === "analyzing"}
+          analyzingStats={analyzingStats}
+          steps={steps}
+          screenshot={screenshot}
+          summary={summary}
+          errorMsg={errorMsg}
+          onRunAgain={handleRunAgain}
+          onNewTest={handleNewTest}
+          remainingRuns={quota.remaining}
+          resetsIn={quota.resets_in}
+        />
+        {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
+      </>
     );
   }
 
@@ -324,8 +370,11 @@ export default function App() {
         onRun={handleRun}
         onRegenerateTasks={handleRegenerateTasks}
         onSignInClick={() => setShowSignIn(true)}
+        remainingRuns={isSignedIn ? quota.remaining : undefined}
+        resetsIn={isSignedIn ? quota.resets_in : undefined}
       />
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
+      {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
     </>
   );
 }

@@ -1,11 +1,17 @@
-import { useState, useEffect, useRef } from "react";
-import { formatTimer } from "../lib/utils";
+import { useState, useEffect } from "react";
 
 interface RunningHeaderProps {
   isRunning: boolean;
-  totalMs?: number;
   onNewTest: () => void;
   remainingRuns?: number;
+  resetsIn?: number;
+}
+
+function formatResetTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -19,7 +25,7 @@ function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-[#3c49ad]/15 backdrop-blur-sm" onClick={onCancel} />
+      <div className="absolute inset-0 modal-backdrop" onClick={onCancel} />
       <div className="relative max-w-[400px] w-full border-2 border-slate-200 bg-white p-8 m-4 shadow-2xl text-center">
         <p className="text-lg font-semibold text-slate-900 mb-2">Cancel this run?</p>
         <p className="text-sm text-slate-500 mb-6">The benchmark is still running. If you leave now, you won't see the results.</p>
@@ -44,32 +50,11 @@ function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 
 export function RunningHeader({
   isRunning,
-  totalMs,
   onNewTest,
   remainingRuns,
+  resetsIn,
 }: RunningHeaderProps) {
-  const [elapsed, setElapsed] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (isRunning) {
-      setElapsed(0);
-      intervalRef.current = setInterval(() => {
-        setElapsed((prev) => prev + 1000);
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning]);
-
-  const displayTime = isRunning ? formatTimer(elapsed) : totalMs ? formatTimer(totalMs) : "";
 
   const handleLeave = () => {
     if (isRunning) {
@@ -96,23 +81,24 @@ export function RunningHeader({
           <span className="text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {displayTime && (
-            <span className={`text-xs font-semibold ${isRunning ? "text-[#3c49ad]" : "text-slate-500"}`}>
-              {isRunning ? "RUNNING " : ""}{displayTime}
+          {remainingRuns !== undefined && remainingRuns > 0 && (
+            <span className="text-xs text-slate-500">
+              {remainingRuns === 1 && (
+                <svg className="inline w-3.5 h-3.5 text-amber-500 mr-1 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                </svg>
+              )}
+              <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
             </span>
           )}
-          {remainingRuns !== undefined && (
-            <span className={`text-xs font-semibold px-2.5 py-1 border ${
-              remainingRuns > 0
-                ? "border-[#3c49ad] text-[#3c49ad] bg-[#3c49ad]/5"
-                : "border-amber-600 text-amber-600 bg-amber-50"
-            }`}>
-              Remaining: {remainingRuns}
+          {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (
+            <span className="text-xs font-semibold text-red-500">
+              Runs reset in {formatResetTime(resetsIn)}
             </span>
           )}
           <button
             onClick={handleLeave}
-            className="text-xs font-medium text-[#3c49ad] border border-[#3c49ad] px-3 py-1 hover:bg-[#3c49ad] hover:text-white transition-colors"
+            className="text-sm font-semibold text-[#3c49ad] border-2 border-[#3c49ad] px-5 py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors"
           >
             New Test
           </button>

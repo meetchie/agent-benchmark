@@ -62,7 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         "X-User-Id": userId,
         "X-Internal-Key": context.env.INTERNAL_API_KEY || "",
       },
-      body: JSON.stringify({ url: body.url, goal: body.goal, label: body.label || "" }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(5000),
     });
 

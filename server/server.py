@@ -44,6 +44,50 @@ _INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 _task_gen_requests: dict[str, list[float]] = {}  # ip -> list of timestamps
 _TASK_GEN_MAX_PER_MINUTE = 5
 
+# Daily quota: 3 runs per 24h rolling window
+# Persisted to disk so quotas survive server restarts
+_DAILY_QUOTA = 3
+_QUOTA_WINDOW = 24 * 60 * 60  # 24 hours in seconds
+_QUOTA_FILE = os.path.join(os.path.dirname(__file__), ".quota_data.json")
+
+import json as _json
+
+def _load_quota_data() -> dict[str, list[float]]:
+    try:
+        with open(_QUOTA_FILE, "r") as f:
+            data = _json.load(f)
+        # Clean expired entries on load
+        now = _time.time()
+        return {uid: [t for t in ts if now - t < _QUOTA_WINDOW] for uid, ts in data.items()}
+    except (FileNotFoundError, _json.JSONDecodeError):
+        return {}
+
+def _save_quota_data():
+    try:
+        with open(_QUOTA_FILE, "w") as f:
+            _json.dump(_user_run_timestamps, f)
+    except OSError:
+        pass
+
+_user_run_timestamps: dict[str, list[float]] = _load_quota_data()
+
+
+def _get_quota(user_id: str) -> dict:
+    """Return remaining runs and seconds until next reset for a user."""
+    now = _time.time()
+    timestamps = _user_run_timestamps.get(user_id, [])
+    # Filter to only timestamps within the window
+    recent = [t for t in timestamps if now - t < _QUOTA_WINDOW]
+    _user_run_timestamps[user_id] = recent
+
+    remaining = max(0, _DAILY_QUOTA - len(recent))
+    resets_in = 0
+    if remaining == 0 and recent:
+        # Time until the oldest run in the window expires
+        resets_in = int(recent[0] + _QUOTA_WINDOW - now)
+
+    return {"remaining": remaining, "resets_in": resets_in, "limit": _DAILY_QUOTA}
+
 # Demo mode — returns fake data without calling OpenAI or launching a browser
 # Set DEMO_MODE=true in .env to enable
 def _check_demo_mode() -> bool:
@@ -234,9 +278,27 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
             "error": "Too many runs in progress. Wait for one to finish.",
         })
 
+    # Daily quota check
+    if not is_admin:
+        quota = _get_quota(user_id)
+        if quota["remaining"] <= 0:
+            hours = quota["resets_in"] // 3600
+            mins = (quota["resets_in"] % 3600) // 60
+            raise HTTPException(status_code=429, detail={
+                "error": f"Daily limit reached. Resets in {hours}h {mins}m.",
+                "resets_in": quota["resets_in"],
+                "remaining": 0,
+            })
+
     _evict_stale_runs()
 
     _active_runs[user_id] = active + 1
+    # Record run timestamp for daily quota
+    if user_id not in _user_run_timestamps:
+        _user_run_timestamps[user_id] = []
+    _user_run_timestamps[user_id].append(_time.time())
+    _save_quota_data()
+
     run_id = str(uuid.uuid4())
     state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
     _runs[run_id] = state
@@ -269,7 +331,17 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
     _run_tasks[run_id] = task
     task.add_done_callback(lambda _: _run_tasks.pop(run_id, None))
 
-    return {"run_id": run_id}
+    quota = _get_quota(user_id)
+    return {"run_id": run_id, "remaining": quota["remaining"], "resets_in": quota["resets_in"]}
+
+
+@app.get("/benchmark/quota")
+async def get_quota(user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
+    user_id = user["user_id"]
+    user_email = user.get("email", "").lower()
+    if user_email in ADMIN_EMAILS:
+        return {"remaining": 999, "resets_in": 0, "limit": _DAILY_QUOTA}
+    return _get_quota(user_id)
 
 
 @app.get("/benchmark/status/{run_id}")

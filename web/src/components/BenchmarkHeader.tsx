@@ -34,7 +34,7 @@ export function BenchmarkHeader({ onSignInClick }: BenchmarkHeaderProps) {
           href="https://rindler.ai"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm font-medium text-slate-900 border-2 border-slate-900 px-5 py-1.5 hover:bg-slate-900 hover:text-white transition-colors"
+          className="text-sm font-semibold text-[#3c49ad] border-2 border-[#3c49ad] px-5 py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors"
         >
           Learn More
         </a>

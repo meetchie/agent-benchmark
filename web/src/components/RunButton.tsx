@@ -17,7 +17,7 @@ export function RunButton({ status, disabled, onClick }: RunButtonProps) {
         ${
           disabled || isRunning
             ? "border-[#3c49ad]/30 bg-[#3c49ad]/10 text-[#3c49ad]/40 cursor-not-allowed"
-            : "border-[#3c49ad] bg-[#3c49ad] text-white hover:bg-[#2f3a8a] cursor-pointer"
+            : "border-transparent bg-[#3c49ad] text-white hover:bg-[#5563c9] cursor-pointer"
         }
       `}
     >

@@ -32,7 +32,7 @@ export function URLInput({ value, onChange, onSubmit, onStop, loading, disabled 
           type="url"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onBlur={() => { if (!loading) onSubmit?.(); }}
+          onBlur={() => {}}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder="https://your-site.com"
@@ -45,7 +45,7 @@ export function URLInput({ value, onChange, onSubmit, onStop, loading, disabled 
         {loading ? (
           <button
             onClick={onStop}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-[#3c49ad] hover:bg-[#2f3a8a] transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-[#3c49ad] hover:bg-[#5563c9] transition-colors"
             title="Stop generating"
           >
             <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="currentColor">
@@ -56,7 +56,7 @@ export function URLInput({ value, onChange, onSubmit, onStop, loading, disabled 
           <button
             onClick={onSubmit}
             disabled={disabled}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-[#3c49ad] hover:bg-[#2f3a8a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-[#3c49ad] hover:bg-[#5563c9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Generate tasks"
           >
             <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -21,6 +21,8 @@ interface SetupViewProps {
   onRun: () => void;
   onRegenerateTasks: () => void;
   onSignInClick?: () => void;
+  remainingRuns?: number;
+  resetsIn?: number;
 }
 
 export function SetupView({
@@ -38,12 +40,15 @@ export function SetupView({
   onRun,
   onRegenerateTasks,
   onSignInClick,
+  remainingRuns,
+  resetsIn,
 }: SetupViewProps) {
   const hasShifted = useRef(false);
   if (tasks.length > 0 || tasksLoading) {
     hasShifted.current = true;
   }
   const shifted = hasShifted.current;
+  const exhausted = remainingRuns !== undefined && remainingRuns <= 0;
 
   const [tasksVisible, setTasksVisible] = useState(false);
   useEffect(() => {
@@ -67,11 +72,27 @@ export function SetupView({
           <URLInput
             value={url}
             onChange={onUrlChange}
-            onSubmit={onUrlSubmit}
+            onSubmit={exhausted ? undefined : onUrlSubmit}
             onStop={onStopGenerate}
             loading={tasksLoading}
-            disabled={runStatus === "running"}
+            disabled={runStatus === "running" || exhausted}
           />
+
+          <p
+            className="text-xs text-slate-400 mt-2 transition-all duration-300"
+            style={{
+              opacity: remainingRuns !== undefined && remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? 1 : 0,
+              maxHeight: remainingRuns !== undefined && remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? "20px" : "0",
+              overflow: "hidden",
+            }}
+          >
+            <strong className="text-[#3c49ad]">{remainingRuns}</strong> {remainingRuns === 1 ? "run" : "runs"} remaining
+          </p>
+          {exhausted && resetsIn !== undefined && resetsIn > 0 && (
+            <p className="text-xs text-red-500 font-semibold mt-1">
+              No runs remaining. Resets in {Math.floor(resetsIn / 3600)}h {Math.floor((resetsIn % 3600) / 60)}m
+            </p>
+          )}
 
           <div
             className="flex items-center gap-2 transition-all duration-300"
@@ -127,7 +148,22 @@ export function SetupView({
             </div>
             {tasks.length > 0 && (
               <div className="mt-8">
-                <RunButton status={runStatus} disabled={!canRun} onClick={onRun} />
+                <RunButton status={runStatus} disabled={!canRun || (remainingRuns !== undefined && remainingRuns <= 0)} onClick={onRun} />
+                {remainingRuns !== undefined && remainingRuns > 0 && (
+                  <p className="text-xs text-slate-500 text-center mt-3">
+                    {remainingRuns === 1 && (
+                      <svg className="inline w-3.5 h-3.5 text-amber-500 mr-1 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
+                  </p>
+                )}
+                {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (
+                  <p className="text-xs text-red-500 font-semibold text-center mt-3">
+                    No runs remaining. Resets in {Math.floor(resetsIn / 3600)}h {Math.floor((resetsIn % 3600) / 60)}m
+                  </p>
+                )}
               </div>
             )}
           </div>

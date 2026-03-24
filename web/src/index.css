@@ -16,3 +16,58 @@ body,
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* StepLog animations */
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-enter {
+  animation: step-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* View Results bar slide-up */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+/* Active step dot pulse */
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(60, 73, 173, 0.15); }
+  50% { box-shadow: 0 0 0 7px rgba(60, 73, 173, 0.08); }
+}
+
+.dot-pulse {
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+/* Cross-browser modal fixes */
+.modal-backdrop {
+  /* Fallback for browsers that don't support backdrop-filter */
+  background-color: rgba(60, 73, 173, 0.2);
+}
+@supports (backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px)) {
+  .modal-backdrop {
+    background-color: rgba(60, 73, 173, 0.15);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+}
+
+.modal-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* smooth scroll on iOS Safari */
+}
