@@ -121,6 +121,8 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
 class StartRequest(BaseModel):
     url: str
     goal: str
+    viewport_width: int | None = None
+    viewport_height: int | None = None
 
     @field_validator("url")
     @classmethod
@@ -229,16 +231,20 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
     state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
     _runs[run_id] = state
 
-    async def _run_and_decrement(state, url, goal, uid):
+    viewport = None
+    if req.viewport_width and req.viewport_height:
+        viewport = {"width": req.viewport_width, "height": req.viewport_height}
+
+    async def _run_and_decrement(state, url, goal, uid, vp):
         try:
             if _check_demo_mode():
                 await _demo_run(state, url, goal)
             else:
-                await run_benchmark(state, url, goal)
+                await run_benchmark(state, url, goal, viewport=vp)
         finally:
             _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
 
-    task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id))
+    task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id, viewport))
     _run_tasks[run_id] = task
     task.add_done_callback(lambda _: _run_tasks.pop(run_id, None))
 

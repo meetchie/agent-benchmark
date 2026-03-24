@@ -168,7 +168,7 @@ async def _take_screenshot(agent) -> Optional[str]:
         return None
 
 
-async def run_benchmark(state: RunState, url: str, goal: str) -> None:
+async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | None = None) -> None:
     """
     Run a BrowserUse agent for the benchmark and update state with each step.
 
@@ -213,11 +213,13 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
         full_goal = f"Go to {url}\n\n{goal}"
 
         # Clean browser profile — no saved cookies, location, or login state
+        # Viewport matches the viewer's screenshot container size
         browser_profile = BrowserProfile(
             user_data_dir=None,
             headless=False,
             keep_alive=False,
             permissions=[],
+            viewport=viewport or {"width": 1280, "height": 720},
         )
 
         agent = Agent(

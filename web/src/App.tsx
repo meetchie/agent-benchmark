@@ -230,7 +230,12 @@ export default function App() {
     setView("running");
 
     try {
-      const data = await startBenchmark(url, selectedTask.goal, token);
+      // Compute the screenshot container size to match the viewer's browser
+      // Layout: h-screen, minus header (~48px), minus padding (16*2), minus gap (16)
+      // Width: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
+      const vpWidth = Math.round(window.innerWidth - 300 - 16 * 2 - 16 - 4);
+      const vpHeight = Math.round(window.innerHeight * 0.55);
+      const data = await startBenchmark(url, selectedTask.goal, token, { width: vpWidth, height: vpHeight });
       currentRunIdRef.current = data.run_id;
       startPolling(data.run_id);
     } catch (e) {
