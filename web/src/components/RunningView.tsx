@@ -44,7 +44,8 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[300px] shrink-0">
+    <div className="w-[300px] shrink-0 flex flex-col gap-4">
+      {/* Stats card */}
       <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex flex-col" style={{ height: "45vh" }}>
         {/* Site + task info */}
         <div className="px-4 py-4 border-b border-slate-100">
@@ -74,6 +75,29 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
         <div className="px-4 py-4 flex justify-between items-baseline flex-1">
           <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
           <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
+        </div>
+      </div>
+
+      {/* CTA card */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <p className="text-xs text-slate-500 mb-3">Want your site to work seamlessly with AI agents?</p>
+        <div className="flex flex-col gap-2">
+          <a
+            href="https://rindler.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2 text-xs font-semibold text-center hover:bg-[#2f3a8a] transition-colors"
+          >
+            Check out Rindler →
+          </a>
+          <a
+            href="https://cal.com/example/demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-2 border-slate-300 bg-white text-slate-700 py-2 text-xs font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] transition-colors"
+          >
+            Book a Demo →
+          </a>
         </div>
       </div>
     </div>
