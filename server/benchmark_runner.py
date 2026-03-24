@@ -240,29 +240,68 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     _AGENT_TIMEOUT = 180  # 3 minutes
 
     timed_out = False
+    bb = None        # Browserbase client (for session cleanup in finally)
+    bb_session = None
     try:
-        from browser_use.browser.profile import BrowserProfile
-
         llm = get_llm_by_name("openai_gpt-4o")
 
         # Prepend the target URL to the goal so the agent navigates there first
         full_goal = f"Go to {url}\n\n{goal}"
 
-        # Clean browser profile — no saved cookies, location, or login state
-        # Viewport matches the viewer's screenshot container size
-        browser_profile = BrowserProfile(
-            user_data_dir=None,
-            headless=False,
-            keep_alive=False,
-            permissions=[],
-            viewport=viewport or {"width": 1280, "height": 720},
-        )
+        provider = _get_browser_provider()
 
-        agent = Agent(
-            task=full_goal,
-            llm=llm,
-            browser_profile=browser_profile,
-        )
+        if provider == "browserbase":
+            _validate_browser_config()
+            from browserbase import Browserbase
+            from browserbase._exceptions import RateLimitError
+
+            bb = Browserbase(api_key=os.getenv("BROWSERBASE_API_KEY"))
+            bb_project = os.getenv("BROWSERBASE_PROJECT_ID")
+
+            try:
+                bb_session = bb.sessions.create(
+                    project_id=bb_project,
+                    browser_settings={"record_session": True},
+                )
+            except RateLimitError:
+                # Hit concurrent session limit — release stale sessions and retry
+                logging.warning("Browserbase concurrent session limit hit, releasing stale sessions")
+                try:
+                    for s in bb.sessions.list():
+                        bb.sessions.update(id=s.id, project_id=bb_project, status="REQUEST_RELEASE")
+                    await asyncio.sleep(2)
+                except Exception:
+                    pass
+                bb_session = bb.sessions.create(
+                    project_id=bb_project,
+                    browser_settings={"record_session": True},
+                )
+
+            logging.info("Browserbase session: %s", bb_session.id)
+
+            agent = Agent(
+                task=full_goal,
+                llm=llm,
+                browserbase_api_key=os.getenv("BROWSERBASE_API_KEY"),
+                browserbase_project_id=bb_project,
+                browserbase_session_id=bb_session.id,
+            )
+        else:
+            # Local Playwright (requires a display — headed mode)
+            from browser_use.browser.profile import BrowserProfile
+
+            browser_profile = BrowserProfile(
+                user_data_dir=None,
+                headless=False,
+                keep_alive=False,
+                permissions=[],
+                viewport=viewport or {"width": 1280, "height": 720},
+            )
+            agent = Agent(
+                task=full_goal,
+                llm=llm,
+                browser_profile=browser_profile,
+            )
 
         try:
             history = await asyncio.wait_for(
@@ -345,3 +384,14 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.status = "error"
         state.message = str(e)[:200]
         state.result_state = "error"
+    finally:
+        # Release Browserbase session to free quota
+        if bb and bb_session:
+            try:
+                bb.sessions.update(
+                    id=bb_session.id,
+                    project_id=os.getenv("BROWSERBASE_PROJECT_ID"),
+                    status="REQUEST_RELEASE",
+                )
+            except Exception as e:
+                logging.debug("Browserbase session release failed: %s", e)
