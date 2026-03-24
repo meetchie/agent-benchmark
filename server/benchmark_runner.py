@@ -205,15 +205,25 @@ async def run_benchmark(state: RunState, url: str, goal: str) -> None:
 
     timed_out = False
     try:
+        from browser_use.browser.profile import BrowserProfile
+
         llm = get_llm_by_name("openai_gpt-4o")
 
         # Prepend the target URL to the goal so the agent navigates there first
         full_goal = f"Go to {url}\n\n{goal}"
 
+        # Clean browser profile — no saved cookies, location, or login state
+        browser_profile = BrowserProfile(
+            user_data_dir=None,
+            headless=False,
+            keep_alive=False,
+            permissions=[],
+        )
+
         agent = Agent(
             task=full_goal,
             llm=llm,
-            # No Browserbase keys → uses local Playwright browser
+            browser_profile=browser_profile,
         )
 
         try:
