@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
+import { formatTimer } from "../lib/utils";
 
 interface RunningHeaderProps {
   isRunning: boolean;
+  elapsedMs: number;
+  totalMs?: number;
   onNewTest: () => void;
   remainingRuns?: number;
   resetsIn?: number;
@@ -50,6 +53,8 @@ function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 
 export function RunningHeader({
   isRunning,
+  elapsedMs,
+  totalMs,
   onNewTest,
   remainingRuns,
   resetsIn,
@@ -69,6 +74,9 @@ export function RunningHeader({
     onNewTest();
   };
 
+  // Show server time when done; live counter once first step has arrived (elapsedMs > 0); blank while connecting
+  const displayTime = totalMs ? formatTimer(totalMs) : elapsedMs > 0 ? formatTimer(elapsedMs) : "";
+
   return (
     <>
       <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 sm:py-3">
@@ -82,6 +90,11 @@ export function RunningHeader({
             <span className="text-xs sm:text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {displayTime && (
+              <span className={`text-xs font-semibold ${isRunning ? "text-[#3c49ad]" : "text-slate-500"}`}>
+                {isRunning ? "RUNNING " : ""}{displayTime}
+              </span>
+            )}
             {/* Runs remaining — hidden on mobile, shown in sub-bar */}
             {remainingRuns !== undefined && remainingRuns > 0 && (
               <span className="hidden sm:inline text-xs text-slate-500">

@@ -13,31 +13,27 @@ function formatCost(inputTokens: number, outputTokens: number): string {
   return "$" + cost.toFixed(2);
 }
 
-function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string; taskLabel: string; steps: StepRecord[]; isRunning: boolean; finalMs?: number }) {
-  const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+function LiveStats({
+  url, taskLabel, steps, elapsedMs, finalMs,
+  finalInputTokens, finalOutputTokens,
+}: {
+  url: string;
+  taskLabel: string;
+  steps: StepRecord[];
+  elapsedMs: number;
+  finalMs?: number;
+  finalInputTokens?: number;
+  finalOutputTokens?: number;
+}) {
+  // Snap to real server time when done, otherwise show shared live counter
+  const displayMs = finalMs ?? elapsedMs;
 
-  useEffect(() => {
-    if (isRunning) {
-      setElapsed(0);
-      intervalRef.current = setInterval(() => {
-        setElapsed((prev) => prev + 1000);
-      }, 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning]);
-
-  // Smooth counter while running, snap to real data when done
-  const displayMs = finalMs ?? elapsed;
-
-  // Estimate tokens from steps (rough: ~3000 tokens per step for GPT-4o)
-  const estimatedTokens = steps.length * 3000;
-  const estimatedCost = formatCost(estimatedTokens * 0.8, estimatedTokens * 0.2);
+  // Use real token data when available, fall back to rough estimate
+  const hasRealTokens = finalInputTokens !== undefined && finalOutputTokens !== undefined;
+  const displayInputTokens = hasRealTokens ? finalInputTokens! : Math.round(steps.length * 3000 * 0.8);
+  const displayOutputTokens = hasRealTokens ? finalOutputTokens! : Math.round(steps.length * 3000 * 0.2);
+  const displayTotalTokens = displayInputTokens + displayOutputTokens;
+  const displayCost = formatCost(displayInputTokens, displayOutputTokens);
 
   const domain = (() => {
     try { return new URL(url).hostname.replace("www.", ""); }
@@ -47,8 +43,8 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   const statItems = [
     { label: "Time", value: formatTimer(displayMs) },
     { label: "Steps", value: String(steps.length) },
-    { label: "Cost", value: steps.length > 0 ? estimatedCost : "—" },
-    { label: "Tokens", value: steps.length > 0 ? estimatedTokens.toLocaleString() : "—" },
+    { label: "Cost", value: steps.length > 0 ? (hasRealTokens ? displayCost : `~${displayCost}`) : "—" },
+    { label: "Tokens", value: steps.length > 0 ? (hasRealTokens ? displayTotalTokens.toLocaleString() : `~${displayTotalTokens.toLocaleString()}`) : "—" },
   ];
 
   return (
@@ -66,6 +62,7 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
               <span className="text-sm font-bold text-slate-900 font-mono">{s.value}</span>
             </div>
           ))}
+
         </div>
       </div>
 
@@ -146,6 +143,45 @@ export function RunningView({
   const isDone = !!summary || (!!errorMsg && !isRunning && !isAnalyzing);
   const showOverlayTrigger = isDone || isAnalyzing;
 
+  const finalMs = summary?.total_ms ?? analyzingStats?.total_ms;
+  const finalInputTokens = summary?.input_tokens ?? analyzingStats?.input_tokens;
+  const finalOutputTokens = summary?.output_tokens ?? analyzingStats?.output_tokens;
+
+  // Timer starts when first step arrives (server is ready), stops when server gives final time
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef<number>(0);
+  const timerStartedRef = useRef(false);
+
+  // Reset on each new run
+  useEffect(() => {
+    if (isRunning) {
+      timerStartedRef.current = false;
+      setElapsedMs(0);
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    }
+  }, [isRunning]);
+
+  // Start on first step
+  useEffect(() => {
+    if (steps.length === 1 && !timerStartedRef.current) {
+      timerStartedRef.current = true;
+      startedAtRef.current = Date.now();
+      intervalRef.current = setInterval(() => {
+        setElapsedMs(Date.now() - startedAtRef.current);
+      }, 500);
+    }
+  }, [steps.length]);
+
+  // Stop when server gives us the real duration
+  useEffect(() => {
+    if (finalMs && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalMs]);
+
   const [showOverlay, setShowOverlay] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -167,7 +203,11 @@ export function RunningView({
     <div className="h-screen bg-[#f0f4ff] flex flex-col overflow-hidden">
       <RunningHeader
         isRunning={isRunning}
-        onNewTest={onNewTest} remainingRuns={remainingRuns} resetsIn={resetsIn}
+        elapsedMs={elapsedMs}
+        totalMs={finalMs}
+        onNewTest={onNewTest}
+        remainingRuns={remainingRuns}
+        resetsIn={resetsIn}
       />
 
       {/* Desktop layout */}
@@ -206,10 +246,14 @@ export function RunningView({
             )}
           </div>
           <div className="flex-1 min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
-            <StepLog steps={steps} isRunning={isRunning} />
+            <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} />
           </div>
         </div>
-        <LiveStats url={url} taskLabel={taskLabel} steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
+        <LiveStats
+          url={url} taskLabel={taskLabel} steps={steps}
+          elapsedMs={elapsedMs} finalMs={finalMs}
+          finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens}
+        />
       </div>
 
       {/* Mobile layout */}
@@ -248,10 +292,10 @@ export function RunningView({
           )}
         </div>
         {/* Horizontal stats bar */}
-        <LiveStats url={url} taskLabel={taskLabel} steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
+        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens} />
         {/* Steps */}
         <div className="h-[200px] min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
-          <StepLog steps={steps} isRunning={isRunning} />
+          <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} />
         </div>
         {/* CTA card */}
         <div className="bg-white border-t-[3px] border-t-[#3c49ad] p-5">

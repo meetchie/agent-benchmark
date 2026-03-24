@@ -219,15 +219,25 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     from browser_use import Agent
     from browser_use.llm.models import get_llm_by_name
 
-    step_start_time: datetime = datetime.now()
     overall_start = datetime.now()
+    step_start_time: datetime = overall_start
+    prev_step_end_time: datetime = overall_start
 
     async def on_step_start(agent):
-        nonlocal step_start_time
+        nonlocal step_start_time, prev_step_end_time
         step_start_time = datetime.now()
+        # For the very first step, align the wall-clock anchor to when it actually started
+        if not state.steps:
+            prev_step_end_time = step_start_time
 
     async def on_step_end(agent):
-        elapsed_ms = int((datetime.now() - step_start_time).total_seconds() * 1000)
+        nonlocal prev_step_end_time
+        now = datetime.now()
+        # Step-to-step wall-clock time: includes LLM reasoning + action execution.
+        # For step 1 this equals the action time; for subsequent steps it also
+        # captures the inter-step thinking so that sum(elapsed_ms) ≈ total_ms.
+        elapsed_ms = int((now - prev_step_end_time).total_seconds() * 1000)
+        prev_step_end_time = now
         description = _format_action(agent)
         screenshot_b64 = await _take_screenshot(agent)
 

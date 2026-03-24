@@ -5,6 +5,7 @@ import { formatMs } from "../lib/utils";
 interface StepLogProps {
   steps: StepRecord[];
   isRunning: boolean;
+  totalMs?: number;
 }
 
 /* Layout: 16px left padding, then the line at 16px, dots centered on 16px, text starts at 32px */
@@ -14,7 +15,7 @@ const ACTIVE_DOT_SIZE = 10; // px (active dots)
 const DOT_OFFSET = LINE_LEFT - DOT_SIZE / 2; // 10px — centers dot on line
 const LINE_PAD = 8;   // px of gradient fade before first dot / after last dot
 
-export function StepLog({ steps, isRunning }: StepLogProps) {
+export function StepLog({ steps, isRunning, totalMs }: StepLogProps) {
   const currentStep = isRunning && steps.length > 0 ? steps[steps.length - 1] : null;
   const completedSteps = currentStep ? steps.slice(0, -1) : steps;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -71,8 +72,8 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Steps
         </span>
-        <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-          Duration
+        <span className="text-xs text-slate-400 font-mono">
+          {totalMs ? formatMs(totalMs) : ""}
         </span>
       </div>
 
