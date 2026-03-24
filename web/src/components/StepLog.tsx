@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { StepRecord } from "../lib/types";
 import { formatMs } from "../lib/utils";
 
@@ -9,67 +10,67 @@ interface StepLogProps {
 export function StepLog({ steps, isRunning }: StepLogProps) {
   const currentStep = isRunning && steps.length > 0 ? steps[steps.length - 1] : null;
   const completedSteps = currentStep ? steps.slice(0, -1) : steps;
-  const totalMs = steps.reduce((sum, s) => sum + s.elapsed_ms, 0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new steps arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [steps.length]);
 
   return (
-    <div className="space-y-3">
-      {/* Current step — highlighted card, always at top */}
-      {currentStep && (
-        <div className="border-2 border-[#3c49ad] bg-[#f0f4ff] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <svg
-              className="animate-spin h-4 w-4 text-[#3c49ad] shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-sm font-medium text-[#3c49ad]">
-              Step {currentStep.step}
-            </span>
-            <span className="text-sm text-slate-700">{currentStep.description}</span>
-          </div>
-        </div>
-      )}
+    <div className="relative h-full overflow-hidden">
+      {/* Top fade */}
+      <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
 
-      {/* Starting state — no steps yet */}
-      {steps.length === 0 && isRunning && (
-        <div className="border-2 border-[#3c49ad] bg-[#f0f4ff] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-[#3c49ad] animate-pulse shrink-0" />
-            <span className="text-sm text-slate-500">Starting agent...</span>
-          </div>
-        </div>
-      )}
+      {/* Scrollable timeline */}
+      <div ref={scrollRef} className="h-full overflow-y-auto px-2 py-5">
+        <div className="relative pl-8">
+          {/* Vertical line with gradient */}
+          <div
+            className="absolute left-[11px] top-0 bottom-0 w-0.5"
+            style={{
+              background: "linear-gradient(transparent 0%, #3c49ad 8%, #3c49ad 92%, transparent 100%)",
+            }}
+          />
 
-      {/* Completed steps — compact scrollable list */}
-      {completedSteps.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex justify-between">
-            <span>{isRunning ? "Completed Steps" : "Steps"}</span>
-            <span className="text-slate-400">Total: {formatMs(totalMs)}</span>
-          </div>
-          <div className="max-h-40 overflow-y-auto">
-            <div className="divide-y divide-slate-100">
-              {completedSteps.map((step) => (
-                <div key={step.step} className="flex items-center gap-2 px-3 py-1.5">
-                  <svg className="h-3 w-3 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="flex-1 text-xs text-slate-600">
-                    <span className="text-slate-400 mr-1">#{step.step}</span>
-                    {step.description}
-                  </span>
-                  <span className="shrink-0 text-xs text-slate-400 font-mono">
-                    {formatMs(step.elapsed_ms)}
-                  </span>
-                </div>
-              ))}
+          {/* Starting state */}
+          {steps.length === 0 && isRunning && (
+            <div className="relative pb-4">
+              <div className="absolute -left-[13px] top-[6px] w-3 h-3 rounded-full bg-[#3c49ad] shadow-[0_0_0_4px_rgba(60,73,173,0.15)]" />
+              <span className="text-xs text-slate-400">Starting agent...</span>
             </div>
-          </div>
+          )}
+
+          {/* Completed steps */}
+          {completedSteps.map((step) => (
+            <div key={step.step} className="relative pb-5">
+              <div className="absolute -left-[13px] top-[6px] w-3 h-3 rounded-full border-2 border-[#3c49ad] bg-[#f0f4ff]" />
+              <div className="flex justify-between items-baseline gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] text-slate-400 mr-1">#{step.step}</span>
+                  <span className="text-xs text-slate-500">{step.description}</span>
+                </div>
+                <span className="shrink-0 text-[10px] text-slate-400 font-mono">{formatMs(step.elapsed_ms)}</span>
+              </div>
+            </div>
+          ))}
+
+          {/* Current step */}
+          {currentStep && (
+            <div className="relative pb-1">
+              <div className="absolute -left-[13px] top-[6px] w-3 h-3 rounded-full bg-[#3c49ad] shadow-[0_0_0_4px_rgba(60,73,173,0.15)]" />
+              <div>
+                <span className="text-[10px] text-[#3c49ad] font-semibold mr-1">#{currentStep.step}</span>
+                <span className="text-xs text-slate-900 font-medium">{currentStep.description}</span>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
