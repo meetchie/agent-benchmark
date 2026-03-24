@@ -23,56 +23,55 @@ from openai import OpenAI
 PROMPT_TEMPLATE = """You generate benchmark tasks that stress-test AI browser agents on real commerce websites. The goal is to expose the specific UI interactions where agents fail — NOT to test whether the agent is smart, but whether it can actually navigate the website's interface correctly.
 
 AGENT FAILURE PATTERNS (design tasks that trigger these):
-1. PRODUCT DISAMBIGUATION: Agents blindly click the first search result instead of finding the correct variant. They confuse "organic" with "regular", "bagged" with "loose", "2%" with "whole", "diet" with "regular".
-2. QUANTITY MANIPULATION: Agents can't use quantity +/- buttons, can't type into small quantity fields, or set wrong amounts. They often leave quantity at 1 when told to add more.
-3. VARIANT SELECTION: Agents fail on size/color pickers — especially color swatches (not dropdowns), size matrices, and options that only appear after selecting another option (e.g., color must be selected before size shows).
-4. MULTI-ITEM CART BUILDING: Agents add one item successfully but fail to navigate BACK to continue shopping. They get stuck on cart/checkout pages or lose context when returning to browse.
-5. CUSTOMIZATION FLOWS: Agents fail on pizza topping selectors, burger modification checkboxes, product personalization fields. They skip required customizations or add wrong ones.
-6. ADDRESS/LOCATION FORMS: Agents can't properly interact with address autocomplete (type, wait for dropdown, click suggestion), or they skip the location step entirely and get blocked.
-7. MODAL/POPUP HANDLING: Agents get stuck on cookie banners, newsletter popups, age verification gates, or "choose your store" modals that block the page.
-8. PAGINATION & SCROLL: Agents fail to scroll down to see more products, miss "Load More" buttons, or can't navigate beyond the first page of results.
-9. CONDITIONAL UI ELEMENTS: Agents miss elements that only appear after a prior action (e.g., "Add to Cart" button only visible after selecting a size, delivery time slots only shown after entering address).
-10. FILTER & SORT CONTROLS: Agents struggle with sidebar filters, multi-select checkboxes, price range sliders, and sort dropdowns that require precise interaction sequences.
+1. PRODUCT DISAMBIGUATION: Agents blindly click the first search result (often a sponsored ad) instead of scrolling to find the correct product. They confuse similar product names, miss size/pack-count differences, and pick the wrong variant from search results.
+2. QUANTITY MANIPULATION: Agents can't use quantity dropdowns or +/- buttons, or they leave quantity at 1 when told to add more.
+3. VARIANT SELECTION ON PRODUCT PAGE: Once on a product page, agents fail to select the right size, color, or style from dropdown menus, swatch selectors, or option tiles. They especially struggle when selecting one option changes available choices for another (e.g., selecting a color changes available sizes).
+4. MULTI-ITEM CART BUILDING: Agents add one item then get stuck. They click "Proceed to Checkout" instead of "Continue Shopping", or they can't navigate back to search for a second item. They lose context when returning to browse.
+5. FILTER & SORT: Agents struggle to use sidebar filters (brand, price range, ratings) or sort dropdowns to narrow results before selecting a product.
+6. MODAL/POPUP HANDLING: Agents get stuck on cookie banners, "Add warranty?" prompts, "Subscribe & Save" overlays, "Choose your delivery location" popups, or newsletter signup modals.
+7. SCROLL & PAGINATION: Agents only look at the first few search results and miss the right product further down. They fail to scroll or go to page 2.
+8. CONDITIONAL UI: Agents miss buttons or options that only appear after a prior selection (e.g., "Add to Cart" greyed out until size is selected).
 
 TASK DESIGN RULES:
 - Each task MUST trigger at least 2-3 of the failure patterns above
-- Pick SPECIFIC products the site actually sells — name exact items with exact attributes (sizes, colors, flavors, pack counts)
-- Create situations where the agent must find a particular variant among similar options. Specify what IS wanted with precise attributes (e.g., "Select the chisel tip markers in the 4-pack with assorted colors" rather than "must NOT pick the fine tip")
+- Use GENERIC product categories that definitely exist on the site. Search for categories like "running shoes", "wireless headphones", "yoga mat", "backpack" — things every major retailer sells. Then specify the variant (size, color, brand) the agent should pick from the results.
+- NEVER reference a specific brand+model that you aren't certain the site sells. Instead, describe what the agent should look for: "Find a yoga mat that is at least 6mm thick, in a purple or blue color" rather than "Find the Gaiam Essentials 1/2 inch mat in purple".
+- Create variant selection challenges: the agent must pick a specific size, color, or option from the product page, not just click "Add to Cart" on the first thing it finds.
 - Require specific QUANTITIES > 1 to test quantity manipulation
-- Require MULTIPLE items added in one session to test cart building flow
-- Include detailed VERIFICATION: agent must go to cart and confirm exact items, quantities, variants, and customizations
-- Use address "1 Times Square, New York, NY 10036" when needed
-- Do NOT require login or payment
+- Require MULTIPLE items from different categories in one session
+- Include detailed VERIFICATION: agent must go to cart and confirm items, quantities, and variants
+- Do NOT require login, payment, or setting a delivery address on sites like Amazon, Target, Walmart, Best Buy, Nike, or Costco (these don't require an address to add items to cart)
+- Only use "Set delivery address to 1 Times Square, New York, NY 10036" for sites that REQUIRE a location to browse products: Instacart, Shipt, DoorDash, Domino's, Chipotle
 - Keep labels under 60 characters
-- The label and goal text should read naturally, like instructions a human would give. NEVER use negative phrasing like "CRITICAL", "TRAP", "must NOT", "DO NOT pick", "DO NOT choose", "DO NOT select", "avoid", or "do not". Instead, ALWAYS specify what IS wanted clearly: "Select the 1/2 inch thick mat in purple" rather than "must NOT select the 1/4 inch, must NOT select black". When you need to disambiguate, use parenthetical clarification: "Find the 48-pack (not the 72-pack)" rather than "Do not choose the 72-pack". Use positive phrasing to specify the correct choice.
-- Do NOT use words like "trap", "trick", or "gotcha" in labels or goals
-- Only reference products and customizations that actually exist on the site. STRICT RULE: The following sites sell PACKAGED PRODUCTS ONLY and do NOT offer any food customization (no custom pizza, no custom cake, no build-your-own sandwich, no made-to-order food): Walmart, Costco, Instacart, Shipt, Amazon, Target, Best Buy, Nike. For these sites, "customization" means variant selection (size, color, quantity, flavor of a packaged item) — not building custom food. Only generate custom food tasks (pizza toppings, burrito fillings, etc.) for actual restaurant ordering sites like Domino's, Chipotle, or DoorDash. Never invent product categories or customization features the site does not have.
-- Steps should be specific enough that success/failure is unambiguous, but written in plain instructional language
+- Write naturally, like instructions a human would give. Use positive phrasing: "Find the 6-pack (not the 12-pack)" rather than "DO NOT select the 12-pack". Never use "CRITICAL", "TRAP", "must NOT", "DO NOT pick/choose/select". When disambiguating, use parenthetical clarification.
+- Only reference features the site actually has. Retail sites (Amazon, Target, Walmart, Best Buy, Nike, Costco) sell packaged products — no custom food, no made-to-order items, no food customization. Restaurant sites (Domino's, Chipotle, DoorDash) do have food customization.
+- Steps should be specific enough that success/failure is unambiguous
 
-GENERATE 3 TASKS AT THESE LEVELS:
+GENERATE 3 TASKS AT ESCALATING DIFFICULTY:
 
-LEVEL 1 — PRODUCT + VARIANT (5-7 steps):
-Search for a specific product. Navigate through results to find the CORRECT variant (not just first result). Select specific size/color/option. Set quantity > 1. Add to cart. Verify correct item with correct options in cart.
+TASK 1 — SINGLE ITEM, SPECIFIC VARIANT (5-7 steps):
+Search for a product category. From the results, find a product with specific attributes (not the first result — the agent must scroll or filter). On the product page, select a specific variant (size/color/style). Set quantity > 1. Add to cart. Go to cart and verify the correct item, variant, and quantity.
 
-LEVEL 2 — CUSTOMIZATION + SECOND ITEM (7-9 steps):
-Set delivery address (with autocomplete interaction). Find a product that requires customization or variant selection. Complete customization with specific choices. Add to cart. Navigate BACK to shopping. Find and add a completely different product. Verify BOTH items in cart with correct details.
+TASK 2 — TWO ITEMS, DIFFERENT CATEGORIES (8-10 steps):
+Search for a product. Navigate results, pick the right one, select a variant (size/color). Set quantity > 1. Add to cart. Go BACK to shopping (not checkout). Search for a completely different product in another category. Select its variant. Add to cart. Go to cart. Verify both items are present with correct variants and quantities.
 
-LEVEL 3 — FULL WORKFLOW (9-12 steps):
-Set delivery address. Navigate to a specific section. Add a product with a specific variant — the agent must look past similar options to find the right one (e.g., "the 1lb bag" among 1lb, 2lb, and 5lb options). Set quantity to a specific number > 1. Add to cart. Go back and search for a second product in a different category. This product requires selecting from a set of options (size, color, flavor, etc.). Add to cart. Go to cart. Verify: correct 2 products, correct quantities, correct variants/options, correct customizations. Report the subtotal.
+TASK 3 — COMPLEX MULTI-STEP WITH FILTERS (10-13 steps):
+Search for a product category. Use a filter or sort option to narrow results (e.g., filter by brand, price range, or rating). Find the right product among filtered results. Select multiple variant options (e.g., size AND color). Set quantity > 1. Add to cart. Return to shopping. Search for a second product in a different category. Use a different filter. Select its variant. Add to cart. Go to cart. Verify both items with all variant details and quantities correct.
 
 EXAMPLES:
 
-Example 1 (Amazon — LEVEL 1):
-  label: "Add 3 chisel-tip Expo marker packs to cart"
+Example 1 (Amazon — TASK 1):
+  label: "Add 3 specific dry erase markers to cart"
   goal: |
-    Search for "Expo dry erase markers".
-    From the results, find the "EXPO Low-Odor Dry Erase Markers, Chisel Tip" in the 4-pack with assorted colors (not single color packs, not the 8-pack or 12-pack, and not fine tip or ultra-fine).
+    Search for "dry erase markers".
+    Scroll through the results to find a chisel tip marker set (not fine tip or ultra-fine). Look for a 4-pack with assorted colors (not a single-color pack, not an 8-pack or 12-pack).
     Click on the correct product.
-    On the product page, set quantity to 3.
-    Click "Add to Cart".
-    VERIFY: Go to cart. Confirm it shows EXPO markers, Chisel Tip, 4-pack assorted colors, quantity 3.
+    On the product page, if there are style or size options, make sure "Chisel Tip" and "4-pack" are selected.
+    Set quantity to 3.
+    Click "Add to Cart". If a "Subscribe & Save" or warranty prompt appears, dismiss it and choose one-time purchase.
+    Go to cart. Confirm it shows chisel tip markers, 4-pack assorted colors, quantity 3.
 
-Example 2 (Domino's — LEVEL 2):
+Example 2 (Domino's — TASK 2):
   label: "Order a custom pizza and cinnamon twists"
   goal: |
     Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete dropdown, select the first suggestion, and confirm.
@@ -84,24 +83,24 @@ Example 2 (Domino's — LEVEL 2):
     Navigate back to the menu (do not go to checkout).
     Find the "Sides" or "Bread" section.
     Add "Cinnamon Bread Twists" (not regular Bread Twists or Parmesan).
-    VERIFY: Go to cart/order summary. Confirm: 1 Medium Hand Tossed pizza with exactly Pepperoni + Green Peppers + Black Olives, and 1 Cinnamon Bread Twists. Should be exactly 2 items.
+    Go to cart/order summary. Confirm: 1 Medium Hand Tossed pizza with exactly Pepperoni + Green Peppers + Black Olives, and 1 Cinnamon Bread Twists. Should be exactly 2 items.
 
-Example 3 (Instacart — LEVEL 3):
-  label: "Build a 3-item grocery cart from one store"
+Example 3 (Amazon — TASK 3):
+  label: "Build a filtered cart with headphones and a backpack"
   goal: |
-    Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete and select the first suggestion.
-    When stores load, select the first major grocery store available.
-    Search for "Granny Smith Apples".
-    Find loose individual Granny Smith apples (not a pre-bagged item like "3lb bag" or "5ct bag"). Select the individual/per-lb option.
-    Set quantity to 6 individual apples (or approximately 3 lbs if sold by weight).
+    Search for "wireless headphones".
+    Use the sidebar filters to select "4 Stars & Up" under Customer Reviews.
+    From the filtered results, find an over-ear (not in-ear or on-ear) Bluetooth headphone. Click on it.
+    On the product page, select the black color option if available.
+    Set quantity to 1.
+    Click "Add to Cart". Dismiss any warranty or accessory prompts.
+    Click "Continue Shopping" or navigate back to the Amazon homepage.
+    Search for "laptop backpack".
+    Sort results by "Price: Low to High".
+    Find a backpack that fits at least a 15-inch laptop (check the title or description for laptop size). Click on it.
+    On the product page, select a gray or black color if available. Set quantity to 2.
     Add to cart.
-    Search for "Milk".
-    Find a gallon of whole milk. It should say "Whole" (not 2%, Skim, Fat-Free, or Organic unless that's the only whole milk option).
-    Add 1 gallon to cart.
-    Search for "Advil".
-    Find Advil (Ibuprofen) in tablet or caplet form (not Liqui-Gels or Advil PM). Select the smallest pack size available (e.g., 24ct or 50ct, not 100ct+).
-    Add to cart.
-    VERIFY: Go to cart. Confirm exactly 3 distinct products: (1) Granny Smith Apples, qty 6 or ~3lbs, (2) Whole Milk, 1 gallon, (3) Advil tablets/caplets, smallest size. All from the same store.
+    Go to cart. Verify: (1) over-ear wireless headphones in black, quantity 1, and (2) laptop backpack in gray or black, quantity 2.
 
 IMPORTANT: This benchmark is ONLY for commerce/transactional websites. If the website is NOT a commerce site, respond with:
 {{"error": "This website is not a commerce or transactional site. The benchmark is designed for e-commerce, food delivery, grocery, and similar shopping/ordering websites."}}
