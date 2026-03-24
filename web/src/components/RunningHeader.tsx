@@ -71,38 +71,52 @@ export function RunningHeader({
 
   return (
     <>
-      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <button onClick={handleLeave} className="flex items-center gap-2.5 shrink-0">
-            <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />
-            <span className="text-lg font-semibold text-slate-900">Rindler</span>
-          </button>
-          <span className="text-slate-400 font-light shrink-0">|</span>
-          <span className="text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {remainingRuns !== undefined && remainingRuns > 0 && (
-            <span className="text-xs text-slate-500">
-              {remainingRuns === 1 && (
-                <svg className="inline w-3.5 h-3.5 text-amber-500 mr-1 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                </svg>
-              )}
-              <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
-            </span>
-          )}
-          {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (
-            <span className="text-xs font-semibold text-red-500">
-              Runs reset in {formatResetTime(resetsIn)}
-            </span>
-          )}
-          <button
-            onClick={handleLeave}
-            className="text-sm font-semibold text-[#3c49ad] border-2 border-[#3c49ad] px-5 py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors"
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 sm:py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <button onClick={handleLeave} className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+              <img src="/rindler-logo.png" alt="Rindler" className="h-7 sm:h-9 w-auto" />
+              <span className="text-base sm:text-lg font-semibold text-slate-900">Rindler</span>
+            </button>
+            <span className="text-slate-400 font-light shrink-0">|</span>
+            <span className="text-xs sm:text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Runs remaining — hidden on mobile, shown in sub-bar */}
+            {remainingRuns !== undefined && remainingRuns > 0 && (
+              <span className="hidden sm:inline text-xs text-slate-500">
+                {remainingRuns === 1 && (
+                  <svg className="inline w-3.5 h-3.5 text-amber-500 mr-1 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
+              </span>
+            )}
+            {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (
+              <span className="hidden sm:inline text-xs font-semibold text-red-500">
+                Runs reset in {formatResetTime(resetsIn)}
+              </span>
+            )}
+            <button
+              onClick={handleLeave}
+              className="text-xs sm:text-sm font-semibold text-[#3c49ad] border-2 border-[#3c49ad] px-3 sm:px-5 py-1 sm:py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors whitespace-nowrap"
           >
             New Test
           </button>
+          </div>
         </div>
+        {/* Mobile sub-bar for remaining runs */}
+        {remainingRuns !== undefined && remainingRuns > 0 && (
+          <div className="sm:hidden text-[10px] text-slate-400 mt-1 text-right">
+            <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
+          </div>
+        )}
+        {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (
+          <div className="sm:hidden text-[10px] font-semibold text-red-500 mt-1 text-right">
+            Runs reset in {formatResetTime(resetsIn)}
+          </div>
+        )}
       </header>
 
       {showConfirm && (

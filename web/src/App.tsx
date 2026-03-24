@@ -271,10 +271,15 @@ export default function App() {
 
     try {
       // Compute the screenshot container size to match the viewer's browser
-      // Layout: h-screen, minus header (~48px), minus padding (16*2), minus gap (16)
-      // Width: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
-      const vpWidth = Math.round(window.innerWidth - 300 - 16 * 2 - 16 - 4);
-      const vpHeight = Math.round(window.innerHeight * 0.55);
+      // Mobile (< 768px): full width minus padding, no sidebar
+      // Desktop: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
+      const isMobile = window.innerWidth < 768;
+      const vpWidth = isMobile
+        ? Math.round(window.innerWidth - 16 * 2)
+        : Math.round(window.innerWidth - 300 - 16 * 2 - 16 - 4);
+      const vpHeight = isMobile
+        ? Math.round(window.innerHeight * 0.45)
+        : Math.round(window.innerHeight * 0.55);
       const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight }) as { run_id: string; remaining?: number; resets_in?: number };
       currentRunIdRef.current = data.run_id;
       if (data.remaining !== undefined) setQuota({ remaining: data.remaining, resets_in: data.resets_in ?? 0 });

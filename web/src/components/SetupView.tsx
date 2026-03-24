@@ -60,7 +60,7 @@ export function SetupView({
   }, [tasks.length, tasksLoading]);
 
   return (
-    <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
+    <div className="min-h-screen bg-[#f0f4ff] flex flex-col overflow-x-hidden">
       <BenchmarkHeader onSignInClick={onSignInClick} />
 
       <div

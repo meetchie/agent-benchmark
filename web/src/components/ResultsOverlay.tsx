@@ -162,16 +162,16 @@ export function ResultsOverlay({
               </button>
             </div>
 
-            <div className="bg-[#f0f4ff] border border-[#3c49ad]/10 p-5 text-center">
-              <div className="text-sm text-slate-600 mb-3">Want to make your site work seamlessly with AI agents?</div>
-              <div className="flex gap-3">
+            <div className="bg-[#f0f4ff] border border-[#3c49ad]/10 p-4 sm:p-5 text-center">
+              <div className="text-xs sm:text-sm text-slate-600 mb-3">Want to make your site work seamlessly with AI agents?</div>
+              <div className="flex gap-2 sm:gap-3">
                 <a href="https://rindler.ai" target="_blank" rel="noopener noreferrer"
-                  className="flex-1 border-2 border-transparent bg-[#3c49ad] text-white py-2.5 text-sm font-semibold text-center hover:bg-[#5563c9]">
+                  className="flex-1 border-2 border-transparent bg-[#3c49ad] text-white py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-center hover:bg-[#5563c9] whitespace-nowrap">
                   Check out Rindler →
                 </a>
                 <DemoModal>
                   <button
-                    className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad]">
+                    className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] whitespace-nowrap">
                     Book a Demo →
                   </button>
                 </DemoModal>
