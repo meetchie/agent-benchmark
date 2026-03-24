@@ -26,9 +26,9 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
   return (
     <div className="relative h-full overflow-hidden">
       {/* Top fade */}
-      <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none" />
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
 
       {/* Scrollable timeline */}
       <div ref={scrollRef} className="h-full overflow-y-auto py-10">
@@ -58,7 +58,7 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
           {completedSteps.map((step) => (
             <div key={step.step} className="relative pb-5">
               <div
-                className="absolute rounded-full border-2 border-[#3c49ad] bg-[#f0f4ff]"
+                className="absolute rounded-full border-2 border-[#3c49ad] bg-white"
                 style={{ left: DOT_OFFSET - 32, top: 4, width: DOT_SIZE, height: DOT_SIZE }}
               />
               <div className="flex justify-between items-baseline gap-2">
