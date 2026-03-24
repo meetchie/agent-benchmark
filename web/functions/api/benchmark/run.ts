@@ -7,6 +7,7 @@ import type { Env } from "../../env";
 interface RunRequest {
   url: string;
   goal: string;
+  label?: string;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -61,7 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         "X-User-Id": userId,
         "X-Internal-Key": context.env.INTERNAL_API_KEY || "",
       },
-      body: JSON.stringify({ url: body.url, goal: body.goal }),
+      body: JSON.stringify({ url: body.url, goal: body.goal, label: body.label || "" }),
       signal: AbortSignal.timeout(5000),
     });
 

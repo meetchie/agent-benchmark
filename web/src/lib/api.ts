@@ -4,6 +4,7 @@ import type { StatusResponse, Task } from "./types";
 export async function startBenchmark(
   url: string,
   goal: string,
+  label: string,
   token: string,
   viewport?: { width: number; height: number }
 ): Promise<{ run_id: string }> {
@@ -13,7 +14,7 @@ export async function startBenchmark(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ url, goal, ...(viewport && { viewport_width: viewport.width, viewport_height: viewport.height }) }),
+    body: JSON.stringify({ url, goal, label, ...(viewport && { viewport_width: viewport.width, viewport_height: viewport.height }) }),
   });
   if (res.status === 429) {
     const data = await res.json().catch(() => ({}));
