@@ -12,7 +12,7 @@ function formatCost(inputTokens: number, outputTokens: number): string {
   return "$" + cost.toFixed(2);
 }
 
-function LiveStats({ steps, isRunning, finalMs }: { steps: StepRecord[]; isRunning: boolean; finalMs?: number }) {
+function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string; taskLabel: string; steps: StepRecord[]; isRunning: boolean; finalMs?: number }) {
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -38,8 +38,19 @@ function LiveStats({ steps, isRunning, finalMs }: { steps: StepRecord[]; isRunni
   const estimatedTokens = steps.length * 3000;
   const estimatedCost = formatCost(estimatedTokens * 0.8, estimatedTokens * 0.2);
 
+  const domain = (() => {
+    try { return new URL(url).hostname.replace("www.", ""); }
+    catch { return url; }
+  })();
+
   return (
     <div className="w-[220px] shrink-0 space-y-4">
+      {/* Site + task info */}
+      <div className="bg-[#f0f4ff] border border-[#3c49ad]/20 p-4">
+        <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{taskLabel}</p>
+      </div>
+
       {/* Time elapsed */}
       <div className="border-2 border-slate-200 bg-white p-4">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time Elapsed</p>
@@ -103,7 +114,7 @@ export function RunningView({
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
       <RunningHeader
-        url={url} taskLabel={taskLabel} isRunning={isRunning}
+        isRunning={isRunning}
         totalMs={summary?.total_ms} onNewTest={onNewTest} remainingRuns={remainingRuns}
       />
 
@@ -126,7 +137,7 @@ export function RunningView({
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
-        <LiveStats steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
+        <LiveStats url={url} taskLabel={taskLabel} steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
       </div>
 
       {/* View Results button */}

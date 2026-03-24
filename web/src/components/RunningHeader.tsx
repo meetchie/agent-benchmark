@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { formatTimer } from "../lib/utils";
 
 interface RunningHeaderProps {
-  url: string;
-  taskLabel: string;
   isRunning: boolean;
   totalMs?: number;
   onNewTest: () => void;
@@ -45,8 +43,6 @@ function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
 }
 
 export function RunningHeader({
-  url,
-  taskLabel,
   isRunning,
   totalMs,
   onNewTest,
@@ -73,13 +69,6 @@ export function RunningHeader({
     };
   }, [isRunning]);
 
-  let domain = url;
-  try {
-    domain = new URL(url).hostname.replace("www.", "");
-  } catch {
-    // keep original
-  }
-
   const displayTime = isRunning ? formatTimer(elapsed) : totalMs ? formatTimer(totalMs) : "";
 
   const handleLeave = () => {
@@ -105,10 +94,6 @@ export function RunningHeader({
           </button>
           <span className="text-slate-400 font-light shrink-0">|</span>
           <span className="text-sm font-medium text-[#3c49ad] shrink-0">Benchmark</span>
-          <span className="text-slate-400 font-light shrink-0">|</span>
-          <span className="text-xs text-slate-500 truncate">{domain}</span>
-          <span className="text-slate-300 shrink-0">|</span>
-          <span className="text-xs text-slate-500 truncate">{taskLabel}</span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {displayTime && (
