@@ -135,7 +135,7 @@ export function RunningView({
               </div>
             )}
           </div>
-          <div className="flex-1 min-h-0 border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex-1 min-h-0 border-2 border-slate-200 bg-white overflow-hidden">
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>

@@ -23,15 +23,26 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
     }
   }, [steps.length]);
 
-  return (
-    <div className="relative h-full overflow-hidden">
-      {/* Top fade */}
-      <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none" />
-      {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
+  const totalMs = steps.reduce((sum, s) => sum + s.elapsed_ms, 0);
 
-      {/* Scrollable timeline */}
-      <div ref={scrollRef} className="h-full overflow-y-auto py-10">
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          {isRunning ? "Completed Steps" : "Steps"}
+        </span>
+        <span className="text-xs text-slate-400 font-mono">
+          {formatMs(totalMs)}
+        </span>
+      </div>
+
+      {/* Timeline */}
+      <div className="relative flex-1 overflow-hidden">
+        {/* Bottom fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
+
+        <div ref={scrollRef} className="h-full overflow-y-auto py-4">
         <div className="relative" style={{ paddingLeft: 32 }}>
           {/* Vertical line — centered at LINE_LEFT */}
           <div
@@ -84,6 +95,7 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
