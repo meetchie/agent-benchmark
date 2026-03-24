@@ -45,7 +45,7 @@ export function URLInput({ value, onChange, onSubmit, onStop, loading, disabled 
         {loading ? (
           <button
             onClick={onStop}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-slate-900 hover:bg-slate-700 transition-colors"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-[#3c49ad] hover:bg-[#2f3a8a] transition-colors"
             title="Stop generating"
           >
             <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="currentColor">
