@@ -86,6 +86,11 @@ async def lifespan(app: FastAPI):
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
+
+    # Fail fast if browser provider is misconfigured
+    from benchmark_runner import _validate_browser_config
+    _validate_browser_config()
+
     yield
 
 
@@ -145,7 +150,11 @@ class GenerateTasksRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"ok": True}
+    from benchmark_runner import _get_browser_provider
+    return {
+        "ok": True,
+        "browser_provider": _get_browser_provider(),
+    }
 
 
 async def _demo_run(state: RunState, url: str, goal: str):
