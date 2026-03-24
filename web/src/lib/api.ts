@@ -39,12 +39,14 @@ export async function cancelBenchmark(runId: string): Promise<void> {
 }
 
 export async function generateTasks(
-  url: string
+  url: string,
+  signal?: AbortSignal
 ): Promise<{ tasks: Task[] }> {
   const res = await fetch("/api/benchmark/generate-tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
+    signal,
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

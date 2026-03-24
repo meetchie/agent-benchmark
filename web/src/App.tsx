@@ -59,6 +59,8 @@ export default function App() {
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
   const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
 
+  const taskGenAbortRef = useRef<AbortController | null>(null);
+
   const handleUrlSubmit = useCallback(async () => {
     const trimmed = url.trim();
     if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
@@ -71,17 +73,36 @@ export default function App() {
     setTasks([]);
     setTaskId(null);
 
+    const abort = new AbortController();
+    taskGenAbortRef.current = abort;
+
     try {
-      const data = await generateTasks(trimmed);
-      setTasks(data.tasks);
+      const data = await generateTasks(trimmed, abort.signal);
+      if (!abort.signal.aborted) {
+        setTasks(data.tasks);
+      }
     } catch (e) {
-      setTasksError(
-        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
-      );
+      if (!abort.signal.aborted) {
+        setTasksError(
+          e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+        );
+      }
     } finally {
-      setTasksLoading(false);
+      if (!abort.signal.aborted) {
+        setTasksLoading(false);
+      }
+      taskGenAbortRef.current = null;
     }
   }, [url, tasksLoading]);
+
+  const handleStopGenerate = useCallback(() => {
+    if (taskGenAbortRef.current) {
+      taskGenAbortRef.current.abort();
+      taskGenAbortRef.current = null;
+    }
+    setTasksLoading(false);
+    lastGeneratedUrlRef.current = "";
+  }, []);
 
   const handleRegenerateTasks = useCallback(async () => {
     const trimmed = url.trim();
@@ -287,6 +308,7 @@ export default function App() {
         url={url}
         onUrlChange={setUrl}
         onUrlSubmit={handleUrlSubmit}
+        onStopGenerate={handleStopGenerate}
         tasks={tasks}
         tasksLoading={tasksLoading}
         tasksError={tasksError}

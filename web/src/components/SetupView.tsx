@@ -10,6 +10,7 @@ interface SetupViewProps {
   url: string;
   onUrlChange: (v: string) => void;
   onUrlSubmit: () => void;
+  onStopGenerate: () => void;
   tasks: Task[];
   tasksLoading: boolean;
   tasksError: string | null;
@@ -26,6 +27,7 @@ export function SetupView({
   url,
   onUrlChange,
   onUrlSubmit,
+  onStopGenerate,
   tasks,
   tasksLoading,
   tasksError,
@@ -66,6 +68,8 @@ export function SetupView({
             value={url}
             onChange={onUrlChange}
             onSubmit={onUrlSubmit}
+            onStop={onStopGenerate}
+            loading={tasksLoading}
             disabled={runStatus === "running"}
           />
 
