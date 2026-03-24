@@ -26,10 +26,11 @@ _VALID_PROVIDERS = {"local", "browserbase"}
 def _get_browser_provider() -> str:
     """Return the configured browser provider ('local' or 'browserbase').
 
-    Reads BROWSER_PROVIDER env var. Defaults to 'local'.
-    Warns and falls back to 'local' for unrecognized values.
+    Reads BENCHMARK_BROWSER_PROVIDER env var. Defaults to 'local'.
+    Note: This is separate from the Go MCP server's BROWSER_PROVIDER env var
+    which controls the worker fleet's browser (local/cdp/browserbase).
     """
-    provider = os.getenv("BROWSER_PROVIDER", "local").lower().strip()
+    provider = os.getenv("BENCHMARK_BROWSER_PROVIDER", "local").lower().strip()
     if provider not in _VALID_PROVIDERS:
         logging.warning(
             "Unknown BROWSER_PROVIDER=%r, falling back to 'local'. "
