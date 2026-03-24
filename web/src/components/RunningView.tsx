@@ -44,35 +44,37 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[280px] shrink-0 flex flex-col gap-3 overflow-y-auto">
-      {/* Site + task card */}
-      <div className="bg-white border-2 border-slate-200 border-t-[3px] border-t-[#3c49ad] px-4 py-4">
-        <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
-        <p className="text-xs text-slate-400 mt-1 leading-relaxed">{taskLabel}</p>
-      </div>
+    <div className="w-[300px] shrink-0">
+      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex flex-col" style={{ height: "45vh" }}>
+        {/* Site + task info */}
+        <div className="px-4 py-4 border-b border-slate-100">
+          <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">{taskLabel}</p>
+        </div>
 
-      {/* Time */}
-      <div className="bg-white border-2 border-slate-200 px-4 py-3 flex justify-between items-baseline">
-        <span className="text-xs text-slate-400 uppercase tracking-wider">Time</span>
-        <span className="text-xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
-      </div>
+        {/* Time elapsed */}
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Time</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
+        </div>
 
-      {/* Steps */}
-      <div className="bg-white border-2 border-slate-200 px-4 py-3 flex justify-between items-baseline">
-        <span className="text-xs text-slate-400 uppercase tracking-wider">Steps</span>
-        <span className="text-xl font-bold text-slate-900 font-mono">{steps.length}</span>
-      </div>
+        {/* Steps completed */}
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Steps</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length}</span>
+        </div>
 
-      {/* Cost */}
-      <div className="bg-white border-2 border-slate-200 px-4 py-3 flex justify-between items-baseline">
-        <span className="text-xs text-slate-400 uppercase tracking-wider">Cost</span>
-        <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
-      </div>
+        {/* Estimated cost */}
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Cost</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
+        </div>
 
-      {/* Tokens */}
-      <div className="bg-white border-2 border-slate-200 px-4 py-3 flex justify-between items-baseline">
-        <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
-        <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
+        {/* Estimated tokens */}
+        <div className="px-4 py-4 flex justify-between items-baseline flex-1">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
+        </div>
       </div>
     </div>
   );
@@ -120,7 +122,6 @@ export function RunningView({
 
       {/* Running view — always visible */}
       <div className="flex-1 flex p-4 gap-4 overflow-hidden">
-        {/* Left: screenshot + timeline */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ height: "45vh", flexShrink: 0 }}>
             {screenshot ? (
@@ -138,7 +139,6 @@ export function RunningView({
             <StepLog steps={steps} isRunning={isRunning} />
           </div>
         </div>
-        {/* Right: stacked cards */}
         <LiveStats url={url} taskLabel={taskLabel} steps={steps} isRunning={isRunning} finalMs={summary?.total_ms ?? analyzingStats?.total_ms} />
       </div>
 
