@@ -44,7 +44,7 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[260px] shrink-0">
+    <div className="w-[300px] shrink-0">
       <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden">
         {/* Site + task info */}
         <div className="px-4 py-3.5 border-b border-slate-100">
@@ -123,7 +123,7 @@ export function RunningView({
       {/* Running view — always visible */}
       <div className="flex-1 flex p-4 gap-4 overflow-hidden">
         <div className="flex-1 flex flex-col gap-4 min-w-0">
-          <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ height: "50vh", flexShrink: 0 }}>
+          <div className="border-2 border-slate-200 bg-white overflow-hidden" style={{ height: "45vh", flexShrink: 0 }}>
             {screenshot ? (
               <img src={screenshot} alt="Agent screenshot" className="w-full h-full object-cover object-top" />
             ) : (
