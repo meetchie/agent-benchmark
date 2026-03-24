@@ -7,15 +7,19 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://localhost:8080")
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
-
-_HEADERS = {
-    "Content-Type": "application/json",
-    "X-Internal-Key": INTERNAL_API_KEY,
-}
-
 _TIMEOUT = aiohttp.ClientTimeout(total=5)
+
+
+def _get_headers() -> dict:
+    """Build request headers lazily so env vars are read after load_dotenv runs."""
+    return {
+        "Content-Type": "application/json",
+        "X-Internal-Key": os.getenv("INTERNAL_API_KEY", ""),
+    }
+
+
+def _get_go_server_url() -> str:
+    return os.getenv("GO_SERVER_URL", "http://localhost:8080")
 
 
 def _get_domain(url: str) -> str:
@@ -36,7 +40,7 @@ async def persist_run_start(
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             resp = await session.post(
-                f"{GO_SERVER_URL}/api/benchmark/runs",
+                f"{_get_go_server_url()}/api/benchmark/runs",
                 json={
                     "clerk_user_id": clerk_user_id,
                     "site_domain": _get_domain(url),
@@ -46,7 +50,7 @@ async def persist_run_start(
                     "agent_type": agent_type,
                     "agent_model": agent_model,
                 },
-                headers=_HEADERS,
+                headers=_get_headers(),
             )
             if resp.status == 201:
                 data = await resp.json()
@@ -64,7 +68,7 @@ async def persist_steps(run_id: str, steps: list[dict]) -> None:
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             await session.post(
-                f"{GO_SERVER_URL}/api/benchmark/runs/{run_id}/steps",
+                f"{_get_go_server_url()}/api/benchmark/runs/{run_id}/steps",
                 json=[
                     {
                         "step_number": s.get("step", s.get("step_number", 0)),
@@ -73,7 +77,7 @@ async def persist_steps(run_id: str, steps: list[dict]) -> None:
                     }
                     for s in steps
                 ],
-                headers=_HEADERS,
+                headers=_get_headers(),
             )
     except Exception:
         logger.warning("persist_steps: Go server unreachable", exc_info=True)
@@ -97,7 +101,7 @@ async def persist_run_completion(
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             await session.patch(
-                f"{GO_SERVER_URL}/api/benchmark/runs/{run_id}",
+                f"{_get_go_server_url()}/api/benchmark/runs/{run_id}",
                 json={
                     "status": status,
                     "result_state": result_state,
@@ -109,7 +113,7 @@ async def persist_run_completion(
                     "estimated_cost_usd": estimated_cost_usd,
                     "summary": summary,
                 },
-                headers=_HEADERS,
+                headers=_get_headers(),
             )
     except Exception:
         logger.warning("persist_run_completion: Go server unreachable", exc_info=True)
@@ -122,7 +126,7 @@ async def persist_phases(run_id: str, phases: list[dict]) -> None:
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             await session.post(
-                f"{GO_SERVER_URL}/api/benchmark/runs/{run_id}/phases",
+                f"{_get_go_server_url()}/api/benchmark/runs/{run_id}/phases",
                 json=[
                     {
                         "name": p.get("name", ""),
@@ -133,7 +137,7 @@ async def persist_phases(run_id: str, phases: list[dict]) -> None:
                     }
                     for p in phases
                 ],
-                headers=_HEADERS,
+                headers=_get_headers(),
             )
     except Exception:
         logger.warning("persist_phases: Go server unreachable", exc_info=True)
@@ -150,14 +154,14 @@ async def persist_tasks(
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             for task in tasks:
                 await session.post(
-                    f"{GO_SERVER_URL}/api/benchmark/tasks",
+                    f"{_get_go_server_url()}/api/benchmark/tasks",
                     json={
                         "clerk_user_id": clerk_user_id,
                         "site_domain": domain,
                         "label": task.get("label", ""),
                         "goal": task.get("goal", ""),
                     },
-                    headers=_HEADERS,
+                    headers=_get_headers(),
                 )
     except Exception:
         logger.warning("persist_tasks: Go server unreachable", exc_info=True)
