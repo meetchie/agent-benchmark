@@ -44,36 +44,36 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[300px] shrink-0">
-      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden">
+    <div className="w-[300px] shrink-0 flex flex-col">
+      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex-1 flex flex-col">
         {/* Site + task info */}
-        <div className="px-4 py-3.5 border-b border-slate-100">
+        <div className="px-4 py-4 border-b border-slate-100">
           <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">{taskLabel}</p>
         </div>
 
         {/* Time elapsed */}
-        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
           <span className="text-xs text-slate-400 uppercase tracking-wider">Time</span>
-          <span className="text-lg font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
         </div>
 
         {/* Steps completed */}
-        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
           <span className="text-xs text-slate-400 uppercase tracking-wider">Steps</span>
-          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length}</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length}</span>
         </div>
 
         {/* Estimated cost */}
-        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+        <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-baseline flex-1">
           <span className="text-xs text-slate-400 uppercase tracking-wider">Cost</span>
-          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
         </div>
 
         {/* Estimated tokens */}
-        <div className="px-4 py-2.5 flex justify-between items-baseline">
+        <div className="px-4 py-4 flex justify-between items-baseline flex-1">
           <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
-          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
+          <span className="text-xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
         </div>
       </div>
     </div>
