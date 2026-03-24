@@ -20,6 +20,42 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
 
 
+_VALID_PROVIDERS = {"local", "browserbase"}
+
+
+def _get_browser_provider() -> str:
+    """Return the configured browser provider ('local' or 'browserbase').
+
+    Reads BROWSER_PROVIDER env var. Defaults to 'local'.
+    Warns and falls back to 'local' for unrecognized values.
+    """
+    provider = os.getenv("BROWSER_PROVIDER", "local").lower().strip()
+    if provider not in _VALID_PROVIDERS:
+        logging.warning(
+            "Unknown BROWSER_PROVIDER=%r, falling back to 'local'. "
+            "Valid options: %s", provider, ", ".join(sorted(_VALID_PROVIDERS))
+        )
+        return "local"
+    return provider
+
+
+def _validate_browser_config() -> None:
+    """Validate that required env vars are set for the configured provider.
+
+    Raises ValueError if Browserbase is selected but keys are missing.
+    """
+    provider = _get_browser_provider()
+    if provider == "browserbase":
+        if not os.getenv("BROWSERBASE_API_KEY"):
+            raise ValueError(
+                "BROWSERBASE_API_KEY is required when BROWSER_PROVIDER=browserbase"
+            )
+        if not os.getenv("BROWSERBASE_PROJECT_ID"):
+            raise ValueError(
+                "BROWSERBASE_PROJECT_ID is required when BROWSER_PROVIDER=browserbase"
+            )
+
+
 @dataclass
 class StepRecord:
     step: int
