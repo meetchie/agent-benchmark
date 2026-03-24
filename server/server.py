@@ -126,6 +126,7 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
 class StartRequest(BaseModel):
     url: str
     goal: str
+    label: str = ""  # task label for persistence
     viewport_width: int | None = None
     viewport_height: int | None = None
 
@@ -239,6 +240,17 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
     run_id = str(uuid.uuid4())
     state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
     _runs[run_id] = state
+
+    # Fire-and-forget: persist run to Go server.
+    from persistence import persist_run_start
+    persisted_id = await persist_run_start(
+        run_id=run_id,
+        clerk_user_id=user_id,
+        url=req.url,
+        task_label=req.label,
+        task_goal=req.goal,
+    )
+    state.persisted_run_id = persisted_id  # may be None if Go server unavailable
 
     viewport = None
     if req.viewport_width and req.viewport_height:

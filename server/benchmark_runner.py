@@ -90,6 +90,8 @@ class RunState:
     total_tokens: int = 0
     phases: list[dict] = field(default_factory=list)
     goal: str = ""  # Stored so the judge can access it
+    persisted_run_id: str | None = None  # ID from Go server, None if persistence failed
+    agent_model: str = "gpt-4o"  # Model used by the agent, for cost computation
 
     def to_response(self) -> dict:
         """Serialize for API response. Only latest step includes screenshot_b64."""
@@ -395,3 +397,36 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 )
             except Exception as e:
                 logging.debug("Browserbase session release failed: %s", e)
+
+    # Persist results to Go server.
+    from persistence import persist_steps, persist_run_completion, persist_phases
+    from constants import COST_RATES
+
+    if state.persisted_run_id:
+        # Persist all steps (batch).
+        await persist_steps(state.persisted_run_id, [
+            {"step_number": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+            for s in state.steps
+        ])
+
+        # Compute cost.
+        model = getattr(state, 'agent_model', 'gpt-4o')
+        rates = COST_RATES.get(model, {"input": 2.50, "output": 10.00})
+        cost = (state.input_tokens * rates["input"] + state.output_tokens * rates["output"]) / 1_000_000
+
+        # Persist run completion.
+        await persist_run_completion(
+            run_id=state.persisted_run_id,
+            status=state.status,
+            result_state=state.result_state,
+            success=state.success,
+            total_ms=state.total_ms,
+            input_tokens=state.input_tokens,
+            output_tokens=state.output_tokens,
+            total_tokens=state.total_tokens,
+            estimated_cost_usd=cost,
+            summary=state.summary,
+        )
+
+        # Persist phases.
+        await persist_phases(state.persisted_run_id, state.phases)
