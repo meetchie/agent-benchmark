@@ -208,12 +208,85 @@ _NON_COMMERCE_DOMAINS = {
     "netflix.com", "spotify.com", "tiktok.com", "pinterest.com", "medium.com",
 }
 
+# Known commerce/transactional domains (SPAs that return thin HTML shells)
+_KNOWN_COMMERCE_DOMAINS = {
+    # Grocery & delivery
+    "shipt.com", "instacart.com", "kroger.com", "safeway.com", "wholefoods.com",
+    "albertsons.com", "freshdirect.com", "thrivemarket.com", "hungryroot.com",
+    "misfitsmarket.com", "sayweee.com", "imperfectfoods.com", "peapod.com",
+    "heb.com", "publix.com", "wegmans.com", "sprouts.com", "traderjoes.com",
+    "foodlion.com", "harristeeter.com", "vons.com", "acmemarkets.com",
+    "shaws.com",
+    # Food delivery aggregators
+    "doordash.com", "grubhub.com", "ubereats.com", "seamless.com",
+    "postmates.com", "caviar.com", "gopuff.com", "favor.com", "ezcater.com",
+    "slice.co", "chownow.com",
+    # Restaurant ordering (QSR / fast casual)
+    "dominos.com", "chipotle.com", "mcdonalds.com", "starbucks.com",
+    "papajohns.com", "pizzahut.com", "tacobell.com", "wendys.com", "bk.com",
+    "chickfila.com", "panerabread.com", "sweetgreen.com", "shakeshack.com",
+    "popeyes.com", "fiveguys.com", "dunkindonuts.com", "subway.com",
+    "wingstop.com", "jimmyjohns.com", "qdoba.com", "whataburger.com",
+    "jackinthebox.com", "sonic.com",
+    # Big retail / general merchandise
+    "amazon.com", "walmart.com", "target.com", "costco.com", "bestbuy.com",
+    "samsclub.com", "kohls.com", "jcpenney.com", "macys.com", "nordstrom.com",
+    "bloomingdales.com", "tjmaxx.com",
+    # Fashion & apparel
+    "nike.com", "adidas.com", "zappos.com", "shein.com", "zara.com", "hm.com",
+    "asos.com", "nordstromrack.com", "gap.com", "oldnavy.com", "uniqlo.com",
+    "lululemon.com", "underarmour.com", "puma.com", "newbalance.com",
+    "urbanoutfitters.com", "anthropologie.com", "abercrombie.com", "ae.com",
+    "jcrew.com", "allbirds.com", "everlane.com", "revolve.com", "ssense.com",
+    "farfetch.com", "fashionnova.com", "forever21.com",
+    # Electronics & tech
+    "newegg.com", "bhphotovideo.com", "microcenter.com", "apple.com",
+    "samsung.com", "dell.com", "adorama.com",
+    # Home, furniture & improvement
+    "wayfair.com", "homedepot.com", "lowes.com", "ikea.com",
+    "crateandbarrel.com", "westelm.com", "potterybarn.com", "cb2.com",
+    "overstock.com", "williams-sonoma.com", "acehardware.com", "menards.com",
+    "article.com",
+    # Pharmacy & health
+    "cvs.com", "walgreens.com", "riteaid.com", "capsule.com",
+    # Quick commerce / convenience
+    "getir.com",
+    # Alcohol delivery
+    "drizly.com", "totalwine.com", "wine.com", "vivino.com",
+    # Pet supplies
+    "chewy.com", "petco.com", "petsmart.com",
+    # Beauty & personal care
+    "sephora.com", "ulta.com", "glossier.com", "bathandbodyworks.com",
+    "dermstore.com",
+    # Auto parts
+    "autozone.com", "oreillyauto.com", "advanceautoparts.com", "rockauto.com",
+    # Resale marketplaces
+    "ebay.com", "etsy.com", "mercari.com", "poshmark.com", "depop.com",
+    "stockx.com", "goat.com", "therealreal.com", "thredup.com", "grailed.com",
+    "offerup.com", "vinted.com",
+    # International commerce
+    "flipkart.com", "shopee.com", "lazada.com", "coupang.com",
+    "mercadolibre.com", "zalando.com", "aliexpress.com", "rakuten.com",
+    "temu.com",
+    # Specialty / niche
+    "iherb.com", "dickssportinggoods.com", "rei.com", "cabelas.com",
+    "basspro.com", "gamestop.com", "barnesandnoble.com", "wish.com",
+    "fivebelow.com", "dollartree.com",
+    # Tickets & travel (transactional SPAs)
+    "ticketmaster.com", "stubhub.com", "seatgeek.com", "eventbrite.com",
+    "airbnb.com", "booking.com", "expedia.com", "kayak.com", "priceline.com",
+}
+
+
+def _get_domain(url: str) -> str:
+    """Extract the base domain from a URL (strips www. prefix)."""
+    hostname = urlparse(url).hostname or ""
+    return hostname.replace("www.", "").lower()
+
 
 def _check_commerce_site(metadata: dict) -> None:
     """Raise ValueError if the site doesn't look like a commerce site."""
-    url = metadata.get("url", "")
-    hostname = urlparse(url).hostname or ""
-    domain = hostname.replace("www.", "").lower()
+    domain = _get_domain(metadata.get("url", ""))
 
     # Block known non-commerce domains
     if domain in _NON_COMMERCE_DOMAINS:
@@ -247,6 +320,15 @@ def generate_tasks(metadata: dict) -> list[dict]:
         visible_text=safe_text,
         url=safe_url,
     )
+
+    # If domain is known commerce, tell GPT-4o so it doesn't reject thin SPA shells
+    domain = _get_domain(metadata.get("url", ""))
+    if domain in _KNOWN_COMMERCE_DOMAINS:
+        prompt += (
+            "\n\nNOTE: This is a confirmed commerce/transactional website. "
+            "Even if the HTML content appears sparse (common with single-page apps), "
+            "generate tasks based on what you know about this site."
+        )
 
     response = client.chat.completions.create(
         model="gpt-4o",
