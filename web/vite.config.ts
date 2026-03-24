@@ -24,6 +24,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => "/benchmark/start",
       },
+      "/api/benchmark/cancel": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: (path) =>
+          path.replace("/api/benchmark/cancel", "/benchmark/cancel"),
+      },
       "/api/benchmark/generate-tasks": {
         target: "http://localhost:8000",
         changeOrigin: true,

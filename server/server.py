@@ -25,6 +25,7 @@ from clerk_auth import verify_clerk_jwt
 
 # In-memory run state store
 _runs: dict[str, RunState] = {}
+_run_tasks: dict[str, asyncio.Task] = {}  # run_id -> asyncio task (for cancellation)
 
 # Run eviction settings
 _MAX_STORED_RUNS = 200
@@ -237,7 +238,9 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
         finally:
             _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
 
-    asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id))
+    task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id))
+    _run_tasks[run_id] = task
+    task.add_done_callback(lambda _: _run_tasks.pop(run_id, None))
 
     return {"run_id": run_id}
 
@@ -248,6 +251,19 @@ async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     if not state:
         raise HTTPException(status_code=404, detail="Not found")
     return state.to_response()
+
+
+@app.post("/benchmark/cancel/{run_id}")
+async def cancel_benchmark(run_id: str, _: None = Depends(verify_internal_key)):
+    task = _run_tasks.get(run_id)
+    if task and not task.done():
+        task.cancel()
+    state = _runs.get(run_id)
+    if state and state.status == "running":
+        state.status = "error"
+        state.message = "Run cancelled by user."
+        state.result_state = "error"
+    return {"ok": True}
 
 
 @app.post("/benchmark/generate-tasks")

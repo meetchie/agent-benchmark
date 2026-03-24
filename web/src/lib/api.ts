@@ -34,6 +34,10 @@ export async function pollStatus(runId: string): Promise<StatusResponse> {
   return res.json();
 }
 
+export async function cancelBenchmark(runId: string): Promise<void> {
+  await fetch(`/api/benchmark/cancel/${runId}`, { method: "POST" }).catch(() => {});
+}
+
 export async function generateTasks(
   url: string
 ): Promise<{ tasks: Task[] }> {

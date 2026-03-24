@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
-import { startBenchmark, pollStatus, generateTasks } from "./lib/api";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark } from "./lib/api";
 import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
 import { SignInModal } from "./components/SignInPage";
@@ -45,6 +45,7 @@ export default function App() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
+  const currentRunIdRef = useRef<string | null>(null);
   const analyzingStatsRef = useRef(analyzingStats);
   const stepsRef = useRef(steps);
   useEffect(() => { analyzingStatsRef.current = analyzingStats; }, [analyzingStats]);
@@ -209,6 +210,7 @@ export default function App() {
 
     try {
       const data = await startBenchmark(url, selectedTask.goal, token);
+      currentRunIdRef.current = data.run_id;
       startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
@@ -228,6 +230,10 @@ export default function App() {
 
   const handleNewTest = useCallback(() => {
     stopPolling();
+    if (currentRunIdRef.current) {
+      cancelBenchmark(currentRunIdRef.current);
+      currentRunIdRef.current = null;
+    }
     setRunStatus("idle");
     setSteps([]);
     setScreenshot(null);
