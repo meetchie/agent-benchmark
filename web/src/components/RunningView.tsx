@@ -44,35 +44,37 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[220px] shrink-0 space-y-4">
-      {/* Site + task info */}
-      <div className="bg-[#f0f4ff] border border-[#3c49ad]/20 p-4">
-        <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
-        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{taskLabel}</p>
-      </div>
+    <div className="w-[220px] shrink-0">
+      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden">
+        {/* Site + task info */}
+        <div className="px-4 py-3.5 border-b border-slate-100">
+          <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
+          <p className="text-xs text-slate-400 mt-1 leading-relaxed">{taskLabel}</p>
+        </div>
 
-      {/* Time elapsed */}
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time Elapsed</p>
-        <p className="text-2xl font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</p>
-      </div>
+        {/* Time elapsed */}
+        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Time</span>
+          <span className="text-lg font-bold text-slate-900 font-mono">{formatTimer(displayMs)}</span>
+        </div>
 
-      {/* Steps completed */}
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Steps</p>
-        <p className="text-2xl font-bold text-slate-900 font-mono">{steps.length}</p>
-      </div>
+        {/* Steps completed */}
+        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Steps</span>
+          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length}</span>
+        </div>
 
-      {/* Estimated cost */}
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Est. Cost</p>
-        <p className="text-2xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</p>
-      </div>
+        {/* Estimated cost */}
+        <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-baseline">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Cost</span>
+          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedCost : "—"}</span>
+        </div>
 
-      {/* Estimated tokens */}
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Est. Tokens</p>
-        <p className="text-2xl font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</p>
+        {/* Estimated tokens */}
+        <div className="px-4 py-2.5 flex justify-between items-baseline">
+          <span className="text-xs text-slate-400 uppercase tracking-wider">Tokens</span>
+          <span className="text-lg font-bold text-slate-900 font-mono">{steps.length > 0 ? estimatedTokens.toLocaleString() : "—"}</span>
+        </div>
       </div>
     </div>
   );
