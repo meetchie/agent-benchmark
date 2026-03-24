@@ -26,12 +26,12 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
   return (
     <div className="relative h-full overflow-hidden">
       {/* Top fade */}
-      <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#f0f4ff] to-transparent z-10 pointer-events-none" />
 
       {/* Scrollable timeline */}
-      <div ref={scrollRef} className="h-full overflow-y-auto py-5">
+      <div ref={scrollRef} className="h-full overflow-y-auto py-10">
         <div className="relative" style={{ paddingLeft: 32 }}>
           {/* Vertical line — centered at LINE_LEFT */}
           <div

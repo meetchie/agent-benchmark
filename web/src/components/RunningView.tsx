@@ -114,7 +114,7 @@ export function RunningView({
   }, [showOverlayTrigger]);
 
   return (
-    <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
+    <div className="h-screen bg-[#f0f4ff] flex flex-col overflow-hidden">
       <RunningHeader
         isRunning={isRunning}
         totalMs={summary?.total_ms} onNewTest={onNewTest} remainingRuns={remainingRuns}
