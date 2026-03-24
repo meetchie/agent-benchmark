@@ -279,12 +279,24 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _
             {"id": 3, "label": f"Add two different items to cart on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036. Select the first autocomplete suggestion.\nBrowse to a product section. Select the first item and add it to cart.\nGo back to browsing. Find a different product in a different category.\nAdd the second item to cart.\nVERIFY: Go to cart. Confirm it shows 2 distinct items. Both should have correct names and quantities."},
         ]}
     try:
-        tasks = await fetch_and_generate(req.url)
+        # Run in a task so it can be cancelled if the client disconnects
+        gen_task = asyncio.create_task(fetch_and_generate(req.url))
+        # Poll for client disconnect while waiting
+        while not gen_task.done():
+            if await request.is_disconnected():
+                gen_task.cancel()
+                raise HTTPException(status_code=499, detail="Client disconnected")
+            await asyncio.sleep(0.2)
+        tasks = gen_task.result()
         return {"tasks": tasks}
+    except asyncio.CancelledError:
+        raise HTTPException(status_code=499, detail="Client disconnected")
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Task generation failed: {e}")
