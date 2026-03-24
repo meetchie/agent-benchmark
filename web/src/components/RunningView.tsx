@@ -78,15 +78,15 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
         </div>
       </div>
 
-      {/* CTA card */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-xs text-slate-500 mb-3">Want your site to work seamlessly with AI agents?</p>
-        <div className="flex flex-col gap-2">
+      {/* CTA card — fills remaining height to match step log */}
+      <div className="flex-1 bg-[#f0f4ff] border border-[#3c49ad]/15 rounded-lg p-5 flex flex-col justify-center items-center text-center">
+        <p className="text-sm text-slate-600 mb-4">Want your site to work seamlessly with AI agents?</p>
+        <div className="flex flex-col gap-2 w-full">
           <a
             href="https://rindler.ai"
             target="_blank"
             rel="noopener noreferrer"
-            className="border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2 text-xs font-semibold text-center hover:bg-[#2f3a8a] transition-colors"
+            className="border-2 border-[#3c49ad] bg-[#3c49ad] text-white py-2.5 text-sm font-semibold text-center hover:bg-[#2f3a8a] transition-colors"
           >
             Check out Rindler →
           </a>
@@ -94,7 +94,7 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
             href="https://cal.com/example/demo"
             target="_blank"
             rel="noopener noreferrer"
-            className="border-2 border-slate-300 bg-white text-slate-700 py-2 text-xs font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] transition-colors"
+            className="border-2 border-slate-300 bg-white text-slate-700 py-2.5 text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] transition-colors"
           >
             Book a Demo →
           </a>
