@@ -50,7 +50,7 @@ export function StepLog({ steps, isRunning }: StepLogProps) {
             <span>{isRunning ? "Completed Steps" : "Steps"}</span>
             <span className="text-slate-400">Total: {formatMs(totalMs)}</span>
           </div>
-          <div className="max-h-40 overflow-y-auto border-2 border-slate-200 bg-white">
+          <div className="max-h-40 overflow-y-auto">
             <div className="divide-y divide-slate-100">
               {completedSteps.map((step) => (
                 <div key={step.step} className="flex items-center gap-2 px-3 py-1.5">

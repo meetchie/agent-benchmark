@@ -44,8 +44,8 @@ function LiveStats({ url, taskLabel, steps, isRunning, finalMs }: { url: string;
   })();
 
   return (
-    <div className="w-[300px] shrink-0 flex flex-col">
-      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex-1 flex flex-col">
+    <div className="w-[300px] shrink-0">
+      <div className="bg-white border border-slate-200 border-t-[3px] border-t-[#3c49ad] rounded-b-lg overflow-hidden flex flex-col" style={{ height: "45vh" }}>
         {/* Site + task info */}
         <div className="px-4 py-4 border-b border-slate-100">
           <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
