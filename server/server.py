@@ -64,7 +64,7 @@ def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key
     if not _INTERNAL_API_KEY:
         return  # Not configured (local dev) — skip check
     if x_internal_key != _INTERNAL_API_KEY:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _check_task_gen_rate(request: Request):
