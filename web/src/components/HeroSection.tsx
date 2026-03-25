@@ -16,12 +16,14 @@ export function HeroSection({ onSignInClick, onCTA }: HeroSectionProps) {
           <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto object-contain sm:h-12" />
           <span className="hidden sm:inline">Rindler</span>
         </div>
-        <button
-          onClick={onSignInClick}
-          className="inline-flex items-center border-2 border-black bg-transparent px-3 py-1.5 text-sm font-medium text-black transition-all duration-200 hover:bg-black/10 sm:px-4 sm:py-2"
-        >
-          Sign In
-        </button>
+        {onSignInClick && (
+          <button
+            onClick={onSignInClick}
+            className="inline-flex items-center border-2 border-black bg-transparent px-3 py-1.5 text-sm font-medium text-black transition-all duration-200 hover:bg-black/10 sm:px-4 sm:py-2"
+          >
+            Sign In
+          </button>
+        )}
       </nav>
 
       {/* Hero block — same dims as main site Hero */}
