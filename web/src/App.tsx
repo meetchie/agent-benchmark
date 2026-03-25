@@ -7,8 +7,9 @@ import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
 import { RunningView } from "./components/RunningView";
 import { ExhaustedOverlay } from "./components/ExhaustedOverlay";
+import { HeroSection } from "./components/HeroSection";
 
-type View = "setup" | "running";
+type View = "home" | "setup" | "running";
 
 const MAX_POLLS = 300; // 5 min — backend handles 3-min agent timeout + judge
 const POLL_INTERVAL_MS = 1000;
@@ -16,7 +17,7 @@ const POLL_INTERVAL_MS = 1000;
 export default function App() {
   const { isSignedIn, getToken } = useAuth();
 
-  const [view, setView] = useState<View>("setup");
+  const [view, setView] = useState<View>("home");
 
   // Persist URL, tasks, and selection in sessionStorage so they survive sign-in
   const [url, setUrl] = useState(() => sessionStorage.getItem("bench_url") || "");
@@ -354,6 +355,18 @@ export default function App() {
           resetsIn={quota.resets_in}
         />
         {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
+      </>
+    );
+  }
+
+  if (view === "home") {
+    return (
+      <>
+        <HeroSection
+          onSignInClick={() => setShowSignIn(true)}
+          onCTA={() => setView("setup")}
+        />
+        {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
       </>
     );
   }
