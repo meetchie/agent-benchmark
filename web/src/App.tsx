@@ -372,7 +372,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <div className="view-enter" key="setup">
       <SetupView
         url={url}
         onUrlChange={setUrl}
@@ -393,6 +393,6 @@ export default function App() {
       />
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
       {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
-    </>
+    </div>
   );
 }
