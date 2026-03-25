@@ -361,13 +361,15 @@ export default function App() {
 
   if (view === "home") {
     return (
-      <div className="view-enter" key="home">
-        <HeroSection
-          onSignInClick={() => setShowSignIn(true)}
-          onCTA={() => setView("setup")}
-        />
+      <>
+        <div className="view-enter" key="home">
+          <HeroSection
+            onSignInClick={() => setShowSignIn(true)}
+            onCTA={() => setView("setup")}
+          />
+        </div>
         {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
-      </div>
+      </>
     );
   }
 
