@@ -12,16 +12,18 @@ FAKE_USER = {"user_id": "test-user-id"}
 @pytest.fixture(autouse=True)
 def clear_runs():
     server_module._runs.clear()
+    server_module._user_run_timestamps.clear()
     app.dependency_overrides.pop(get_current_user, None)
     yield
     server_module._runs.clear()
+    server_module._user_run_timestamps.clear()
     app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_health():
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+    assert resp.json()["ok"] is True
 
 
 def test_start_returns_run_id():

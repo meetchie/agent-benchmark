@@ -108,7 +108,7 @@ def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key
     if not _INTERNAL_API_KEY:
         return  # Not configured (local dev) — skip check
     if x_internal_key != _INTERNAL_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def _check_task_gen_rate(request: Request):
@@ -398,4 +398,4 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Task generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Task generation failed")
