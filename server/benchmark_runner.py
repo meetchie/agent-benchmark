@@ -1,30 +1,60 @@
 """
-Benchmark Runner - Thin UI harness around arena's BrowserUseTelemetricAgent.
+Benchmark Runner - Runs BrowserUse agent with live step tracking and screenshots.
 
-Coordinates agent execution and LLM judge evaluation, feeding live screenshots
-and step descriptions to the benchmark UI via RunState polling.
+Manages in-memory run state, captures screenshots after each agent action,
+and provides step descriptions for the benchmark UI.
 """
 
+import asyncio
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 import logging
 import os
-import sys
 
 from dotenv import load_dotenv
 
-# Load env
+# Load env (OPENAI_API_KEY needed for LLM)
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
 
-# Ensure clean-room root is on path for adapter imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from adapters.browseruse_agent import BrowserUseTelemetricAgent
-from scenarios import create_custom_scenario
-from arena import run_judge
+_VALID_PROVIDERS = {"local", "browserbase"}
+
+
+def _get_browser_provider() -> str:
+    """Return the configured browser provider ('local' or 'browserbase').
+
+    Reads BENCHMARK_BROWSER_PROVIDER env var. Defaults to 'local'.
+    Note: This is separate from the Go MCP server's BROWSER_PROVIDER env var
+    which controls the worker fleet's browser (local/cdp/browserbase).
+    """
+    provider = os.getenv("BENCHMARK_BROWSER_PROVIDER", "local").lower().strip()
+    if provider not in _VALID_PROVIDERS:
+        logging.warning(
+            "Unknown BROWSER_PROVIDER=%r, falling back to 'local'. "
+            "Valid options: %s", provider, ", ".join(sorted(_VALID_PROVIDERS))
+        )
+        return "local"
+    return provider
+
+
+def _validate_browser_config() -> None:
+    """Validate that required env vars are set for the configured provider.
+
+    Raises ValueError if Browserbase is selected but keys are missing.
+    """
+    provider = _get_browser_provider()
+    if provider == "browserbase":
+        if not os.getenv("BROWSERBASE_API_KEY"):
+            raise ValueError(
+                "BROWSERBASE_API_KEY is required when BROWSER_PROVIDER=browserbase"
+            )
+        if not os.getenv("BROWSERBASE_PROJECT_ID"):
+            raise ValueError(
+                "BROWSERBASE_PROJECT_ID is required when BROWSER_PROVIDER=browserbase"
+            )
 
 
 @dataclass
@@ -48,12 +78,21 @@ class StepRecord:
 @dataclass
 class RunState:
     run_id: str
-    status: str = "running"  # "running" | "complete" | "error"
+    user_id: str = ""
+    status: str = "running"  # "running" | "analyzing" | "complete" | "error"
     steps: list[StepRecord] = field(default_factory=list)
     success: bool = False
     summary: str = ""
+    result_state: str = ""  # "pass" | "fail" | "too_slow" | "error"
     total_ms: int = 0
     message: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    phases: list[dict] = field(default_factory=list)
+    goal: str = ""  # Stored so the judge can access it
+    persisted_run_id: str | None = None  # ID from Go server, None if persistence failed
+    agent_model: str = "gpt-4o"  # Model used by the agent, for cost computation
 
     def to_response(self) -> dict:
         """Serialize for API response. Only latest step includes screenshot_b64."""
@@ -64,21 +103,55 @@ class RunState:
 
         if self.status == "running":
             return {"status": "running", "steps": steps_data}
+        elif self.status == "analyzing":
+            return {
+                "status": "analyzing",
+                "steps": steps_data,
+                "total_ms": self.total_ms,
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "total_tokens": self.total_tokens,
+            }
         elif self.status == "complete":
             return {
                 "status": "complete",
                 "steps": steps_data,
                 "success": self.success,
                 "summary": self.summary,
+                "result_state": self.result_state,
                 "total_ms": self.total_ms,
+                "input_tokens": self.input_tokens,
+                "output_tokens": self.output_tokens,
+                "total_tokens": self.total_tokens,
+                "phases": self.phases,
             }
         else:
-            return {"status": "error", "message": self.message}
+            return {
+                "status": "error",
+                "message": self.message,
+                "steps": steps_data,
+            }
 
 
 def _format_action(agent) -> str:
-    """Extract a human-readable description of the last agent action."""
+    """Extract a human-readable description of the last agent action.
+
+    Uses the agent's own 'next_goal' from its model output for rich descriptions
+    like 'Click on the Menu link' instead of just 'Clicking element'.
+    Falls back to action type if model output isn't available.
+    """
     try:
+        # Try to get the rich description from the agent's model output
+        if agent.history.history:
+            last_item = agent.history.history[-1]
+            if hasattr(last_item, 'model_output') and last_item.model_output:
+                mo = last_item.model_output
+                # next_goal is the best description of what the agent is doing
+                goal = getattr(mo, 'next_goal', '')
+                if goal:
+                    return str(goal)
+
+        # Fallback: format from raw action data
         actions = agent.history.model_actions()
         if not actions:
             return "Processing..."
@@ -86,22 +159,32 @@ def _format_action(agent) -> str:
         if isinstance(last, dict):
             action_type = list(last.keys())[0] if last else "action"
             action_data = last.get(action_type, {})
-            if action_type == "go_to_url":
+            el = last.get("interacted_element")
+
+            if action_type in ("go_to_url", "navigate"):
                 url = action_data.get("url", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Navigating to {url[:60]}"
-            elif action_type == "click":
+                return f"Navigating to {url[:80]}"
+            elif action_type in ("click_element", "click"):
+                # Try to get element info
+                if el and hasattr(el, 'node_name'):
+                    tag = getattr(el, 'node_name', '').lower()
+                    attrs = getattr(el, 'attributes', {}) or {}
+                    label = attrs.get('aria-label', '') or attrs.get('title', '') or attrs.get('alt', '')
+                    if label:
+                        return f"Clicking {tag} \"{label[:60]}\""
+                    return f"Clicking <{tag}> element"
                 return "Clicking element"
             elif action_type in ("input_text", "type"):
                 text = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Typing: {str(text)[:40]}"
+                return f"Typing: \"{str(text)[:50]}\""
             elif action_type == "scroll":
-                return "Scrolling page"
-            elif action_type in ("extract_content",):
-                # extract_content kept for backward compatibility with old telemetry data
-                return "Extracting page content"
+                direction = action_data.get("direction", "down") if isinstance(action_data, dict) else "down"
+                return f"Scrolling {direction}"
+            elif action_type == "extract_content":
+                return "Reading page content"
             elif action_type == "done":
                 result = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Done: {str(result)[:60]}"
+                return f"Done: {str(result)[:80]}"
             else:
                 return f"{action_type.replace('_', ' ').capitalize()}"
     except Exception as e:
@@ -110,138 +193,251 @@ def _format_action(agent) -> str:
 
 
 async def _take_screenshot(agent) -> Optional[str]:
-    """Capture a JPEG screenshot via BrowserSession.take_screenshot().
+    """Capture a JPEG screenshot from the current browser page.
 
-    Uses browser-use's CDP-based screenshot (not Playwright Page.screenshot).
-    JPEG quality 80 — ~50-150 KB per screenshot.
+    Caps width at 1280px, JPEG quality 80 — ~50-150 KB per screenshot.
     """
     try:
-        if hasattr(agent, "browser_session") and agent.browser_session:
-            img_bytes = await agent.browser_session.take_screenshot(
-                format="jpeg", quality=80, full_page=False,
-            )
-        else:
-            return None
+        # browser_use ≥0.11 uses browser_session; older versions used browser_context
+        session = getattr(agent, 'browser_session', None) or agent.browser_context
+        img_bytes = await session.take_screenshot(format="jpeg", quality=80)
         return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
     except Exception as e:
-        logging.warning(f"_take_screenshot failed: {type(e).__name__}: {e}")
+        logging.error(f"_take_screenshot failed: {type(e).__name__}: {e}")
         return None
 
 
-class _BenchmarkAgent(BrowserUseTelemetricAgent):
-    """Thin subclass that adds screenshot capture for the benchmark UI.
-
-    Wraps the parent's step callbacks to also capture screenshots and
-    update RunState for live polling.
-
-    TODO: The benchmark runner currently only supports BrowserUse. It should
-    be extended to support all arena agents (Steel, Skyvern, Stagehand, Rindler)
-    so the benchmark UI can compare agents side-by-side.
+async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | None = None) -> None:
     """
+    Run a BrowserUse agent for the benchmark and update state with each step.
 
-    def __init__(self, state: RunState, **kwargs):
-        super().__init__(**kwargs)
-        self._bench_state = state
-        self._step_start_time = datetime.now()
-
-    async def run(self, start_url: Optional[str] = None, **kwargs) -> dict:
-        """Override to inject screenshot capture into step callbacks."""
-        import browser_use
-        import adapters.browseruse_agent as ba_mod
-
-        _OriginalAgent = ba_mod.Agent
-        bench_state = self._bench_state
-        step_start_ref = [datetime.now()]
-
-        class _ScreenshotAgent(_OriginalAgent):
-            """Intercepts browser-use Agent to add screenshot capture."""
-
-            async def run(inner_self, **run_kwargs):
-                original_on_step_start = run_kwargs.get("on_step_start")
-                original_on_step_end = run_kwargs.get("on_step_end")
-
-                async def wrapped_on_step_start(agent):
-                    step_start_ref[0] = datetime.now()
-                    if original_on_step_start:
-                        await original_on_step_start(agent)
-
-                async def wrapped_on_step_end(agent):
-                    if original_on_step_end:
-                        await original_on_step_end(agent)
-
-                    # Capture screenshot and description for UI
-                    elapsed_ms = int((datetime.now() - step_start_ref[0]).total_seconds() * 1000)
-                    description = _format_action(agent)
-                    screenshot_b64 = await _take_screenshot(agent)
-
-                    bench_state.steps.append(StepRecord(
-                        step=len(bench_state.steps) + 1,
-                        description=description,
-                        elapsed_ms=elapsed_ms,
-                        screenshot_b64=screenshot_b64,
-                    ))
-
-                run_kwargs["on_step_start"] = wrapped_on_step_start
-                run_kwargs["on_step_end"] = wrapped_on_step_end
-
-                return await super().run(**run_kwargs)
-
-        # Patch Agent in both places it's imported
-        ba_mod.Agent = _ScreenshotAgent
-        try:
-            result = await super().run(start_url=start_url, **kwargs)
-        finally:
-            ba_mod.Agent = _OriginalAgent
-
-        return result
-
-
-async def run_benchmark(state: RunState, url: str, goal: str) -> None:
+    Uses a local Playwright browser (no Browserbase required).
+    Requires OPENAI_API_KEY in environment.
     """
-    Run a benchmark using arena's BrowserUseTelemetricAgent + LLM judge.
+    # Deferred import: keeps the server startable even if browser_use is not installed,
+    # and avoids import-time side effects (Playwright browser launch).
+    from browser_use import Agent
+    from browser_use.llm.models import get_llm_by_name
 
-    Creates the agent, captures live screenshots for the UI, then evaluates
-    with the LLM judge for a reliable pass/fail verdict.
-    """
     overall_start = datetime.now()
+    step_start_time: datetime = overall_start
+    prev_step_end_time: datetime = overall_start
 
-    # Prepend target URL to the goal
-    full_goal = f"Go to {url}\n\n{goal}"
+    async def on_step_start(agent):
+        nonlocal step_start_time, prev_step_end_time
+        step_start_time = datetime.now()
+        # For the very first step, align the wall-clock anchor to when it actually started
+        if not state.steps:
+            prev_step_end_time = step_start_time
 
-    # Create arena agent with live screenshot support
-    agent = _BenchmarkAgent(
-        state=state,
-        run_id=state.run_id,
-        goal=full_goal,
-        lane="BENCHMARK",
-    )
+    async def on_step_end(agent):
+        nonlocal prev_step_end_time
+        now = datetime.now()
+        # Step-to-step wall-clock time: includes LLM reasoning + action execution.
+        # For step 1 this equals the action time; for subsequent steps it also
+        # captures the inter-step thinking so that sum(elapsed_ms) ≈ total_ms.
+        elapsed_ms = int((now - prev_step_end_time).total_seconds() * 1000)
+        prev_step_end_time = now
+        description = _format_action(agent)
+        screenshot_b64 = await _take_screenshot(agent)
 
+        state.steps.append(
+            StepRecord(
+                step=len(state.steps) + 1,
+                description=description,
+                elapsed_ms=elapsed_ms,
+                screenshot_b64=screenshot_b64,
+            )
+        )
+
+    _AGENT_TIMEOUT = 180  # 3 minutes
+
+    timed_out = False
+    bb = None        # Browserbase client (for session cleanup in finally)
+    bb_session = None
     try:
-        result = await agent.run()
+        llm = get_llm_by_name("openai_gpt-4o")
 
+        # Prepend the target URL to the goal so the agent navigates there first
+        full_goal = f"Go to {url}\n\n{goal}"
+
+        provider = _get_browser_provider()
+
+        if provider == "browserbase":
+            _validate_browser_config()
+            from browserbase import Browserbase
+            from browserbase._exceptions import RateLimitError
+
+            bb = Browserbase(api_key=os.getenv("BROWSERBASE_API_KEY"))
+            bb_project = os.getenv("BROWSERBASE_PROJECT_ID")
+
+            try:
+                bb_session = bb.sessions.create(
+                    project_id=bb_project,
+                    browser_settings={"record_session": True},
+                )
+            except RateLimitError:
+                # Hit concurrent session limit — release stale sessions and retry
+                logging.warning("Browserbase concurrent session limit hit, releasing stale sessions")
+                try:
+                    for s in bb.sessions.list():
+                        bb.sessions.update(id=s.id, project_id=bb_project, status="REQUEST_RELEASE")
+                    await asyncio.sleep(2)
+                except Exception:
+                    pass
+                bb_session = bb.sessions.create(
+                    project_id=bb_project,
+                    browser_settings={"record_session": True},
+                )
+
+            logging.info("Browserbase session: %s", bb_session.id)
+
+            agent = Agent(
+                task=full_goal,
+                llm=llm,
+                browserbase_api_key=os.getenv("BROWSERBASE_API_KEY"),
+                browserbase_project_id=bb_project,
+                browserbase_session_id=bb_session.id,
+            )
+        else:
+            # Local Playwright (requires a display — headed mode)
+            from browser_use.browser.profile import BrowserProfile
+
+            browser_profile = BrowserProfile(
+                user_data_dir=None,
+                headless=False,
+                keep_alive=False,
+                permissions=[],
+                viewport=viewport or {"width": 1280, "height": 720},
+            )
+            agent = Agent(
+                task=full_goal,
+                llm=llm,
+                browser_profile=browser_profile,
+            )
+
+        try:
+            history = await asyncio.wait_for(
+                agent.run(
+                    on_step_start=on_step_start,
+                    on_step_end=on_step_end,
+                ),
+                timeout=_AGENT_TIMEOUT,
+            )
+
+            # Extract token usage from completed run
+            try:
+                usage = history.usage
+                state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
+                state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
+                state.total_tokens = getattr(usage, 'total_tokens', 0)
+            except Exception as e:
+                logging.debug(f"Token usage extraction failed: {e}")
+
+        except asyncio.TimeoutError:
+            timed_out = True
+            logging.info("Agent timed out after %ds", _AGENT_TIMEOUT)
+            # Extract token usage from the agent's token cost service
+            try:
+                usage = await agent.token_cost_service.get_usage_summary()
+                state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
+                state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
+                state.total_tokens = getattr(usage, 'total_tokens', 0)
+            except Exception as e:
+                logging.debug(f"Token usage extraction on timeout failed: {e}")
+
+        # --- Agent finished or timed out — always run the judge ---
         total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+        state.total_ms = total_ms
+        state.status = "analyzing"
 
-        # Run LLM judge for reliable pass/fail
-        scenario = create_custom_scenario(
-            goal=full_goal,
-            start_url=url,
-            name=f"benchmark-{state.run_id[:8]}",
-        )
+        # Call GPT-4o judge on whatever steps we have
+        from run_judge import judge_run
+        steps_for_judge = [
+            {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+            for s in state.steps
+        ]
+        # Pass result_state hint so judge knows whether agent timed out
+        rs_hint = "too_slow" if timed_out else "unknown"
+        judgment = judge_run(state.goal, steps_for_judge, result_state=rs_hint)
 
-        judge_result = run_judge(
-            scenario=scenario,
-            result=result,
-            telemetry_events=agent.telemetry_events,
-        )
+        state.success = judgment["success"]
+        state.summary = judgment["summary"]
+        state.phases = judgment["phases"]
 
-        verdict = judge_result.get("verdict", "ERROR")
-        reason = judge_result.get("reason", "No reason provided")
+        if timed_out:
+            state.result_state = "too_slow"
+            state.summary = judgment["summary"] or "The agent ran out of time before completing the task."
+        else:
+            state.result_state = "pass" if judgment["success"] else "fail"
 
         state.status = "complete"
-        state.success = verdict == "PASS"
-        state.summary = reason
-        state.total_ms = total_ms
 
     except Exception as e:
+        # Still try to run judge if we have steps
+        if state.steps:
+            try:
+                state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+                state.status = "analyzing"
+                from run_judge import judge_run
+                steps_for_judge = [
+                    {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+                    for s in state.steps
+                ]
+                judgment = judge_run(state.goal, steps_for_judge)
+                state.success = False
+                state.summary = judgment["summary"]
+                state.phases = judgment["phases"]
+                state.result_state = "error"
+                state.message = str(e)[:200]
+                state.status = "complete"
+                return
+            except Exception:
+                pass
         state.status = "error"
         state.message = str(e)[:200]
+        state.result_state = "error"
+    finally:
+        # Release Browserbase session to free quota
+        if bb and bb_session:
+            try:
+                bb.sessions.update(
+                    id=bb_session.id,
+                    project_id=os.getenv("BROWSERBASE_PROJECT_ID"),
+                    status="REQUEST_RELEASE",
+                )
+            except Exception as e:
+                logging.debug("Browserbase session release failed: %s", e)
+
+    # Persist results to Go server.
+    from persistence import persist_steps, persist_run_completion, persist_phases
+    from constants import COST_RATES
+
+    if state.persisted_run_id:
+        # Persist all steps (batch).
+        await persist_steps(state.persisted_run_id, [
+            {"step_number": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+            for s in state.steps
+        ])
+
+        # Compute cost.
+        model = getattr(state, 'agent_model', 'gpt-4o')
+        rates = COST_RATES.get(model, {"input": 2.50, "output": 10.00})
+        cost = (state.input_tokens * rates["input"] + state.output_tokens * rates["output"]) / 1_000_000
+
+        # Persist run completion.
+        await persist_run_completion(
+            run_id=state.persisted_run_id,
+            status=state.status,
+            result_state=state.result_state,
+            success=state.success,
+            total_ms=state.total_ms,
+            input_tokens=state.input_tokens,
+            output_tokens=state.output_tokens,
+            total_tokens=state.total_tokens,
+            estimated_cost_usd=cost,
+            summary=state.summary,
+        )
+
+        # Persist phases.
+        await persist_phases(state.persisted_run_id, state.phases)

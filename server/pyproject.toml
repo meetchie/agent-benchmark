@@ -9,37 +9,34 @@ dependencies = [
     "browser-use>=0.11.2",
     "browserbase>=1.4.0",
     "playwright>=1.40.0",
-    
+
     # Steel SDK for STEEL agent
     "steel-sdk>=0.1.0",
-    
+
     # LLM orchestration
     "langchain>=0.2.0",
     "langchain-openai>=0.1.0",
-    
+    "openai>=1.30.0",
+
     # HTTP clients (for SKYVERN agent)
     "requests>=2.31.0",
     "aiohttp>=3.9.0",
-    
-    # Benchmark server
-    "fastapi>=0.110.0",
-    "uvicorn>=0.27.0",
 
     # Environment and utilities
     "python-dotenv>=1.0.0",
-    
+
     # Optional: for MCP integration
     "mcp>=1.0.0",
 
     # LLM providers for RINDLER agent
-    "openai>=1.0.0",
     "anthropic>=0.30.0",
-]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
+    # Clerk JWT verification (JWKS)
+    "PyJWT[crypto]>=2.8.0",
+
+    # Benchmark server
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -53,4 +50,9 @@ build-backend = "hatchling.build"
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.0.2",
+    "pytest-asyncio>=0.21.0",
 ]
+
+[tool.pytest.ini_options]
+addopts = "-p no:launch_ros -p no:launch_testing -p no:launch_testing_ros -p no:ament_flake8 -p no:ament_xmllint -p no:ament_copyright -p no:ament_pep257 -p no:ament_lint"
+asyncio_mode = "auto"

@@ -1,1 +1,118 @@
-prose.json
+{
+  "site_id": "prose",
+  "domain": "www.prose.com",
+  "screens": {
+    "homepage": {
+      "url_pattern": "prose\\.com/?$",
+      "available_actions": ["view_accessories", "view_product", "view_cart", "view_gift_cards", "search_products", "go_back"]
+    },
+    "accessories": {
+      "url_pattern": "prose\\.com/products/accessories",
+      "available_actions": ["view_product", "view_cart", "view_gift_cards", "view_accessories", "search_products", "go_back"]
+    },
+    "product_detail": {
+      "url_pattern": "prose\\.com/products/prose-",
+      "available_actions": ["add_to_cart", "view_product", "view_accessories", "view_cart", "view_gift_cards", "search_products", "go_back"]
+    },
+    "brushes": {
+      "url_pattern": "prose\\.com/products/brushes",
+      "available_actions": ["add_to_cart", "view_product", "view_accessories", "view_cart", "view_gift_cards", "search_products", "go_back"]
+    },
+    "cart": {
+      "url_pattern": "prose\\.com/checkout/accessories",
+      "available_actions": ["view_cart", "view_product", "remove_from_cart", "view_accessories", "view_gift_cards", "search_products", "go_back"]
+    },
+    "gift": {
+      "url_pattern": "prose\\.com/gift",
+      "available_actions": ["view_accessories", "view_product", "view_cart", "view_gift_cards", "search_products", "go_back"]
+    }
+  },
+  "actions": {
+    "view_accessories": {
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+      ],
+      "target_screen": "accessories"
+    },
+    "view_product": {
+      "params": {
+        "item": {"type": "string", "required": true}
+      },
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000},
+        {"action": "press_key", "value": "Escape", "optional": true},
+        {"action": "click", "selector": "a:has-text('{{item}}')", "timeout": 2000, "fallbacks": [
+          {"type": "text", "selector": "{{item}}"},
+          {"type": "css", "selector": "h2:has-text('{{item}}')"}
+        ]},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h1", "timeout": 2000}
+      ],
+      "target_screen": "product_detail"
+    },
+    "add_to_cart": {
+      "params": {
+        "item": {"type": "string", "required": true}
+      },
+      "steps": [
+        {"action": "press_key", "value": "Escape", "optional": true},
+        {"action": "click", "selector": "[data-testid='add-to-cart']", "timeout": 2000, "fallbacks": [
+          {"type": "css", "selector": "button:has-text('Add to cart')"},
+          {"type": "text_exact", "selector": "Add to cart"}
+        ]}
+      ],
+      "stays_on_screen": true
+    },
+    "view_cart": {
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/checkout/accessories"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000}
+      ],
+      "target_screen": "cart"
+    },
+    "view_gift_cards": {
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/gift"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000}
+      ],
+      "target_screen": "gift"
+    },
+    "go_back": {
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+      ],
+      "target_screen": "accessories"
+    },
+    "remove_from_cart": {
+      "params": {
+        "item": {"type": "string", "required": true}
+      },
+      "steps": [
+        {"action": "click", "selector": "button:has-text('Remove')", "timeout": 2000, "fallbacks": [
+          {"type": "text", "selector": "Remove"},
+          {"type": "css", "selector": "button[aria-label*='Remove']"}
+        ]}
+      ],
+      "stays_on_screen": true
+    },
+    "search_products": {
+      "params": {
+        "query": {"type": "string", "required": true}
+      },
+      "steps": [
+        {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+      ],
+      "target_screen": "accessories"
+    }
+  },
+  "context_extractors": {
+    "cart": {
+      "steps": [
+        {"action": "extract", "selector": "a[href*='/checkout/accessories']", "field": "summary"}
+      ]
+    }
+  }
+}

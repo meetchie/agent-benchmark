@@ -1,9 +1,0 @@
-Agent: RINDLER
-Scenario: amazon_search
-Agent Reported Success: True
-Judge Verdict: PASS
-Token Burn: 800 (700 in / 100 out)
-Cost: $0.01
-
-Telemetry Events:
-[{"event_type": "step_start", "step_index": 1, "action_type": "navigate"}, {"event_type": "step_end", "step_index": 1, "tokens_input": 400, "tokens_output": 50}, {"event_type": "step_start", "step_index": 2, "action_type": "type"}, {"event_type": "step_end", "step_index": 2, "tokens_input": 300, "tokens_output": 50}]

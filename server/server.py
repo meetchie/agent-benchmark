@@ -10,53 +10,169 @@ Endpoints:
 """
 
 import asyncio
+import os
+import time as _time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from benchmark_runner import RunState, run_benchmark
+from task_generator import fetch_and_generate
+from clerk_auth import verify_clerk_jwt
 
-
-# In-memory run state store with TTL eviction
+# In-memory run state store
 _runs: dict[str, RunState] = {}
-_MAX_RUNS = 100
+_run_tasks: dict[str, asyncio.Task] = {}  # run_id -> asyncio task (for cancellation)
+
+# Run eviction settings
+_MAX_STORED_RUNS = 200
+
+# Per-user concurrency limit (max active runs)
+_active_runs: dict[str, int] = {}  # user_id -> count
+_MAX_CONCURRENT_RUNS = 5
+
+# Admin emails get unlimited runs (bypass concurrency limit)
+ADMIN_EMAILS: set[str] = set()
+
+# Internal API key for edge-to-backend auth
+_INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
+# Rate limiting for task generation
+_task_gen_requests: dict[str, list[float]] = {}  # ip -> list of timestamps
+_TASK_GEN_MAX_PER_MINUTE = 5
+
+# Daily quota: 3 runs per 24h rolling window
+# Persisted to disk so quotas survive server restarts
+_DAILY_QUOTA = 3
+_QUOTA_WINDOW = 24 * 60 * 60  # 24 hours in seconds
+_QUOTA_FILE = os.path.join(os.path.dirname(__file__), ".quota_data.json")
+
+import json as _json
+
+def _load_quota_data() -> dict[str, list[float]]:
+    try:
+        with open(_QUOTA_FILE, "r") as f:
+            data = _json.load(f)
+        # Clean expired entries on load
+        now = _time.time()
+        return {uid: [t for t in ts if now - t < _QUOTA_WINDOW] for uid, ts in data.items()}
+    except (FileNotFoundError, _json.JSONDecodeError):
+        return {}
+
+def _save_quota_data():
+    try:
+        with open(_QUOTA_FILE, "w") as f:
+            _json.dump(_user_run_timestamps, f)
+    except OSError:
+        pass
+
+_user_run_timestamps: dict[str, list[float]] = _load_quota_data()
 
 
-def _evict_old_runs() -> None:
-    """Remove oldest runs when store exceeds capacity."""
-    if len(_runs) <= _MAX_RUNS:
+def _get_quota(user_id: str) -> dict:
+    """Return remaining runs and seconds until next reset for a user."""
+    now = _time.time()
+    timestamps = _user_run_timestamps.get(user_id, [])
+    # Filter to only timestamps within the window
+    recent = [t for t in timestamps if now - t < _QUOTA_WINDOW]
+    _user_run_timestamps[user_id] = recent
+
+    remaining = max(0, _DAILY_QUOTA - len(recent))
+    resets_in = 0
+    if remaining == 0 and recent:
+        # Time until the oldest run in the window expires
+        resets_in = int(recent[0] + _QUOTA_WINDOW - now)
+
+    return {"remaining": remaining, "resets_in": resets_in, "limit": _DAILY_QUOTA}
+
+# Demo mode — returns fake data without calling OpenAI or launching a browser
+# Set DEMO_MODE=true in .env to enable
+def _check_demo_mode() -> bool:
+    return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
+
+def _evict_stale_runs():
+    """Remove completed/errored runs when store exceeds limit."""
+    if len(_runs) < _MAX_STORED_RUNS:
         return
-    # RunState has a run_id; sort by insertion order (dict preserves it in 3.7+)
-    keys = list(_runs.keys())
-    for key in keys[: len(keys) - _MAX_RUNS]:
-        _runs.pop(key, None)
+    to_delete = [rid for rid, s in _runs.items() if s.status in ("complete", "error")]
+    for rid in to_delete:
+        _runs.pop(rid, None)
+
+
+def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key")) -> None:
+    """Verify the request comes from our Cloudflare edge functions."""
+    if not _INTERNAL_API_KEY:
+        return  # Not configured (local dev) — skip check
+    if x_internal_key != _INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _check_task_gen_rate(request: Request):
+    """Rate limit task generation by IP."""
+    ip = request.client.host if request.client else "unknown"
+    now = _time.time()
+    timestamps = _task_gen_requests.get(ip, [])
+    # Remove old entries
+    timestamps = [t for t in timestamps if now - t < 60]
+    if len(timestamps) >= _TASK_GEN_MAX_PER_MINUTE:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a minute.")
+    timestamps.append(now)
+    _task_gen_requests[ip] = timestamps
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load .env files
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
+
+    # Fail fast if browser provider is misconfigured
+    from benchmark_runner import _validate_browser_config
+    _validate_browser_config()
+
     yield
 
 
 app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
 
+_ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5180,http://localhost:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+
+async def get_current_user(authorization: str = Header(None)) -> dict:
+    """Verify Clerk JWT from Authorization header."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.split(" ", 1)[1]
+    try:
+        claims = verify_clerk_jwt(token)
+        return {"user_id": claims["sub"]}
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"AUTH FAILED: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 class StartRequest(BaseModel):
     url: str
     goal: str
+    label: str = ""  # task label for persistence
+    viewport_width: int | None = None
+    viewport_height: int | None = None
 
     @field_validator("url")
     @classmethod
@@ -65,35 +181,221 @@ class StartRequest(BaseModel):
             raise ValueError("url must start with http:// or https://")
         return v
 
-    @field_validator("goal")
+
+class GenerateTasksRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
     @classmethod
-    def goal_max_length(cls, v: str) -> str:
-        if len(v) > 5000:
-            raise ValueError("goal must be 5000 characters or fewer")
+    def url_must_be_http(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("url must start with http:// or https://")
         return v
 
 
 @app.get("/health")
 async def health():
-    return {"ok": True}
+    from benchmark_runner import _get_browser_provider
+    return {
+        "ok": True,
+        "browser_provider": _get_browser_provider(),
+    }
+
+
+async def _demo_run(state: RunState, url: str, goal: str):
+    """Simulate a benchmark run with fake steps for UI testing."""
+    import asyncio as _aio
+    import random
+    from datetime import datetime
+    from benchmark_runner import StepRecord
+
+    domain = url.split("//")[-1].split("/")[0].replace("www.", "")
+    demo_steps = [
+        f"Navigating to {url}",
+        f"Looking for address input on {domain}",
+        "Typing address: 1 Times Square, New York, NY 10036",
+        "Selecting first autocomplete suggestion",
+        f"Browsing product categories on {domain}",
+        "Applying price filter: $15-$25",
+        "Scrolling through filtered results",
+        "Selecting item with 4.5 star rating",
+        "Choosing variant: Size Medium, Color Black",
+        "Adding item to cart",
+        "Checking cart subtotal",
+        "Looking for available promotions",
+        "Verifying cart contents and total",
+    ]
+
+    overall_start = datetime.now()
+    for i, desc in enumerate(demo_steps):
+        await _aio.sleep(random.uniform(1.5, 4.0))
+        elapsed = random.randint(800, 5000)
+        state.steps.append(StepRecord(
+            step=i + 1,
+            description=desc,
+            elapsed_ms=elapsed,
+        ))
+
+    total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+
+    success = random.random() > 0.3  # 70% success rate
+    state.status = "analyzing"
+    state.total_ms = total_ms
+    state.input_tokens = random.randint(8000, 25000)
+    state.output_tokens = random.randint(500, 3000)
+    state.total_tokens = state.input_tokens + state.output_tokens
+
+    # Simulate GPT-4o analysis delay
+    await _aio.sleep(2.0)
+
+    state.phases = [
+        {"name": "Set delivery address", "steps": [1, 2, 3, 4], "total_ms": sum(s.elapsed_ms for s in state.steps[0:4]), "failed": False, "slow": False},
+        {"name": "Browse and select product", "steps": [5, 6, 7, 8], "total_ms": sum(s.elapsed_ms for s in state.steps[4:8]), "failed": False, "slow": True},
+        {"name": "Configure and add to cart", "steps": [9, 10, 11], "total_ms": sum(s.elapsed_ms for s in state.steps[8:11]), "failed": not success, "slow": False},
+        {"name": "Verify cart contents", "steps": [12, 13], "total_ms": sum(s.elapsed_ms for s in state.steps[11:13]), "failed": False, "slow": False},
+    ]
+
+    if success:
+        state.summary = f"Successfully completed the task on {domain}. All items added to cart within budget constraints."
+        state.result_state = "pass"
+    else:
+        state.summary = f"Agent got stuck trying to interact with the variant picker on {domain}. Could not select the correct size from the dropdown."
+        state.result_state = "fail"
+
+    state.success = success
+    state.status = "complete"
 
 
 @app.post("/benchmark/start")
-async def start_benchmark(req: StartRequest):
+async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
+    user_id = user["user_id"]
+    user_email = user.get("email", "").lower()
+    is_admin = user_email in ADMIN_EMAILS
+
+    active = _active_runs.get(user_id, 0)
+    if active >= _MAX_CONCURRENT_RUNS and not is_admin:
+        raise HTTPException(status_code=429, detail={
+            "error": "Too many runs in progress. Wait for one to finish.",
+        })
+
+    # Daily quota check
+    if not is_admin:
+        quota = _get_quota(user_id)
+        if quota["remaining"] <= 0:
+            hours = quota["resets_in"] // 3600
+            mins = (quota["resets_in"] % 3600) // 60
+            raise HTTPException(status_code=429, detail={
+                "error": f"Daily limit reached. Resets in {hours}h {mins}m.",
+                "resets_in": quota["resets_in"],
+                "remaining": 0,
+            })
+
+    _evict_stale_runs()
+
+    _active_runs[user_id] = active + 1
+    # Record run timestamp for daily quota
+    if user_id not in _user_run_timestamps:
+        _user_run_timestamps[user_id] = []
+    _user_run_timestamps[user_id].append(_time.time())
+    _save_quota_data()
+
     run_id = str(uuid.uuid4())
-    state = RunState(run_id=run_id)
+    state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
     _runs[run_id] = state
-    _evict_old_runs()
 
-    # Start agent in the background — does not block this response
-    asyncio.create_task(run_benchmark(state, req.url, req.goal))
+    # Fire-and-forget: persist run to Go server.
+    from persistence import persist_run_start
+    persisted_id = await persist_run_start(
+        run_id=run_id,
+        clerk_user_id=user_id,
+        url=req.url,
+        task_label=req.label,
+        task_goal=req.goal,
+    )
+    state.persisted_run_id = persisted_id  # may be None if Go server unavailable
 
-    return {"run_id": run_id}
+    viewport = None
+    if req.viewport_width and req.viewport_height:
+        viewport = {"width": req.viewport_width, "height": req.viewport_height}
+
+    async def _run_and_decrement(state, url, goal, uid, vp):
+        try:
+            if _check_demo_mode():
+                await _demo_run(state, url, goal)
+            else:
+                await run_benchmark(state, url, goal, viewport=vp)
+        finally:
+            _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
+
+    task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id, viewport))
+    _run_tasks[run_id] = task
+    task.add_done_callback(lambda _: _run_tasks.pop(run_id, None))
+
+    quota = _get_quota(user_id)
+    return {"run_id": run_id, "remaining": quota["remaining"], "resets_in": quota["resets_in"]}
+
+
+@app.get("/benchmark/quota")
+async def get_quota(user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
+    user_id = user["user_id"]
+    user_email = user.get("email", "").lower()
+    if user_email in ADMIN_EMAILS:
+        return {"remaining": 999, "resets_in": 0, "limit": _DAILY_QUOTA}
+    return _get_quota(user_id)
 
 
 @app.get("/benchmark/status/{run_id}")
-async def get_status(run_id: str):
+async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     state = _runs.get(run_id)
     if not state:
-        raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=404, detail="Not found")
     return state.to_response()
+
+
+@app.post("/benchmark/cancel/{run_id}")
+async def cancel_benchmark(run_id: str, _: None = Depends(verify_internal_key)):
+    task = _run_tasks.get(run_id)
+    if task and not task.done():
+        task.cancel()
+    state = _runs.get(run_id)
+    if state and state.status == "running":
+        state.status = "error"
+        state.message = "Run cancelled by user."
+        state.result_state = "error"
+    return {"ok": True}
+
+
+@app.post("/benchmark/generate-tasks")
+async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _: None = Depends(verify_internal_key)):
+    _check_task_gen_rate(request)
+    if _check_demo_mode():
+        import asyncio as _aio
+        await _aio.sleep(1.5)  # Simulate generation delay
+        domain = req.url.split("//")[-1].split("/")[0].replace("www.", "")
+        return {"tasks": [
+            {"id": 1, "label": f"Add a specific item to cart on {domain}", "goal": f"Go to {domain}.\nSearch for a popular product using the search bar.\nClick on the first result.\nSelect the default size and color options if applicable.\nClick 'Add to Cart' or 'Add to Bag'.\nVERIFY: Look for a cart icon badge showing '1', or a confirmation message."},
+            {"id": 2, "label": f"Set address and add customized item on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete dropdown and select the first suggestion.\nBrowse to a product category or menu section.\nSelect a specific item and customize it (choose size, select options, set quantity to 2).\nClick 'Add to Cart' or 'Add to Order'.\nVERIFY: Cart shows the item with correct customizations and quantity of 2."},
+            {"id": 3, "label": f"Add two different items to cart on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036. Select the first autocomplete suggestion.\nBrowse to a product section. Select the first item and add it to cart.\nGo back to browsing. Find a different product in a different category.\nAdd the second item to cart.\nVERIFY: Go to cart. Confirm it shows 2 distinct items. Both should have correct names and quantities."},
+        ]}
+    try:
+        # Run in a task so it can be cancelled if the client disconnects
+        gen_task = asyncio.create_task(fetch_and_generate(req.url))
+        # Poll for client disconnect while waiting
+        while not gen_task.done():
+            if await request.is_disconnected():
+                gen_task.cancel()
+                raise HTTPException(status_code=499, detail="Client disconnected")
+            await asyncio.sleep(0.2)
+        tasks = gen_task.result()
+        return {"tasks": tasks}
+    except asyncio.CancelledError:
+        raise HTTPException(status_code=499, detail="Client disconnected")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Task generation failed")

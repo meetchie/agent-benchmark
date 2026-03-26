@@ -1,9 +1,0 @@
-Agent: RINDLER
-Scenario: shipt_add_to_cart
-Agent Reported Success: True
-Judge Verdict: ERROR
-Token Burn: 1200 (1100 in / 100 out)
-Cost: $0.015
-
-Telemetry Events:
-[{"event_type": "step_start", "step_index": 1, "action_type": "navigate"}, {"event_type": "step_end", "step_index": 1, "tokens_input": 600, "tokens_output": 50}, {"event_type": "step_start", "step_index": 2, "action_type": "click"}, {"event_type": "step_end", "step_index": 2, "tokens_input": 500, "tokens_output": 50}]

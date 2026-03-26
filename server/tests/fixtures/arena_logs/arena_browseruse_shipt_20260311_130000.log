@@ -1,9 +1,0 @@
-Agent: BROWSERUSE
-Scenario: shipt_add_to_cart
-Agent Reported Success: False
-Judge Verdict: FAIL
-Token Burn: 5000 (4500 in / 500 out)
-Cost: $0.045
-
-Telemetry Events:
-[{"event_type": "step_start", "step_index": 1}, {"event_type": "step_end", "step_index": 1}, {"event_type": "step_start", "step_index": 2}, {"event_type": "step_end", "step_index": 2}, {"event_type": "step_start", "step_index": 3}, {"event_type": "step_end", "step_index": 3}, {"event_type": "step_start", "step_index": 4}, {"event_type": "step_end", "step_index": 4}, {"event_type": "step_start", "step_index": 5}, {"event_type": "step_end", "step_index": 5}]

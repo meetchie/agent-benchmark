@@ -1,41 +1,163 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import tasksData from "../tasks.yaml";
-import { startBenchmark, pollStatus } from "./lib/api";
-import type { Category, Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
+import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota } from "./lib/api";
+import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
 
-import { BenchmarkHeader } from "./components/BenchmarkHeader";
-import { URLInput } from "./components/URLInput";
-import { CategorySelector } from "./components/CategorySelector";
-import { TaskCard } from "./components/TaskCard";
-import { RunButton } from "./components/RunButton";
-import { ScreenshotViewer } from "./components/ScreenshotViewer";
-import { StepLog } from "./components/StepLog";
-import { SummaryCard } from "./components/SummaryCard";
+import { SignInModal } from "./components/SignInPage";
+import { SetupView } from "./components/SetupView";
+import { RunningView } from "./components/RunningView";
+import { ExhaustedOverlay } from "./components/ExhaustedOverlay";
+import { HeroSection } from "./components/HeroSection";
 
-const CATEGORIES: Category[] = tasksData.categories;
-const MAX_POLLS_DEFAULT = 300;
-const MAX_POLLS_HARD = 600;
+type View = "home" | "setup" | "running";
+
+const MAX_POLLS = 300; // 5 min — backend handles 3-min agent timeout + judge
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
-  const [url, setUrl] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [taskId, setTaskId] = useState<string | null>(null);
+  const { isSignedIn, getToken } = useAuth();
+
+  const [view, setView] = useState<View>("home");
+
+  // Persist URL, tasks, and selection in sessionStorage so they survive sign-in
+  const [url, setUrl] = useState(() => sessionStorage.getItem("bench_url") || "");
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try { return JSON.parse(sessionStorage.getItem("bench_tasks") || "[]"); } catch { return []; }
+  });
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(() => sessionStorage.getItem("bench_taskId"));
+
+  // Sync to sessionStorage on change
+  useEffect(() => { sessionStorage.setItem("bench_url", url); }, [url]);
+  useEffect(() => { sessionStorage.setItem("bench_tasks", JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { if (taskId) sessionStorage.setItem("bench_taskId", taskId); else sessionStorage.removeItem("bench_taskId"); }, [taskId]);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [steps, setSteps] = useState<StepRecord[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [analyzingStats, setAnalyzingStats] = useState<{
+    total_ms: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  } | null>(null);
+
+  // Usage quota
+  const [quota, setQuota] = useState<{ remaining: number; resets_in: number }>({ remaining: 3, resets_in: 0 });
+
+  // Fetch quota on sign-in
+  useEffect(() => {
+    if (!isSignedIn) return;
+    (async () => {
+      const token = await getToken();
+      if (token) {
+        const q = await fetchQuota(token);
+        setQuota({ remaining: q.remaining, resets_in: q.resets_in });
+      }
+    })();
+  }, [isSignedIn, getToken]);
+
+  const [showExhausted, setShowExhausted] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
+  const currentRunIdRef = useRef<string | null>(null);
+  const analyzingStatsRef = useRef(analyzingStats);
+  const stepsRef = useRef(steps);
+  useEffect(() => { analyzingStatsRef.current = analyzingStats; }, [analyzingStats]);
+  useEffect(() => { stepsRef.current = steps; }, [steps]);
+  const lastGeneratedUrlRef = useRef(
+    (() => { try { return JSON.parse(sessionStorage.getItem("bench_tasks") || "[]").length > 0 ? sessionStorage.getItem("bench_url") || "" : ""; } catch { return ""; } })()
+  );
 
-  const selectedCategory = CATEGORIES.find((c) => c.id === categoryId) ?? null;
-  const selectedTask = selectedCategory?.tasks.find((t) => t.id === taskId) ?? null;
+  const selectedTask = tasks.find((t) => t.id === taskId) ?? null;
 
   const isUrlValid = url.startsWith("http://") || url.startsWith("https://");
   const canRun = isUrlValid && selectedTask !== null && runStatus !== "running";
+
+  const taskGenAbortRef = useRef<AbortController | null>(null);
+
+  // Clear tasks when user deletes 3+ characters from the generated URL
+  useEffect(() => {
+    const genUrl = lastGeneratedUrlRef.current;
+    if (!genUrl || tasks.length === 0) return;
+    if (url.length <= genUrl.length - 3) {
+      setTasks([]);
+      setTaskId(null);
+      setTasksError(null);
+      lastGeneratedUrlRef.current = "";
+    }
+  }, [url, tasks.length]);
+
+  const handleUrlSubmit = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (trimmed === lastGeneratedUrlRef.current) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = trimmed;
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    const abort = new AbortController();
+    taskGenAbortRef.current = abort;
+
+    try {
+      const data = await generateTasks(trimmed, abort.signal);
+      if (!abort.signal.aborted) {
+        setTasks(data.tasks);
+      }
+    } catch (e) {
+      if (!abort.signal.aborted) {
+        setTasksError(
+          e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+        );
+      }
+    } finally {
+      if (!abort.signal.aborted) {
+        setTasksLoading(false);
+      }
+      taskGenAbortRef.current = null;
+    }
+  }, [url, tasksLoading]);
+
+  const handleStopGenerate = useCallback(() => {
+    if (taskGenAbortRef.current) {
+      taskGenAbortRef.current.abort();
+      taskGenAbortRef.current = null;
+    }
+    setTasksLoading(false);
+    lastGeneratedUrlRef.current = "";
+  }, []);
+
+  const handleRegenerateTasks = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+    if (tasksLoading) return;
+
+    lastGeneratedUrlRef.current = "";
+    setTasksLoading(true);
+    setTasksError(null);
+    setTasks([]);
+    setTaskId(null);
+
+    try {
+      const data = await generateTasks(trimmed);
+      setTasks(data.tasks);
+      lastGeneratedUrlRef.current = trimmed;
+    } catch (e) {
+      setTasksError(
+        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [url, tasksLoading]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -45,19 +167,17 @@ export default function App() {
   }, []);
 
   const startPolling = useCallback(
-    (runId: string, hard: boolean) => {
+    (runId: string) => {
       pollCountRef.current = 0;
       retriesRef.current = 0;
-      const maxPolls = hard ? MAX_POLLS_HARD : MAX_POLLS_DEFAULT;
-      const timeoutMin = hard ? 10 : 5;
 
       pollRef.current = setInterval(async () => {
         pollCountRef.current++;
 
-        if (pollCountRef.current > maxPolls) {
+        if (pollCountRef.current > MAX_POLLS) {
           stopPolling();
           setRunStatus("error");
-          setErrorMsg(`Timed out after ${timeoutMin} minutes.`);
+          setErrorMsg("Lost connection — the run may still be processing on the server.");
           return;
         }
 
@@ -78,13 +198,29 @@ export default function App() {
             setScreenshot(latest.screenshot_b64);
           }
 
+          if (data.status === "analyzing") {
+            setRunStatus("analyzing");
+            setAnalyzingStats({
+              total_ms: data.total_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              total_tokens: data.total_tokens,
+            });
+            // Don't stop polling — wait for "complete"
+          }
+
           if (data.status === "complete") {
             stopPolling();
             setRunStatus("complete");
             setSummary({
               success: data.success,
               summary: data.summary,
+              result_state: data.result_state,
               total_ms: data.total_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              total_tokens: data.total_tokens,
+              phases: data.phases ?? [],
             });
           }
 
@@ -102,107 +238,161 @@ export default function App() {
     [stopPolling]
   );
 
-  const handleRun = useCallback(async () => {
-    if (!canRun || !selectedTask) return;
+  const doRun = useCallback(async () => {
+    if (!selectedTask) return;
+
+    if (!isSignedIn) {
+      setShowSignIn(true);
+      return;
+    }
+
+    const token = await getToken();
+    if (!token) {
+      setErrorMsg("Could not get auth token. Please sign in again.");
+      return;
+    }
+
+    // Check quota before starting
+    if (quota.remaining <= 0) {
+      const q = await fetchQuota(token);
+      setQuota({ remaining: q.remaining, resets_in: q.resets_in });
+      if (q.remaining <= 0) {
+        setShowExhausted(true);
+        return;
+      }
+    }
 
     setRunStatus("running");
     setSteps([]);
     setScreenshot(null);
     setSummary(null);
     setErrorMsg(null);
+    setAnalyzingStats(null);
+    setView("running");
 
     try {
-      const { run_id } = await startBenchmark(url, selectedTask.goal);
-      startPolling(run_id, selectedTask.hard ?? false);
+      // Compute the screenshot container size to match the viewer's browser
+      // Mobile (< 768px): full width minus padding, no sidebar
+      // Desktop: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
+      const isMobile = window.innerWidth < 768;
+      const vpWidth = isMobile
+        ? Math.round(window.innerWidth - 16 * 2)
+        : Math.round(window.innerWidth - 300 - 16 * 2 - 16 - 4);
+      const vpHeight = isMobile
+        ? Math.round(window.innerHeight * 0.45)
+        : Math.round(window.innerHeight * 0.55);
+      const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight }) as { run_id: string; remaining?: number; resets_in?: number };
+      currentRunIdRef.current = data.run_id;
+      if (data.remaining !== undefined) setQuota({ remaining: data.remaining, resets_in: data.resets_in ?? 0 });
+      startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [canRun, selectedTask, url, startPolling]);
+  }, [selectedTask, isSignedIn, getToken, url, startPolling]);
+
+  const handleRun = useCallback(async () => {
+    if (!canRun || !selectedTask) return;
+    await doRun();
+  }, [canRun, selectedTask, doRun]);
+
+  const handleRunAgain = useCallback(async () => {
+    if (!selectedTask) return;
+    await doRun();
+  }, [selectedTask, doRun]);
+
+  const handleNewTest = useCallback(() => {
+    stopPolling();
+    if (currentRunIdRef.current) {
+      cancelBenchmark(currentRunIdRef.current);
+      currentRunIdRef.current = null;
+    }
+    setRunStatus("idle");
+    setSteps([]);
+    setScreenshot(null);
+    setSummary(null);
+    setErrorMsg(null);
+    setAnalyzingStats(null);
+    setUrl("");
+    setTasks([]);
+    setTaskId(null);
+    lastGeneratedUrlRef.current = "";
+    setView("setup");
+  }, [stopPolling]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const isRunning = runStatus === "running";
+  const [showSignIn, setShowSignIn] = useState(false);
+
+  // Close modal when user signs in
+  useEffect(() => {
+    if (isSignedIn && showSignIn) {
+      setShowSignIn(false);
+    }
+  }, [isSignedIn, showSignIn]);
+
+  // Handle SSO callback (Google OAuth redirect)
+  if (window.location.pathname === "/sso-callback") {
+    return <AuthenticateWithRedirectCallback />;
+  }
+
+  if (view === "running") {
+    return (
+      <>
+        <RunningView
+          url={url}
+          taskLabel={selectedTask?.label ?? ""}
+          isRunning={runStatus === "running"}
+          isAnalyzing={runStatus === "analyzing"}
+          analyzingStats={analyzingStats}
+          steps={steps}
+          screenshot={screenshot}
+          summary={summary}
+          errorMsg={errorMsg}
+          onRunAgain={handleRunAgain}
+          onNewTest={handleNewTest}
+          remainingRuns={quota.remaining}
+          resetsIn={quota.resets_in}
+        />
+        {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
+      </>
+    );
+  }
+
+  if (view === "home") {
+    return (
+      <div className="view-enter" key="home">
+        <HeroSection
+          onSignInClick={isSignedIn ? undefined : () => setShowSignIn(true)}
+          onCTA={() => setView("setup")}
+        />
+        {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#f0f4ff] flex flex-col">
-      <BenchmarkHeader />
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT PANEL */}
-        <div className="w-[40%] min-w-[300px] border-r border-slate-200 bg-white flex flex-col overflow-y-auto">
-          <div className="p-6 space-y-6 flex-1">
-            <URLInput value={url} onChange={setUrl} disabled={isRunning} />
-
-            <CategorySelector
-              categories={CATEGORIES}
-              selected={categoryId}
-              onSelect={(id) => {
-                setCategoryId(id);
-                setTaskId(null);
-              }}
-              disabled={isRunning}
-            />
-
-            {selectedCategory && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Task
-                </label>
-                <div className="space-y-2">
-                  {selectedCategory.tasks.map((task: Task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      selected={taskId === task.id}
-                      onSelect={() => setTaskId(task.id)}
-                      disabled={isRunning}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-6 border-t border-slate-100">
-            <RunButton status={runStatus} disabled={!canRun} onClick={handleRun} />
-          </div>
-        </div>
-
-        {/* RIGHT PANEL */}
-        <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-4">
-          {summary && <SummaryCard data={summary} />}
-
-          {runStatus === "error" && errorMsg && (
-            <div className="border-2 border-red-300 bg-red-50 px-4 py-3">
-              <p className="text-sm text-red-700">{errorMsg}</p>
-            </div>
-          )}
-
-          {runStatus === "idle" && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-24">
-              <div className="w-16 h-16 rounded-full bg-[#3c49ad]/10 flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-[#3c49ad]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-slate-700">
-                Enter a URL, select a category and task, then hit Run.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                The agent's browser will appear here in real time.
-              </p>
-            </div>
-          )}
-
-          {runStatus !== "idle" && (
-            <>
-              <ScreenshotViewer src={screenshot} />
-              <StepLog steps={steps} isRunning={isRunning} />
-            </>
-          )}
-        </div>
-      </div>
+    <div className="view-enter" key="setup">
+      <SetupView
+        url={url}
+        onUrlChange={setUrl}
+        onUrlSubmit={handleUrlSubmit}
+        onStopGenerate={handleStopGenerate}
+        tasks={tasks}
+        tasksLoading={tasksLoading}
+        tasksError={tasksError}
+        taskId={taskId}
+        onTaskSelect={(id) => setTaskId(id)}
+        runStatus={runStatus}
+        canRun={canRun}
+        onRun={handleRun}
+        onRegenerateTasks={handleRegenerateTasks}
+        onSignInClick={() => setShowSignIn(true)}
+        remainingRuns={isSignedIn ? quota.remaining : undefined}
+        resetsIn={isSignedIn ? quota.resets_in : undefined}
+      />
+      {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
+      {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
     </div>
   );
 }

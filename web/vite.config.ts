@@ -1,9 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import yaml from "@rollup/plugin-yaml";
-
 export default defineConfig({
-  plugins: [react(), yaml()],
+  plugins: [react()],
   build: {
     outDir: "dist",
   },
@@ -25,6 +23,22 @@ export default defineConfig({
         target: "http://localhost:8000",
         changeOrigin: true,
         rewrite: () => "/benchmark/start",
+      },
+      "/api/benchmark/cancel": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: (path) =>
+          path.replace("/api/benchmark/cancel", "/benchmark/cancel"),
+      },
+      "/api/benchmark/generate-tasks": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: () => "/benchmark/generate-tasks",
+      },
+      "/api/benchmark/quota": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: () => "/benchmark/quota",
       },
     },
   },
