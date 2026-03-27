@@ -377,6 +377,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.status = "complete"
 
     except Exception as e:
+        logging.error("Benchmark run failed: %s: %s", type(e).__name__, e)
         # Still try to run judge if we have steps
         if state.steps:
             try:
@@ -392,13 +393,13 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 state.summary = judgment["summary"]
                 state.phases = judgment["phases"]
                 state.result_state = "error"
-                state.message = str(e)[:200]
+                state.message = "The run encountered an error."
                 state.status = "complete"
                 return
             except Exception:
                 pass
         state.status = "error"
-        state.message = str(e)[:200]
+        state.message = "The run encountered an error."
         state.result_state = "error"
     finally:
         # Release Browserbase session to free quota
