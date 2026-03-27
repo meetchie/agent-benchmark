@@ -292,12 +292,15 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
 
             logging.info("Browserbase session: %s", bb_session.id)
 
+            # Connect via CDP directly — avoids triggering the local browser watchdog
+            from browser_use.browser.profile import BrowserProfile
+            api_key = os.getenv("BROWSERBASE_API_KEY")
+            cdp_url = f"wss://connect.browserbase.com?apiKey={api_key}&sessionId={bb_session.id}"
+            browser_profile = BrowserProfile(cdp_url=cdp_url)
             agent = Agent(
                 task=full_goal,
                 llm=llm,
-                browserbase_api_key=os.getenv("BROWSERBASE_API_KEY"),
-                browserbase_project_id=bb_project,
-                browserbase_session_id=bb_session.id,
+                browser_profile=browser_profile,
             )
         else:
             # Local Playwright (requires a display — headed mode)
