@@ -9,7 +9,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies (no dev deps)
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
 COPY . .
