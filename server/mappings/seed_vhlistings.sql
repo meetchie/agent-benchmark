@@ -1,0 +1,295 @@
+-- VHListings Semantic Site Config Seed Data
+-- Domain: vhlistings.com
+-- Mapped: 2026-03-26
+-- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
+--
+-- Key quirks baked into this config:
+--   1. Klaviyo popup blocks ALL interaction on first visit. Handled by interrupt_handlers
+--      (detects "button[name=Close dialog]" with 8s timeout; once dismissed, zero overhead).
+--   2. Add-to-cart opens a slide-out DRAWER (not a page redirect). Drawer must be closed.
+--   3. Quantity controls differ by context: buttons on PDP, links in cart drawer/cart page.
+--   4. Some product link[name] values are AliExpress CDN URLs, not product names. Use text fallbacks.
+--   5. Color variant selection (radio buttons) is NOT covered by generic tools. Agents should
+--      navigate directly to variant URLs (e.g., /products/slug?variant=123) when color matters.
+--      This is a known limitation.
+--   6. Checkout is Shopify-hosted (/checkouts/cn/{token}/en-us) with iframed payment fields.
+--      Payment field automation is out of scope; apply_promo and navigation work.
+-- Idempotent via ON CONFLICT.
+
+-- 1. System user (shared across all seed files)
+INSERT INTO users (id, email) VALUES ('dbfde74b-c44d-53ab-abfb-e61f5ce31040', 'system@example.invalid')
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. VHListings site
+INSERT INTO sites (id, user_id, domain) VALUES ('c7f3a1e4-8b2d-5c6f-a9e0-3d4b7f2c1a8e', 'dbfde74b-c44d-53ab-abfb-e61f5ce31040', 'vhlistings.com')
+ON CONFLICT (id) DO NOTHING;
+
+-- 3. Semantic terminal site config for VHListings
+INSERT INTO site_configs (site_id, domain, config, version) VALUES (
+    'c7f3a1e4-8b2d-5c6f-a9e0-3d4b7f2c1a8e',
+    'vhlistings.com',
+    '{
+        "site_id": "vhlistings",
+        "domain": "vhlistings.com",
+        "screens": {
+            "landing": {
+                "url_pattern": "vhlistings\\.com/$",
+                "parent_screen": null,
+                "extraction": {},
+                "available_actions": ["search_products", "view_product"]
+            },
+            "collection": {
+                "url_pattern": "vhlistings\\.com/collections/",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["search_products", "view_product", "next_page", "prev_page", "go_back"]
+            },
+            "search_results": {
+                "url_pattern": "vhlistings\\.com/search",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["search_products", "view_product", "next_page", "prev_page", "go_back"]
+            },
+            "product_detail": {
+                "url_pattern": "vhlistings\\.com/products/",
+                "parent_screen": "search_results",
+                "extraction": {},
+                "available_actions": ["add_to_cart", "view_cart", "search_products", "go_back"]
+            },
+            "cart": {
+                "url_pattern": "vhlistings\\.com/cart",
+                "parent_screen": "landing",
+                "extraction": {},
+                "available_actions": ["remove_from_cart", "update_quantity", "checkout", "search_products", "go_back"]
+            },
+            "checkout": {
+                "url_pattern": "vhlistings\\.com/checkouts/",
+                "parent_screen": "cart",
+                "extraction": {},
+                "available_actions": ["apply_promo", "go_back"]
+            }
+        },
+        "actions": {
+            "search_products": {
+                "description": "Search for products on VHListings",
+                "params": {"query": {"type": "string"}},
+                "stays_on_screen": false,
+                "target_screen": "search_results",
+                "steps": [
+                    {
+                        "action": "navigate",
+                        "url": "https://vhlistings.com/search?q={{query}}"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 500
+                    }
+                ]
+            },
+            "view_product": {
+                "description": "Navigate to a product detail page",
+                "params": {"item": {"type": "string"}},
+                "stays_on_screen": false,
+                "target_screen": "product_detail",
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "link[name=\"{{item}}\"]",
+                        "fallbacks": [
+                            {"type": "text", "selector": "{{item}}"}
+                        ]
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "button[name=\"Add to cart\"]",
+                        "timeout": 10000
+                    }
+                ]
+            },
+            "add_to_cart": {
+                "description": "Add the current product to cart. Must be on product detail page. Closes the cart drawer after adding.",
+                "params": {},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Add to cart\"]"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "button[name^=\"Checkout\"]",
+                        "timeout": 3000,
+                        "optional": true
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Close\"]",
+                        "optional": true,
+                        "timeout": 2000
+                    }
+                ]
+            },
+            "view_cart": {
+                "description": "Navigate to the full cart page",
+                "params": {},
+                "stays_on_screen": false,
+                "target_screen": "cart",
+                "steps": [
+                    {
+                        "action": "navigate",
+                        "url": "https://vhlistings.com/cart"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "heading[name=\"Cart\"]",
+                        "timeout": 5000
+                    }
+                ]
+            },
+            "remove_from_cart": {
+                "description": "Remove an item from the cart. Must be on the cart page.",
+                "params": {"item": {"type": "string"}},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "link[name=\"Remove\"]",
+                        "fallbacks": [
+                            {"type": "text", "selector": "Remove"}
+                        ]
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1000
+                    }
+                ]
+            },
+            "update_quantity": {
+                "description": "Update the quantity of an item in the cart. Must be on the cart page.",
+                "params": {"item": {"type": "string"}, "quantity": {"type": "string"}},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "type",
+                        "selector": "spinbutton[name=\"Change quantity\"]",
+                        "text": "{{quantity}}"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1000
+                    }
+                ]
+            },
+            "checkout": {
+                "description": "Proceed to checkout from the cart page",
+                "params": {},
+                "stays_on_screen": false,
+                "target_screen": "checkout",
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Checkout\"]",
+                        "fallbacks": [
+                            {"type": "css", "selector": "button[name^=\"Checkout\"]"}
+                        ]
+                    }
+                ]
+            },
+            "apply_promo": {
+                "description": "Apply a discount code at checkout. Must be on the checkout page.",
+                "params": {"code": {"type": "string"}},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "type",
+                        "selector": "textbox[name=\"Discount code or gift card\"]",
+                        "text": "{{code}}"
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Apply Discount Code\"]"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1500
+                    }
+                ]
+            },
+            "next_page": {
+                "description": "Navigate to the next page of results",
+                "params": {},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "link[name=\"Next\"]",
+                        "fallbacks": [
+                            {"type": "text", "selector": "Next"}
+                        ]
+                    }
+                ]
+            },
+            "prev_page": {
+                "description": "Navigate to the previous page of results",
+                "params": {},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "click",
+                        "selector": "link[name=\"Previous\"]",
+                        "fallbacks": [
+                            {"type": "text", "selector": "Previous"}
+                        ]
+                    }
+                ]
+            },
+            "go_back": {
+                "description": "Navigate back to the main product catalog",
+                "params": {},
+                "stays_on_screen": false,
+                "target_screen": "collection",
+                "steps": [
+                    {
+                        "action": "navigate",
+                        "url": "https://vhlistings.com/collections/all"
+                    }
+                ]
+            }
+        },
+        "interrupt_handlers": [
+            {
+                "detect": "button[name=\"Close dialog\"]",
+                "detect_timeout_ms": 8000,
+                "dismiss": [
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Close dialog\"]"
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button[name=\"Close teaser\"]",
+                        "optional": true,
+                        "timeout": 3000
+                    }
+                ]
+            }
+        ],
+        "context_extractors": {
+            "cart_badge": {
+                "steps": [{"action": "extract", "selector": "link[name^=\"Cart\"]", "field": "item_count"}]
+            },
+            "bundle_progress": {
+                "steps": [{"action": "extract", "selector": "generic:has-text(\"Add\")", "field": "bundle_status"}]
+            }
+        }
+    }',
+    3
+)
+ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;

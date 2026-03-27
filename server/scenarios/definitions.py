@@ -115,6 +115,118 @@ The task FAILS if:
     verification_hint="Look for cart contents showing exactly 3 unique products: Granny Smith Apples (6 count or ~3 lbs), whole non-organic milk (gallon), and Advil ibuprofen tablets/caplets. Check that milk is explicitly NOT organic."
 ))
 
+# -----------------------------------------------------------------------------
+# VHListings Scenarios
+# -----------------------------------------------------------------------------
+
+register_scenario(Scenario(
+    name="vhlistings_add_to_cart",
+    description="Search for a product on VHListings, add to cart, and verify",
+    start_url="https://vhlistings.com",
+    tags=["e-commerce", "clothing", "cart"],
+    goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+1. Start a session on vhlistings.com.
+2. Search for "belt".
+3. From the search results, select any belt product.
+4. Add it to the cart.
+5. Navigate to the cart page and verify the item is there.
+
+IMPORTANT NOTES:
+- A popup may appear on the site. If it does, dismiss it before proceeding.
+- After adding to cart, a slide-out drawer will open. Close it, then call view_cart to navigate to the full cart page.
+
+VERIFICATION: After completing the task, call view_cart and report the exact cart contents including the product name and price.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "belt" was performed on VHListings
+2. A belt product was selected and added to the cart
+3. The cart was viewed and contains the belt product
+
+The task FAILS if:
+- The cart is empty or does not contain a belt
+- The agent never verified cart contents via view_cart""",
+    verification_hint="Look for cart contents showing a belt product with a price. The agent should have called view_cart and reported the item name."
+))
+
+register_scenario(Scenario(
+    name="vhlistings_bundle_promo",
+    description="Add 3 items to trigger the bundle discount, then apply the SPRING promo code at checkout",
+    start_url="https://vhlistings.com",
+    tags=["e-commerce", "clothing", "cart", "promo", "logic-test"],
+    goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+VHListings offers a bundle discount: BUY 3 items, GET 10% OFF automatically. There is also a promo code "SPRING" for an additional 15% off.
+
+Your task:
+1. Start a session on vhlistings.com.
+2. Search for "sunglasses". Add any one pair to your cart.
+3. Search for "wallet". Add any one wallet to your cart.
+4. Search for "jewelry". Add any one jewelry item to your cart.
+5. Navigate to the cart page (view_cart) and confirm you have exactly 3 items.
+6. Proceed to checkout.
+7. Apply the promo code "SPRING" at checkout.
+8. Report the final cart total and confirm the promo code was applied.
+
+IMPORTANT NOTES:
+- A popup may appear on first visit. Dismiss it before proceeding.
+- After each add_to_cart, close the drawer that opens, then continue searching.
+- Do NOT attempt to fill in payment details — stop after applying the promo code.
+
+VERIFICATION: Report the number of items in the cart, the subtotal, and whether the SPRING promo code was accepted.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. Exactly 3 different product categories were added (sunglasses, wallet, jewelry)
+2. The cart was verified to contain 3 items before checkout
+3. The checkout page was reached
+4. The SPRING promo code was applied (accepted without error)
+
+The task FAILS if:
+- Fewer than 3 items were added to the cart
+- The agent did not proceed to checkout
+- The promo code was not applied or was rejected
+- The agent attempted to complete payment (out of scope)""",
+    verification_hint="Look for confirmation of 3 cart items across different categories, and confirmation that the SPRING promo code was applied at checkout. The agent should report the order total visible in the checkout sidebar."
+))
+
+register_scenario(Scenario(
+    name="vhlistings_product_attribute_search",
+    description="Find a specific product matching style and price constraints",
+    start_url="https://vhlistings.com",
+    tags=["e-commerce", "clothing", "logic-test", "dirty-data"],
+    goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+Your task is to find and add a specific type of belt based on these constraints:
+- Must be a CHAIN belt (not a leather belt, not a fabric belt)
+- Sale price must be UNDER $35
+- Add it to the cart
+
+Steps:
+1. Start a session on vhlistings.com.
+2. Search for "chain belt".
+3. Review the search results. Look at product names and prices to identify a chain belt under $35.
+4. Select a qualifying product and view its detail page.
+5. Add it to the cart.
+6. Call view_cart and confirm the correct item is there.
+
+IMPORTANT NOTES:
+- A popup may appear on first visit. Dismiss it before proceeding.
+- Product names in search results describe the item type. Use the name to infer whether it is a chain belt.
+- If no results are under $35, pick the cheapest chain belt available and note that the price constraint could not be met.
+
+VERIFICATION: Report the exact product name, sale price, and confirm it is a chain belt (not leather or fabric).""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A search for "chain belt" was performed
+2. The agent selected a product that is identifiable as a chain belt from its name
+3. The product was added to the cart
+4. The cart was verified to contain the selected item
+5. The agent reported the product name and price
+
+The task FAILS if:
+- The agent added a non-chain belt (leather, fabric, etc.)
+- The cart is empty or was not verified
+- The agent did not report the product name and price""",
+    verification_hint="Look for a chain belt product in the cart with its name and price reported. Verify the product name indicates it is a chain-style belt, not leather or fabric."
+))
+
 register_scenario(Scenario(
     name="amazon_search",
     description="Search for a product on Amazon and view details",
