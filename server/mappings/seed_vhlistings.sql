@@ -1,6 +1,6 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-26 (v14: use "value" not "text"/"key"; press_enter:true on type steps)
+-- Mapped: 2026-03-26 (v15: apply_promo description clarifies success=no error, no verify step needed)
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
@@ -215,7 +215,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ]
             },
             "apply_promo": {
-                "description": "Apply a discount code at checkout. Must be on the checkout page.",
+                "description": "Apply a discount code at checkout. Must be on the checkout page. If this action returns without an error, the code was accepted — no separate verification step is needed. A successful run means the discount is applied.",
                 "params": {"code": {"type": "string"}},
                 "stays_on_screen": true,
                 "steps": [
@@ -297,6 +297,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             }
         }
     }',
-    14
+    15
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;
