@@ -1,11 +1,11 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-26
+-- Mapped: 2026-03-26 (v9: view_product uses XPath selector for CardLink-- product grid links)
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
---   1. Klaviyo popup blocks ALL interaction on first visit. Handled by interrupt_handlers
---      (detects "button[name=Close dialog]" with 8s timeout; once dismissed, zero overhead).
+--   1. Klaviyo popup blocks ALL interaction on first visit. Handled by interrupt_handlers.
+--      Detects button[name="No Thanks"] with 15s timeout. Once dismissed, zero overhead.
 --   2. Add-to-cart opens a slide-out DRAWER (not a page redirect). Drawer must be closed.
 --   3. Quantity controls differ by context: buttons on PDP, links in cart drawer/cart page.
 --   4. Some product link[name] values are AliExpress CDN URLs, not product names. Use text fallbacks.
@@ -95,15 +95,15 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {
                         "action": "click",
-                        "selector": "link[name=\"{{item}}\"]",
+                        "selector": "xpath=//a[starts-with(@id,\"CardLink--\") and contains(.,\"{{item}}\")]",
                         "fallbacks": [
-                            {"type": "text", "selector": "{{item}}"}
+                            {"type": "css", "selector": "a[id^=\"CardLink--\"]:has-text(\"{{item}}\")"}
                         ]
                     },
                     {
                         "action": "wait",
                         "strategy": "selector_visible",
-                        "selector": "button[name=\"Add to cart\"]",
+                        "selector": "button.atc-button",
                         "timeout": 10000
                     }
                 ]
@@ -115,18 +115,18 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {
                         "action": "click",
-                        "selector": "button[name=\"Add to cart\"]"
+                        "selector": "button.atc-button"
                     },
                     {
                         "action": "wait",
                         "strategy": "selector_visible",
-                        "selector": "button[name^=\"Checkout\"]",
+                        "selector": "button:has-text(\"Check out\")",
                         "timeout": 3000,
                         "optional": true
                     },
                     {
                         "action": "click",
-                        "selector": "button[name=\"Close\"]",
+                        "selector": "button.drawer__close",
                         "optional": true,
                         "timeout": 2000
                     }
@@ -144,9 +144,8 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                     },
                     {
                         "action": "wait",
-                        "strategy": "selector_visible",
-                        "selector": "heading[name=\"Cart\"]",
-                        "timeout": 5000
+                        "strategy": "delay",
+                        "timeout": 1500
                     }
                 ]
             },
@@ -265,18 +264,12 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         },
         "interrupt_handlers": [
             {
-                "detect": "button[name=\"Close dialog\"]",
-                "detect_timeout_ms": 8000,
+                "detect": "[aria-label=\"Close dialog\"]",
+                "detect_timeout_ms": 15000,
                 "dismiss": [
                     {
                         "action": "click",
-                        "selector": "button[name=\"Close dialog\"]"
-                    },
-                    {
-                        "action": "click",
-                        "selector": "button[name=\"Close teaser\"]",
-                        "optional": true,
-                        "timeout": 3000
+                        "selector": "[aria-label=\"Close dialog\"]"
                     }
                 ]
             }
@@ -290,6 +283,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             }
         }
     }',
-    3
+    9
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;

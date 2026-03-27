@@ -132,10 +132,6 @@ register_scenario(Scenario(
 4. Add it to the cart.
 5. Navigate to the cart page and verify the item is there.
 
-IMPORTANT NOTES:
-- A popup may appear on the site. If it does, dismiss it before proceeding.
-- After adding to cart, a slide-out drawer will open. Close it, then call view_cart to navigate to the full cart page.
-
 VERIFICATION: After completing the task, call view_cart and report the exact cart contents including the product name and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. A search for "belt" was performed on VHListings
@@ -167,10 +163,7 @@ Your task:
 7. Apply the promo code "SPRING" at checkout.
 8. Report the final cart total and confirm the promo code was applied.
 
-IMPORTANT NOTES:
-- A popup may appear on first visit. Dismiss it before proceeding.
-- After each add_to_cart, close the drawer that opens, then continue searching.
-- Do NOT attempt to fill in payment details — stop after applying the promo code.
+Do NOT attempt to fill in payment details — stop after applying the promo code.
 
 VERIFICATION: Report the number of items in the cart, the subtotal, and whether the SPRING promo code was accepted.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
@@ -207,10 +200,7 @@ Steps:
 5. Add it to the cart.
 6. Call view_cart and confirm the correct item is there.
 
-IMPORTANT NOTES:
-- A popup may appear on first visit. Dismiss it before proceeding.
-- Product names in search results describe the item type. Use the name to infer whether it is a chain belt.
-- If no results are under $35, pick the cheapest chain belt available and note that the price constraint could not be met.
+Product names in search results describe the item type. Use the name to infer whether it is a chain belt. If no results are under $35, pick the cheapest chain belt available and note that the price constraint could not be met.
 
 VERIFICATION: Report the exact product name, sale price, and confirm it is a chain belt (not leather or fabric).""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
@@ -225,6 +215,34 @@ The task FAILS if:
 - The cart is empty or was not verified
 - The agent did not report the product name and price""",
     verification_hint="Look for a chain belt product in the cart with its name and price reported. Verify the product name indicates it is a chain-style belt, not leather or fabric."
+))
+
+register_scenario(Scenario(
+    name="vhlistings_remove_from_cart",
+    description="Add a product to the cart on VHListings, then remove it and verify the cart is empty",
+    start_url="https://vhlistings.com",
+    tags=["e-commerce", "clothing", "cart"],
+    goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+1. Start a session on vhlistings.com.
+2. Search for "belt".
+3. Select any belt product and view its detail page.
+4. Add it to the cart.
+5. Navigate to the cart page (view_cart).
+6. Remove the item from the cart using remove_from_cart.
+7. Call view_cart again and verify the cart is now empty.
+
+VERIFICATION: After removing the item, call view_cart and confirm the cart contains zero items.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A belt was added to the cart
+2. The belt was removed using remove_from_cart
+3. The cart was verified to be empty after removal
+
+The task FAILS if:
+- The item was not removed
+- The cart still contains items after the remove step
+- The agent never verified the empty cart via view_cart""",
+    verification_hint="Look for confirmation that the cart is empty after removal. The agent should have called view_cart a second time and reported no cart items."
 ))
 
 register_scenario(Scenario(
