@@ -1,12 +1,14 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-26 (v9: view_product uses XPath selector for CardLink-- product grid links)
+-- Mapped: 2026-03-26 (v14: use "value" not "text"/"key"; press_enter:true on type steps)
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
 --   1. Klaviyo popup blocks ALL interaction on first visit. Handled by interrupt_handlers.
---      Detects button[name="No Thanks"] with 15s timeout. Once dismissed, zero overhead.
+--      Detects [aria-label="Close dialog"] with 15s timeout. Once dismissed, zero overhead.
 --   2. Add-to-cart opens a slide-out DRAWER (not a page redirect). Drawer must be closed.
+--   3. VIP Membership ($0 free trial, then $30/month) is auto-added to every cart on first
+--      add-to-cart. view_cart silently removes it before returning cart contents.
 --   3. Quantity controls differ by context: buttons on PDP, links in cart drawer/cart page.
 --   4. Some product link[name] values are AliExpress CDN URLs, not product names. Use text fallbacks.
 --   5. Color variant selection (radio buttons) is NOT covered by generic tools. Agents should
@@ -146,19 +148,30 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         "action": "wait",
                         "strategy": "delay",
                         "timeout": 1500
+                    },
+                    {
+                        "action": "click",
+                        "selector": "a[aria-label*=\"VIP Membership\"][href*=\"quantity=0\"]",
+                        "optional": true,
+                        "timeout": 1000
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 500
                     }
                 ]
             },
             "remove_from_cart": {
-                "description": "Remove an item from the cart. Must be on the cart page.",
+                "description": "Remove an item from the cart by name. Must be on the cart page.",
                 "params": {"item": {"type": "string"}},
                 "stays_on_screen": true,
                 "steps": [
                     {
                         "action": "click",
-                        "selector": "link[name=\"Remove\"]",
+                        "selector": "a[aria-label*=\"{{item}}\"][href*=\"quantity=0\"]",
                         "fallbacks": [
-                            {"type": "text", "selector": "Remove"}
+                            {"type": "css", "selector": "a[href*=\"quantity=0\"]"}
                         ]
                     },
                     {
@@ -175,13 +188,14 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {
                         "action": "type",
-                        "selector": "spinbutton[name=\"Change quantity\"]",
-                        "text": "{{quantity}}"
+                        "selector": "input[aria-label*=\"Quantity for\"][aria-label*=\"{{item}}\"]",
+                        "value": "{{quantity}}",
+                        "press_enter": true
                     },
                     {
                         "action": "wait",
                         "strategy": "delay",
-                        "timeout": 1000
+                        "timeout": 1500
                     }
                 ]
             },
@@ -193,9 +207,9 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {
                         "action": "click",
-                        "selector": "button[name=\"Checkout\"]",
+                        "selector": "button#checkout",
                         "fallbacks": [
-                            {"type": "css", "selector": "button[name^=\"Checkout\"]"}
+                            {"type": "css", "selector": "button[name=\"checkout\"]:not(#CartDrawer-Checkout)"}
                         ]
                     }
                 ]
@@ -207,12 +221,12 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "steps": [
                     {
                         "action": "type",
-                        "selector": "textbox[name=\"Discount code or gift card\"]",
-                        "text": "{{code}}"
-                    },
-                    {
-                        "action": "click",
-                        "selector": "button[name=\"Apply Discount Code\"]"
+                        "selector": "input[placeholder=\"Discount code or gift card\"]",
+                        "value": "{{code}}",
+                        "press_enter": true,
+                        "fallbacks": [
+                            {"type": "css", "selector": "input[name=\"reductions\"]"}
+                        ]
                     },
                     {
                         "action": "wait",
@@ -283,6 +297,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             }
         }
     }',
-    9
+    14
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;
