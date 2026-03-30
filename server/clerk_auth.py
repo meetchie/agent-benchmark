@@ -16,7 +16,15 @@ _JWKS_CACHE_TTL = 3600  # 1 hour
 
 
 def _get_clerk_issuer() -> str:
-    """Derive the Clerk issuer URL from the publishable key."""
+    """Return the Clerk issuer URL.
+
+    Priority:
+    1. CLERK_ISSUER_URL env var (explicit override, useful when keys are stale)
+    2. Derived from CLERK_PUBLISHABLE_KEY by base64-decoding the suffix
+    """
+    explicit = os.getenv("CLERK_ISSUER_URL", "")
+    if explicit:
+        return explicit.rstrip("/")
     pk = os.getenv("CLERK_PUBLISHABLE_KEY", "")
     if pk:
         import base64
@@ -24,7 +32,7 @@ def _get_clerk_issuer() -> str:
         encoded += "=" * (4 - len(encoded) % 4)
         domain = base64.b64decode(encoded).decode().rstrip("$")
         return f"https://{domain}"
-    raise RuntimeError("CLERK_PUBLISHABLE_KEY is required")
+    raise RuntimeError("CLERK_PUBLISHABLE_KEY or CLERK_ISSUER_URL is required")
 
 
 def _get_jwks_url() -> str:
