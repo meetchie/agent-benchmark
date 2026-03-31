@@ -556,6 +556,12 @@ Examples:
         default=25,
         help="Max action steps for RINDLER agent"
     )
+    parser.add_argument(
+        "--context-log",
+        action="store_true",
+        default=False,
+        help="Write a full context log for RINDLER (captures every message/tool call fed to the LLM). Off by default."
+    )
 
     args = parser.parse_args()
     
@@ -615,6 +621,7 @@ Examples:
     if agent_name == "RINDLER":
         extra_kwargs["llm"] = args.llm
         extra_kwargs["max_steps"] = args.max_steps
+        extra_kwargs["context_log"] = args.context_log
 
     agent = AgentClass(
         run_id=run_id,

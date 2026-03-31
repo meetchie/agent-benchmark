@@ -290,6 +290,7 @@ class RindlerTelemetricAgent(BaseAgent):
         self.server_url = os.environ.get("RINDLER_SERVER_URL", "http://localhost:8080")
         self.llm_name = kwargs.get("llm", "gpt-4o")
         self.max_steps = kwargs.get("max_steps", 25)
+        self._context_log_enabled = kwargs.get("context_log", False)
         self._token = None
         self._session_id = None
         self._code_verifier = None
@@ -487,7 +488,10 @@ class RindlerTelemetricAgent(BaseAgent):
         return parse_tool_result(raw)
 
     def _init_context_log(self, start_url: str):
-        """Initialize the full context log file that captures everything fed to the agent."""
+        """Initialize the full context log file that captures everything fed to the agent.
+        No-op when context_log=False (the default for mass runs)."""
+        if not self._context_log_enabled:
+            return
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "arena_logs")
         os.makedirs(log_dir, exist_ok=True)

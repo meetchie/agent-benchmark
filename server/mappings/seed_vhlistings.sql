@@ -1,6 +1,6 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-30 (v19: 5 bug fixes discovered via live Playwright inspection — see rationale below)
+-- Mapped: 2026-03-30 (v21: 6th fix — VIP removal timing; page_extractor for checkout visibility)
 --
 -- BUG FIX RATIONALE:
 --   FIX 1 — view_cart VIP removal selector:
@@ -26,11 +26,21 @@
 --     Why: Shopify's checkout React components intercept form submission via button click events,
 --     not Enter key events. Pressing Enter has no effect on the discount form.
 --
---   FIX 5 — apply_promo description strengthened:
+--   FIX 5 — apply_promo description strengthened + page_extractor added:
 --     Why: Shopify checkout pricing (Order discount, Total) uses plain divs with no ARIA roles.
 --     These elements are invisible to Playwright's AriaSnapshot. After apply_promo succeeds,
 --     the agent sees an unchanged "Cost summary" and incorrectly concludes the code failed.
---     The description now explicitly instructs the agent to trust a no-error response.
+--     page_extractor reads document.body.innerText directly (bypassing ARIA) and returns
+--     {discount_applied: bool, savings: string} as page_info in the response data.
+--     The description also instructs the agent to trust a no-error response.
+--
+--   FIX 6 — view_cart VIP removal timing:
+--     Old: click with timeout: 1000 (1000ms to find and click the element)
+--     New: selector_visible wait (4000ms, optional) added before the click; timeout removed from click
+--     Why: cart-remove-button is a Shopify Dawn custom element that registers async after page load.
+--     ClickResilient default is 2000ms; the 1000ms override was too tight for the element to appear.
+--     A selector_visible wait ensures the element is in the DOM before the click is attempted.
+--     If VIP is not present (edge case), the optional wait times out silently and the click also skips.
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
@@ -180,15 +190,21 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         "timeout": 1500
                     },
                     {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "cart-remove-button[data-handle=\"vip-membership\"] button",
+                        "timeout": 4000,
+                        "optional": true
+                    },
+                    {
                         "action": "click",
                         "selector": "cart-remove-button[data-handle=\"vip-membership\"] button",
-                        "optional": true,
-                        "timeout": 1000
+                        "optional": true
                     },
                     {
                         "action": "wait",
                         "strategy": "delay",
-                        "timeout": 500
+                        "timeout": 1500
                     }
                 ]
             },
@@ -335,6 +351,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         },
         "page_extractor": "() => { try { if (location.href.indexOf(\"/checkouts/\") === -1) return null; var txt = document.body.innerText; var discountApplied = txt.indexOf(\"Order discount\") !== -1; var savingsI = txt.indexOf(\"TOTAL SAVINGS\"); var savings = savingsI >= 0 ? txt.slice(savingsI, savingsI + 35) : null; return { discount_applied: discountApplied, savings: savings }; } catch(e) { return null; } }"
     }',
-    20
+    21
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;
