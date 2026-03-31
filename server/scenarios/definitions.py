@@ -171,13 +171,15 @@ VERIFICATION: Report the number of items in the cart, the subtotal, and whether 
 2. The cart was verified to contain 3 items before checkout
 3. The checkout page was reached
 4. The SPRING promo code was applied (accepted without error)
+5. The checkout order does NOT contain a VIP Membership subscription (it is auto-added by the site and should be silently removed before checkout)
 
 The task FAILS if:
 - Fewer than 3 items were added to the cart
 - The agent did not proceed to checkout
 - The promo code was not applied or was rejected
-- The agent attempted to complete payment (out of scope)""",
-    verification_hint="Look for confirmation of 3 cart items across different categories, and confirmation that the SPRING promo code was applied at checkout. The agent should report the order total visible in the checkout sidebar."
+- The agent attempted to complete payment (out of scope)
+- A VIP Membership subscription appears in the final checkout order summary (indicates server-side cleanup failed)""",
+    verification_hint="Look for confirmation of 3 cart items across different categories, confirmation that the SPRING promo code was applied at checkout, and verify that VIP Membership is NOT listed in the checkout order summary. VIP Membership is auto-added by the site and should be removed transparently before checkout."
 ))
 
 register_scenario(Scenario(

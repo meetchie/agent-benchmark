@@ -1,6 +1,56 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-26 (v15: apply_promo description clarifies success=no error, no verify step needed)
+-- Mapped: 2026-03-30 (v25: FIX 7 — checkout via drawer; avoids /cart which re-adds VIP)
+--
+-- BUG FIX RATIONALE:
+--   FIX 1 — view_cart VIP removal selector:
+--     Old: a[aria-label*="VIP Membership"][href*="quantity=0"]  (link no longer exists)
+--     New: cart-remove-button[data-handle="vip-membership"] button
+--     Why: VHListings migrated cart to Shopify Dawn theme using <cart-remove-button> custom elements.
+--     The old href-based remove links were replaced with declarative custom element buttons.
+--
+--   FIX 2 — checkout action changed from click to navigate:
+--     Old: click button#checkout (button has form="cart" attribute pointing to nonexistent form)
+--     New: navigate https://vhlistings.com/checkout
+--     Why: The button's form="cart" association references a form that doesn't exist in the DOM.
+--     Clicking the submit button with no valid form does nothing; Shopify's /checkout redirect works.
+--
+--   FIX 3 — apply_promo wait before type:
+--     Added: wait selector_visible input[name="reductions"] timeout 8000ms
+--     Why: Shopify's new React checkout mounts the discount input asynchronously. The input
+--     is not in the DOM immediately after navigation completes; wait prevents type step failures.
+--
+--   FIX 4 — apply_promo submission method:
+--     Old: press_enter: true (Enter key does NOT trigger Shopify React's submit handler)
+--     New: press_enter: false + click button[aria-label="Apply Discount Code"]
+--     Why: Shopify's checkout React components intercept form submission via button click events,
+--     not Enter key events. Pressing Enter has no effect on the discount form.
+--
+--   FIX 5 — apply_promo description strengthened + page_extractor added:
+--     Why: Shopify checkout pricing (Order discount, Total) uses plain divs with no ARIA roles.
+--     These elements are invisible to Playwright's AriaSnapshot. After apply_promo succeeds,
+--     the agent sees an unchanged "Cost summary" and incorrectly concludes the code failed.
+--     page_extractor reads document.body.innerText directly (bypassing ARIA) and returns
+--     {discount_applied: bool, savings: string} as page_info in the response data.
+--     The description also instructs the agent to trust a no-error response.
+--
+--   FIX 6 — VIP removal: wrong element, wrong action, wrong location:
+--     Old (v19-v21): click cart-remove-button[data-handle="vip-membership"] button in view_cart
+--     New (v22): click the toggle switch in add_to_cart while the cart drawer is open
+--     Why: Live DOM inspection revealed that cart-remove-button lives inside a <li> with display:none
+--     set by VHListings CSS. The VIP list item is always hidden -- the site intentionally does not
+--     show VIP in the cart items list. There is no clickable remove button anywhere on the /cart page.
+--     The correct UI affordance is a toggle switch (cart-drawer-upsell button.upsell__toggle-switch)
+--     that appears in the cart DRAWER while it is open after an add-to-cart. Clicking the toggle
+--     removes VIP from the cart. view_cart no longer attempts VIP removal (no valid target).
+--
+--   FIX 7 — VIP re-added on every add-to-cart; checkout via drawer to avoid /cart:
+--     Root cause: navigating to /cart (view_cart) causes Shopify to re-add VIP (cart jumps 3->4).
+--     The cart-drawer-upsell toggle only exists on non-cart pages (product pages, home page).
+--     New (v25): checkout action navigates to home, clicks the cart icon to open the drawer,
+--     waits for the drawer checkout button to confirm the drawer is open, fires a JS MouseEvent
+--     on the VIP toggle to turn it off (bypasses Playwright visibility checks), then clicks the
+--     drawer's own "Check out" button. This never touches /cart, so VIP is not re-added.
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
@@ -111,7 +161,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ]
             },
             "add_to_cart": {
-                "description": "Add the current product to cart. Must be on product detail page. Closes the cart drawer after adding.",
+                "description": "Add the current product to cart. Must be on product detail page. Silently removes the auto-added VIP Membership subscription via its toggle in the cart drawer, then closes the drawer.",
                 "params": {},
                 "stays_on_screen": true,
                 "steps": [
@@ -123,8 +173,25 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         "action": "wait",
                         "strategy": "selector_visible",
                         "selector": "button:has-text(\"Check out\")",
-                        "timeout": 3000,
+                        "timeout": 4000,
                         "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch",
+                        "timeout": 2000,
+                        "optional": true
+                    },
+                    {
+                        "action": "click",
+                        "selector": "cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch",
+                        "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1000
                     },
                     {
                         "action": "click",
@@ -148,12 +215,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         "action": "wait",
                         "strategy": "delay",
                         "timeout": 1500
-                    },
-                    {
-                        "action": "click",
-                        "selector": "a[aria-label*=\"VIP Membership\"][href*=\"quantity=0\"]",
-                        "optional": true,
-                        "timeout": 1000
                     },
                     {
                         "action": "wait",
@@ -200,38 +261,78 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ]
             },
             "checkout": {
-                "description": "Proceed to checkout from the cart page",
+                "description": "Proceed to checkout. Navigates to the home page, opens the cart sidebar, toggles off the VIP Membership if present, then clicks the sidebar checkout button. Do NOT call view_cart before this — navigating to /cart re-adds VIP.",
                 "params": {},
                 "stays_on_screen": false,
                 "target_screen": "checkout",
                 "steps": [
                     {
-                        "action": "click",
-                        "selector": "button#checkout",
-                        "fallbacks": [
-                            {"type": "css", "selector": "button[name=\"checkout\"]:not(#CartDrawer-Checkout)"}
-                        ]
-                    }
-                ]
-            },
-            "apply_promo": {
-                "description": "Apply a discount code at checkout. Must be on the checkout page. If this action returns without an error, the code was accepted — no separate verification step is needed. A successful run means the discount is applied.",
-                "params": {"code": {"type": "string"}},
-                "stays_on_screen": true,
-                "steps": [
+                        "action": "navigate",
+                        "url": "https://vhlistings.com"
+                    },
                     {
-                        "action": "type",
-                        "selector": "input[placeholder=\"Discount code or gift card\"]",
-                        "value": "{{code}}",
-                        "press_enter": true,
+                        "action": "click",
+                        "selector": "#cart-icon-bubble",
                         "fallbacks": [
-                            {"type": "css", "selector": "input[name=\"reductions\"]"}
-                        ]
+                            {"type": "css", "selector": "a[href=\"/cart\"]"}
+                        ],
+                        "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "button:has-text(\"Check out\")",
+                        "timeout": 4000,
+                        "optional": true
+                    },
+                    {
+                        "action": "script",
+                        "script": "(async function(){try{var c=await(await fetch(''/cart.json'')).json();var v=c.items&&c.items.find(function(i){return i.handle===''vip-membership'';});if(v){var t=document.querySelector(''cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch'');if(t)t.dispatchEvent(new MouseEvent(''click'',{bubbles:true,cancelable:true}));}}catch(e){}})();",
+                        "optional": true
                     },
                     {
                         "action": "wait",
                         "strategy": "delay",
                         "timeout": 1500
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button:has-text(\"Check out\")",
+                        "fallbacks": [
+                            {"type": "css", "selector": "a:has-text(\"Check out\")"},
+                            {"type": "css", "selector": "a[href=\"/checkout\"]"}
+                        ]
+                    }
+                ]
+            },
+            "apply_promo": {
+                "description": "Apply a discount code at checkout. Must be on the checkout page. IMPORTANT: The checkout page uses non-ARIA pricing elements, so the price shown in the response will NOT visually change after this action even when the code is successfully applied. If this action returns without an error field, the discount code IS active on the order — call done with success=True immediately. Do NOT attempt to re-apply or verify by checking prices.",
+                "params": {"code": {"type": "string"}},
+                "stays_on_screen": true,
+                "steps": [
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "input[name=\"reductions\"]",
+                        "timeout": 8000
+                    },
+                    {
+                        "action": "type",
+                        "selector": "input[placeholder=\"Discount code or gift card\"]",
+                        "value": "{{code}}",
+                        "press_enter": false,
+                        "fallbacks": [
+                            {"type": "css", "selector": "input[name=\"reductions\"]"}
+                        ]
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button[aria-label=\"Apply Discount Code\"]"
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 2000
                     }
                 ]
             },
@@ -295,8 +396,9 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "bundle_progress": {
                 "steps": [{"action": "extract", "selector": "generic:has-text(\"Add\")", "field": "bundle_status"}]
             }
-        }
+        },
+        "page_extractor": "() => { try { if (location.href.indexOf(\"/checkouts/\") === -1) return null; var txt = document.body.innerText; var discountApplied = txt.indexOf(\"Order discount\") !== -1; var savingsI = txt.indexOf(\"TOTAL SAVINGS\"); var savings = savingsI >= 0 ? txt.slice(savingsI, savingsI + 35) : null; return { discount_applied: discountApplied, savings: savings }; } catch(e) { return null; } }"
     }',
-    15
+    25
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;

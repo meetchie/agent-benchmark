@@ -341,7 +341,6 @@ function analyzeFriction(
   const friction: FrictionEvent[] = [];
 
   // 1. Detect observation loops (consecutive identical observation_hash)
-  let loopStart = -1;
   let loopIndices: number[] = [];
   for (let i = 1; i < steps.length; i++) {
     const prev = steps[i - 1];
@@ -352,7 +351,6 @@ function analyzeFriction(
       curr.observationHash === prev.observationHash
     ) {
       if (loopIndices.length === 0) {
-        loopStart = i - 1;
         loopIndices = [prev.index, curr.index];
       } else {
         loopIndices.push(curr.index);
@@ -367,7 +365,6 @@ function analyzeFriction(
         });
       }
       loopIndices = [];
-      loopStart = -1;
     }
   }
   // Flush remaining loop
@@ -463,7 +460,7 @@ export function scenarioLabel(filename: string): string {
   );
   if (!match) return filename;
 
-  const [, agent, scenario, year, month, day, hour, minute] = match;
+  const [, _agent, scenario, year, month, day, hour, minute] = match;
   const site = scenario
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
