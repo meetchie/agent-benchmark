@@ -1,6 +1,36 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-26 (v15: apply_promo description clarifies success=no error, no verify step needed)
+-- Mapped: 2026-03-30 (v19: 5 bug fixes discovered via live Playwright inspection — see rationale below)
+--
+-- BUG FIX RATIONALE:
+--   FIX 1 — view_cart VIP removal selector:
+--     Old: a[aria-label*="VIP Membership"][href*="quantity=0"]  (link no longer exists)
+--     New: cart-remove-button[data-handle="vip-membership"] button
+--     Why: VHListings migrated cart to Shopify Dawn theme using <cart-remove-button> custom elements.
+--     The old href-based remove links were replaced with declarative custom element buttons.
+--
+--   FIX 2 — checkout action changed from click to navigate:
+--     Old: click button#checkout (button has form="cart" attribute pointing to nonexistent form)
+--     New: navigate https://vhlistings.com/checkout
+--     Why: The button's form="cart" association references a form that doesn't exist in the DOM.
+--     Clicking the submit button with no valid form does nothing; Shopify's /checkout redirect works.
+--
+--   FIX 3 — apply_promo wait before type:
+--     Added: wait selector_visible input[name="reductions"] timeout 8000ms
+--     Why: Shopify's new React checkout mounts the discount input asynchronously. The input
+--     is not in the DOM immediately after navigation completes; wait prevents type step failures.
+--
+--   FIX 4 — apply_promo submission method:
+--     Old: press_enter: true (Enter key does NOT trigger Shopify React's submit handler)
+--     New: press_enter: false + click button[aria-label="Apply Discount Code"]
+--     Why: Shopify's checkout React components intercept form submission via button click events,
+--     not Enter key events. Pressing Enter has no effect on the discount form.
+--
+--   FIX 5 — apply_promo description strengthened:
+--     Why: Shopify checkout pricing (Order discount, Total) uses plain divs with no ARIA roles.
+--     These elements are invisible to Playwright's AriaSnapshot. After apply_promo succeeds,
+--     the agent sees an unchanged "Cost summary" and incorrectly concludes the code failed.
+--     The description now explicitly instructs the agent to trust a no-error response.
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
@@ -151,7 +181,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                     },
                     {
                         "action": "click",
-                        "selector": "a[aria-label*=\"VIP Membership\"][href*=\"quantity=0\"]",
+                        "selector": "cart-remove-button[data-handle=\"vip-membership\"] button",
                         "optional": true,
                         "timeout": 1000
                     },
@@ -206,32 +236,39 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 "target_screen": "checkout",
                 "steps": [
                     {
-                        "action": "click",
-                        "selector": "button#checkout",
-                        "fallbacks": [
-                            {"type": "css", "selector": "button[name=\"checkout\"]:not(#CartDrawer-Checkout)"}
-                        ]
+                        "action": "navigate",
+                        "url": "https://vhlistings.com/checkout"
                     }
                 ]
             },
             "apply_promo": {
-                "description": "Apply a discount code at checkout. Must be on the checkout page. If this action returns without an error, the code was accepted — no separate verification step is needed. A successful run means the discount is applied.",
+                "description": "Apply a discount code at checkout. Must be on the checkout page. IMPORTANT: The checkout page uses non-ARIA pricing elements, so the price shown in the response will NOT visually change after this action even when the code is successfully applied. If this action returns without an error field, the discount code IS active on the order — call done with success=True immediately. Do NOT attempt to re-apply or verify by checking prices.",
                 "params": {"code": {"type": "string"}},
                 "stays_on_screen": true,
                 "steps": [
                     {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "input[name=\"reductions\"]",
+                        "timeout": 8000
+                    },
+                    {
                         "action": "type",
                         "selector": "input[placeholder=\"Discount code or gift card\"]",
                         "value": "{{code}}",
-                        "press_enter": true,
+                        "press_enter": false,
                         "fallbacks": [
                             {"type": "css", "selector": "input[name=\"reductions\"]"}
                         ]
                     },
                     {
+                        "action": "click",
+                        "selector": "button[aria-label=\"Apply Discount Code\"]"
+                    },
+                    {
                         "action": "wait",
                         "strategy": "delay",
-                        "timeout": 1500
+                        "timeout": 2000
                     }
                 ]
             },
@@ -295,8 +332,9 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
             "bundle_progress": {
                 "steps": [{"action": "extract", "selector": "generic:has-text(\"Add\")", "field": "bundle_status"}]
             }
-        }
+        },
+        "page_extractor": "() => { try { if (location.href.indexOf(\"/checkouts/\") === -1) return null; var txt = document.body.innerText; var discountApplied = txt.indexOf(\"Order discount\") !== -1; var savingsI = txt.indexOf(\"TOTAL SAVINGS\"); var savings = savingsI >= 0 ? txt.slice(savingsI, savingsI + 35) : null; return { discount_applied: discountApplied, savings: savings }; } catch(e) { return null; } }"
     }',
-    15
+    20
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;
