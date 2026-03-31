@@ -365,7 +365,10 @@ def generate_tasks(metadata: dict) -> list[dict]:
 async def fetch_and_generate(url: str) -> list[dict]:
     """Fetch a URL, extract metadata, and generate benchmark tasks.
 
-    Validates the URL, fetches HTML via aiohttp with 5s timeout, checks
+    For known commerce domains, skips the HTTP fetch (they block server-side
+    requests from data center IPs) and generates tasks from domain knowledge alone.
+
+    For unknown domains, fetches HTML via aiohttp with 15s timeout, checks
     Content-Type is text/html, extracts metadata, and calls generate_tasks.
 
     Raises:
@@ -375,7 +378,15 @@ async def fetch_and_generate(url: str) -> list[dict]:
     if not validate_url(url):
         raise ValueError(f"Invalid or disallowed URL: {url}")
 
-    timeout = aiohttp.ClientTimeout(total=10)
+    domain = _get_domain(url)
+
+    # Known commerce sites block server-side fetches from data center IPs.
+    # Skip the HTML fetch and generate tasks from GPT-4o's domain knowledge.
+    if domain in _KNOWN_COMMERCE_DOMAINS:
+        metadata = {"title": "", "description": "", "visible_text": "", "url": url}
+        return generate_tasks(metadata)
+
+    timeout = aiohttp.ClientTimeout(total=15)
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
