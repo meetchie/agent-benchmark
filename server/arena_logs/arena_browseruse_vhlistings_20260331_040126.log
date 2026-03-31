@@ -1,0 +1,494 @@
+Agent: BROWSERUSE
+Scenario: vhlistings_bundle_promo
+Run ID: bca3d620-2d26-423a-a85d-21371195a43b
+Trace ID: aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8
+Goal: You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+VHListings offers a bundle discount: BUY 3 items, GET 10% OFF automatically. There is also a promo code "SPRING" for an additional 15% off.
+
+Your task:
+1. Start a session on vhlistings.com.
+2. Search for "sunglasses". Add any one pair to your cart.
+3. Search for "wallet". Add any one wallet to your cart.
+4. Search for "jewelry". Add any one jewelry item to your cart.
+5. Navigate to the cart page (view_cart) and confirm you have exactly 3 items.
+6. Proceed to checkout.
+7. Apply the promo code "SPRING" at checkout.
+8. Report the final cart total and confirm the promo code was applied.
+
+Do NOT attempt to fill in payment details — stop after applying the promo code.
+
+VERIFICATION: Report the number of items in the cart, the subtotal, and whether the SPRING promo code was accepted.
+Start URL: https://vhlistings.com
+Duration: 228.35s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: FAIL
+Judge Reason: The agent did not successfully complete the task as it failed to confirm the cart contents and the final extraction does not provide sufficient details about the items added to the cart.
+Criteria Failed: The cart was verified to contain 3 items before checkout, The SPRING promo code was applied (accepted without error)
+Errors Observed by Judge: The final extraction does not confirm the specific items added to the cart or their categories.
+--- END JUDGE EVALUATION ---
+Token Burn: 152,308 (149,881 in / 2,427 out)
+Cost: $0.3990
+
+Telemetry Events:
+[
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:57:40.787474",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:57:48.330302",
+    "duration_ms": 7542.828,
+    "tokens_input": 9376,
+    "tokens_output": 162,
+    "cost_usd": 0.025060000000000002,
+    "action_type": "navigate",
+    "observation_hash": "c79eea190f6ec7bcfd243ac5925842e6c69c75789c70a435699c79b0bce2a518"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:57:48.330404",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:57:56.200176",
+    "duration_ms": 7869.772,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "9a914d216abcde6ca804a52a6d4a96bb86bbf0b884a64861bf8f468da6203b02"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:57:56.200330",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "input",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:05.699888",
+    "duration_ms": 9499.558,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "input",
+    "observation_hash": "a3ee6dfa0cd57a038965970eb51db0abb41741111fd8ea9f859dc33d0a5ee2fc"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:05.700053",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:15.094510",
+    "duration_ms": 9394.456999999999,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "8a378db970ca2fed3873cceae21bea1321c5db5b8e2cb3a8f3464ab834683c0f"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:15.094645",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:25.297635",
+    "duration_ms": 10202.99,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "scroll",
+    "observation_hash": "b38f9a1859465a35bbb79a13b4eb19d938bba16b2fcd10ffdcf9f7f88f8258ad"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:25.297753",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:36.673717",
+    "duration_ms": 11375.964,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "12095697e675f7d7d8c4078d6352ccdcb81769d4f69ace8c8050dba22058eae2"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:36.673884",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "send_keys",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:45.955423",
+    "duration_ms": 9281.539,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "send_keys",
+    "observation_hash": "8a378db970ca2fed3873cceae21bea1321c5db5b8e2cb3a8f3464ab834683c0f"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:45.955596",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:58:53.442305",
+    "duration_ms": 7486.709,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "scroll",
+    "observation_hash": "78d8b4fc91a2687954ec1946e07514c0d25d46f40ca8cde2ca8a2d3463bda864"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:58:53.442477",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:06.093201",
+    "duration_ms": 12650.724,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "0ecb9bdd2fab8c6a58a39ebd5e1bbb1b2c2770174b8be9971e41d966dddcbcd1"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:06.093357",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "wait",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:15.699047",
+    "duration_ms": 9605.689999999999,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "wait",
+    "observation_hash": "12095697e675f7d7d8c4078d6352ccdcb81769d4f69ace8c8050dba22058eae2"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:15.699186",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "send_keys",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:26.829723",
+    "duration_ms": 11130.537,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "send_keys",
+    "observation_hash": "12095697e675f7d7d8c4078d6352ccdcb81769d4f69ace8c8050dba22058eae2"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:26.829904",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "send_keys",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 12,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:36.052621",
+    "duration_ms": 9222.716999999999,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "send_keys",
+    "observation_hash": "856940a2cde41e4c3845513b9d124732a6020ea6a9f8afd839366f09a803337f"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:36.052816",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 13,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:48.309097",
+    "duration_ms": 12256.280999999999,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "31ab4883d5c8339433e82d5fdb6f0267d809e0c69054cb03ff5c78ff818910ab"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:48.309445",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 14,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T03:59:59.884204",
+    "duration_ms": 11574.759,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "navigate",
+    "observation_hash": "2f36bcc0027b5c53b8965b1445328c119ff68aec43a30d3aee1f4101a6eb7734"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T03:59:59.884545",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 15,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T04:00:18.565291",
+    "duration_ms": 18680.746,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "click",
+    "observation_hash": "5516529e49a0259b9759cb0cb485d9aec50ad1d476c6bbeb589a98b706766395"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T04:00:18.565464",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "step_index": 16,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T04:01:03.381266",
+    "duration_ms": 44815.801999999996,
+    "tokens_input": 9367,
+    "tokens_output": 151,
+    "cost_usd": 0.024927500000000002,
+    "action_type": "scroll",
+    "observation_hash": "063d1879946bdc3e2c645db09560c70295c2a57818ac6e9e2bc56b432093a4c0"
+  },
+  {
+    "trace_id": "aea1da7c-e6c9-43eb-b6e9-eca1df1d0bd8",
+    "run_id": "bca3d620-2d26-423a-a85d-21371195a43b",
+    "lane": "BROWSERUSE",
+    "event_type": "artifact",
+    "artifact_type": "session_replay",
+    "artifact_url": "https://www.browserbase.com/sessions/9983597d-2068-489f-85d6-73b8dd39b3b3",
+    "timestamp": "2026-03-31T04:01:23.250758"
+  }
+]

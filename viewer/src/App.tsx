@@ -7,13 +7,13 @@ import { GoalPanel } from "./components/GoalPanel";
 import { FrictionPanel } from "./components/FrictionPanel";
 import { StepTimeline } from "./components/StepTimeline";
 import { CostChart } from "./components/CostChart";
-import { TrendsPage } from "./components/TrendsPage";
+import { ResultsPage } from "./components/ResultsPage";
 
-type Page = "viewer" | "trends";
+type Page = "results" | "logs";
 
 function App() {
   const [page, setPage] = useState<Page>(() => {
-    return window.location.hash === "#trends" ? "trends" : "viewer";
+    return window.location.hash === "#logs" ? "logs" : "results";
   });
   const [fileMetas, setFileMetas] = useState<LogFileMeta[]>([]);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -30,18 +30,18 @@ function App() {
   // Sync hash with page state
   useEffect(() => {
     const onHashChange = () => {
-      setPage(window.location.hash === "#trends" ? "trends" : "viewer");
+      setPage(window.location.hash === "#logs" ? "logs" : "results");
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   const navigateTo = useCallback((p: Page) => {
-    window.location.hash = p === "trends" ? "#trends" : "#viewer";
+    window.location.hash = p === "logs" ? "#logs" : "#results";
     setPage(p);
   }, []);
 
-  // Load manifest and file metadata on mount
+  // Load manifest on mount
   useEffect(() => {
     setMetaLoading(true);
     fetch("/logs/manifest.json")
@@ -59,15 +59,13 @@ function App() {
             }
           })
         );
-        setFileMetas(
-          metas.filter((m): m is LogFileMeta => m !== null)
-        );
+        setFileMetas(metas.filter((m): m is LogFileMeta => m !== null));
       })
       .catch(() => {})
       .finally(() => setMetaLoading(false));
   }, []);
 
-  // Close dropdown on click outside
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
@@ -81,7 +79,6 @@ function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Load selected log file (from cache or fetch)
   const loadLogFile = useCallback(async (filename: string) => {
     setLoading(true);
     setError(null);
@@ -103,7 +100,6 @@ function App() {
     }
   }, []);
 
-  // Handle file upload
   const handleFileUpload = useCallback(async (file: File) => {
     setLoading(true);
     setError(null);
@@ -113,32 +109,25 @@ function App() {
       setLog(parsed);
       setSelectedFile(file.name);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to parse file"
-      );
+      setError(err instanceof Error ? err.message : "Failed to parse file");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(true);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
-    setDragOver(false);
-  }, []);
+  const handleDragLeave = useCallback(() => setDragOver(false), []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file && file.name.endsWith(".log")) {
-        handleFileUpload(file);
-      }
+      if (file && file.name.endsWith(".log")) handleFileUpload(file);
     },
     [handleFileUpload]
   );
@@ -151,8 +140,124 @@ function App() {
     [handleFileUpload]
   );
 
-  const selectedMeta =
-    fileMetas.find((m) => m.filename === selectedFile) ?? null;
+  const selectedMeta = fileMetas.find((m) => m.filename === selectedFile) ?? null;
+
+  // Log selector UI (shared between main page log section and logs page)
+  const logSelectorUI = (
+    <div className="log-selector" ref={dropdownRef}>
+      <button
+        className={`log-selector-trigger ${dropdownOpen ? "open" : ""}`}
+        onClick={() => setDropdownOpen(!dropdownOpen)}
+      >
+        {selectedMeta ? (
+          <span className="log-selector-value">
+            <span className={`agent-tag ${selectedMeta.isMcp ? "mcp" : "bu"}`}>
+              {selectedMeta.isMcp ? "MCP" : "BU"}
+            </span>
+            <span className="log-selector-site">{selectedMeta.site}</span>
+            <span className="log-selector-date">
+              {selectedMeta.dateLabel} {selectedMeta.timeLabel}
+            </span>
+            <span className={`verdict-dot ${selectedMeta.verdict.toLowerCase()}`} />
+          </span>
+        ) : (
+          <span className="log-selector-placeholder">
+            {metaLoading ? "Loading runs..." : "Select a log run..."}
+          </span>
+        )}
+        <span className="log-selector-chevron">&#9662;</span>
+      </button>
+
+      {dropdownOpen && (
+        <div className="log-selector-dropdown">
+          {fileMetas.length === 0 && (
+            <div className="log-selector-empty">
+              {metaLoading ? "Loading..." : "No log files found"}
+            </div>
+          )}
+          {fileMetas.map((meta) => (
+            <button
+              key={meta.filename}
+              className={`log-selector-option ${
+                selectedFile === meta.filename ? "selected" : ""
+              }`}
+              onClick={() => {
+                loadLogFile(meta.filename);
+                setDropdownOpen(false);
+              }}
+            >
+              <span className={`agent-tag ${meta.isMcp ? "mcp" : "bu"}`}>
+                {meta.isMcp ? "MCP" : "BU"}
+              </span>
+              <span className="log-selector-site">{meta.site}</span>
+              <span className="log-selector-date">
+                {meta.dateLabel} {meta.timeLabel}
+              </span>
+              <span className={`verdict-indicator ${meta.verdict.toLowerCase()}`}>
+                {meta.verdict === "PASS" ? "PASS" : meta.verdict === "FAIL" ? "FAIL" : "-"}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const logViewerContent = (
+    <>
+      {loading && (
+        <div className="loading-overlay">
+          <div className="spinner" />
+          Parsing log...
+        </div>
+      )}
+
+      {error && <div className="error-banner">{error}</div>}
+
+      {!log && !loading && (
+        <div className="empty-state">
+          <div className="empty-icon">&#128202;</div>
+          <h2>VHListings Log Viewer</h2>
+          <p>
+            Select a run from the dropdown, or drag &amp; drop a{" "}
+            <code>.log</code> file here.
+          </p>
+          <div className="drop-zone">
+            <span>Drop .log file here</span>
+          </div>
+        </div>
+      )}
+
+      {log && (
+        <div className="dashboard">
+          <SummaryCards log={log} />
+          <div className="dashboard-grid">
+            <div className="grid-left">
+              <GoalPanel log={log} />
+              <FrictionPanel log={log} />
+            </div>
+            <div className="grid-right">
+              <CostChart log={log} />
+            </div>
+          </div>
+          <StepTimeline log={log} />
+          {log.artifactUrl && (
+            <div className="panel artifact-panel">
+              <h3>Session Replay</h3>
+              <a
+                href={log.artifactUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="artifact-link"
+              >
+                Open Browserbase Session Replay &rarr;
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="app">
@@ -160,117 +265,29 @@ function App() {
       <header className="app-header">
         <div className="header-left">
           <img src="/logo.png" alt="Rindler" className="header-logo" />
-          <div className="header-title">
-            <h1>Rindler</h1>
-            <span className="header-subtitle">Arena Log Analyzer</span>
+          <div className="header-brand">
+            <span className="header-brand-name">Rindler</span>
+            <span className="header-brand-sub">VHListings Benchmark</span>
           </div>
           <nav className="header-nav">
             <button
-              className={`nav-tab ${page === "viewer" ? "active" : ""}`}
-              onClick={() => navigateTo("viewer")}
+              className={`nav-tab ${page === "results" ? "active" : ""}`}
+              onClick={() => navigateTo("results")}
             >
-              Log Viewer
+              Results
             </button>
             <button
-              className={`nav-tab ${page === "trends" ? "active" : ""}`}
-              onClick={() => navigateTo("trends")}
+              className={`nav-tab ${page === "logs" ? "active" : ""}`}
+              onClick={() => navigateTo("logs")}
             >
-              Trends
+              Log Viewer
             </button>
           </nav>
         </div>
 
-        {page === "viewer" && (
+        {page === "logs" && (
           <div className="header-controls">
-            {/* Custom log selector dropdown */}
-            <div className="log-selector" ref={dropdownRef}>
-              <button
-                className={`log-selector-trigger ${dropdownOpen ? "open" : ""}`}
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-              >
-                {selectedMeta ? (
-                  <span className="log-selector-value">
-                    <span
-                      className={`agent-tag ${selectedMeta.isMcp ? "mcp" : "bu"}`}
-                    >
-                      {selectedMeta.isMcp ? "MCP" : "BU"}
-                    </span>
-                    <span
-                      className={`prompt-tag ${selectedMeta.promptType}`}
-                    >
-                      {selectedMeta.promptType === "simple"
-                        ? "Simple"
-                        : selectedMeta.promptType === "complex"
-                          ? "Complex"
-                          : "—"}
-                    </span>
-                    <span className="log-selector-site">
-                      {selectedMeta.site}
-                    </span>
-                    <span className="log-selector-date">
-                      {selectedMeta.dateLabel} {selectedMeta.timeLabel}
-                    </span>
-                    <span
-                      className={`verdict-dot ${selectedMeta.verdict.toLowerCase()}`}
-                    />
-                  </span>
-                ) : (
-                  <span className="log-selector-placeholder">
-                    {metaLoading ? "Loading runs..." : "Select a log run..."}
-                  </span>
-                )}
-                <span className="log-selector-chevron">&#9662;</span>
-              </button>
-
-              {dropdownOpen && (
-                <div className="log-selector-dropdown">
-                  {fileMetas.length === 0 && (
-                    <div className="log-selector-empty">
-                      {metaLoading ? "Loading..." : "No log files found"}
-                    </div>
-                  )}
-                  {fileMetas.map((meta) => (
-                    <button
-                      key={meta.filename}
-                      className={`log-selector-option ${
-                        selectedFile === meta.filename ? "selected" : ""
-                      }`}
-                      onClick={() => {
-                        loadLogFile(meta.filename);
-                        setDropdownOpen(false);
-                      }}
-                    >
-                      <span
-                        className={`agent-tag ${meta.isMcp ? "mcp" : "bu"}`}
-                      >
-                        {meta.isMcp ? "MCP" : "BU"}
-                      </span>
-                      <span className={`prompt-tag ${meta.promptType}`}>
-                        {meta.promptType === "simple"
-                          ? "Simple"
-                          : meta.promptType === "complex"
-                            ? "Complex"
-                            : "—"}
-                      </span>
-                      <span className="log-selector-site">{meta.site}</span>
-                      <span className="log-selector-date">
-                        {meta.dateLabel} {meta.timeLabel}
-                      </span>
-                      <span
-                        className={`verdict-indicator ${meta.verdict.toLowerCase()}`}
-                      >
-                        {meta.verdict === "PASS"
-                          ? "PASS"
-                          : meta.verdict === "FAIL"
-                            ? "FAIL"
-                            : "—"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
+            {logSelectorUI}
             <span className="or-divider">or</span>
             <button
               className="upload-btn"
@@ -290,71 +307,25 @@ function App() {
       </header>
 
       {/* Main content */}
-      {page === "viewer" ? (
+      {page === "results" ? (
+        <ResultsPage
+          logSelectorUI={logSelectorUI}
+          fileInputRef={fileInputRef}
+          handleInputChange={handleInputChange}
+          logViewerContent={logViewerContent}
+          dragOver={dragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        />
+      ) : (
         <main
           className={`app-main ${dragOver ? "drag-over" : ""}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          {loading && (
-            <div className="loading-overlay">
-              <div className="spinner" />
-              Parsing log...
-            </div>
-          )}
-
-          {error && <div className="error-banner">{error}</div>}
-
-          {!log && !loading && (
-            <div className="empty-state">
-              <div className="empty-icon">📊</div>
-              <h2>Arena Log Analyzer</h2>
-              <p>
-                Select a log file from the dropdown above, or drag &amp; drop a{" "}
-                <code>.log</code> file here to analyze an agent run.
-              </p>
-              <div className="drop-zone">
-                <span>Drop .log file here</span>
-              </div>
-            </div>
-          )}
-
-          {log && (
-            <div className="dashboard">
-              <SummaryCards log={log} />
-
-              <div className="dashboard-grid">
-                <div className="grid-left">
-                  <GoalPanel log={log} />
-                  <FrictionPanel log={log} />
-                </div>
-                <div className="grid-right">
-                  <CostChart log={log} />
-                </div>
-              </div>
-
-              <StepTimeline log={log} />
-
-              {log.artifactUrl && (
-                <div className="panel artifact-panel">
-                  <h3>Session Replay</h3>
-                  <a
-                    href={log.artifactUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="artifact-link"
-                  >
-                    Open Browserbase Session Replay &rarr;
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-        </main>
-      ) : (
-        <main className="app-main">
-          <TrendsPage />
+          {logViewerContent}
         </main>
       )}
     </div>

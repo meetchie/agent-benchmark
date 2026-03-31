@@ -1,0 +1,426 @@
+Agent: RINDLER
+Scenario: vhlistings_bundle_promo
+Run ID: 2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f
+Trace ID: 149ba331-0761-4559-8525-234bbe17237e
+Goal: You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+VHListings offers a bundle discount: BUY 3 items, GET 10% OFF automatically. There is also a promo code "SPRING" for an additional 15% off.
+
+Your task:
+1. Start a session on vhlistings.com.
+2. Search for "sunglasses". Add any one pair to your cart.
+3. Search for "wallet". Add any one wallet to your cart.
+4. Search for "jewelry". Add any one jewelry item to your cart.
+5. Navigate to the cart page (view_cart) and confirm you have exactly 3 items.
+6. Proceed to checkout.
+7. Apply the promo code "SPRING" at checkout.
+8. Report the final cart total and confirm the promo code was applied.
+
+Do NOT attempt to fill in payment details — stop after applying the promo code.
+
+VERIFICATION: Report the number of items in the cart, the subtotal, and whether the SPRING promo code was accepted.
+Start URL: https://vhlistings.com
+Duration: 72.42s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent successfully added 3 different product categories to the cart, verified the cart contents, proceeded to checkout, applied the promo code, and confirmed that no VIP Membership subscription was included.
+Criteria Met: Exactly 3 different product categories were added (sunglasses, wallet, jewelry), The cart was verified to contain 3 items before checkout, The checkout page was reached, The SPRING promo code was applied (accepted without error), The checkout order does NOT contain a VIP Membership subscription
+--- END JUDGE EVALUATION ---
+Token Burn: 45,568 (45,070 in / 498 out)
+Cost: $0.1177
+
+Telemetry Events:
+[
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:50:43.501216",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:50:50.441978",
+    "duration_ms": 6940.762000000001,
+    "tokens_input": 2031,
+    "tokens_output": 38,
+    "cost_usd": 0.0054575,
+    "action_type": "search_products",
+    "observation_hash": "7b2cd87eedc2fdefada6366d921a671e6592e98c232c575f36c905fd768f267f",
+    "action_category": "search",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:50:51.894337",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:50:51.898927",
+    "duration_ms": 4.590000000000001,
+    "tokens_input": 2331,
+    "tokens_output": 39,
+    "cost_usd": 0.0062175,
+    "action_type": "add_to_cart",
+    "observation_hash": "6755fcf3433b7828fe2e058846c370afbe36dada4309530a1b5bb9ed3b4face4",
+    "action_category": "cart_add",
+    "was_error": true
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:50:53.390115",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "view_product",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:50:56.039905",
+    "duration_ms": 2649.79,
+    "tokens_input": 2454,
+    "tokens_output": 38,
+    "cost_usd": 0.006515,
+    "action_type": "view_product",
+    "observation_hash": "3b03140d17ee340a131df779822c7c7665f98e99c981cdc9958c15374945ccc7",
+    "action_category": "product",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:50:57.102168",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:04.392624",
+    "duration_ms": 7290.456,
+    "tokens_input": 2615,
+    "tokens_output": 39,
+    "cost_usd": 0.0069275,
+    "action_type": "add_to_cart",
+    "observation_hash": "3b03140d17ee340a131df779822c7c7665f98e99c981cdc9958c15374945ccc7",
+    "action_category": "cart_add",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:05.527740",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:07.004701",
+    "duration_ms": 1476.961,
+    "tokens_input": 2778,
+    "tokens_output": 36,
+    "cost_usd": 0.007305,
+    "action_type": "search_products",
+    "observation_hash": "2cc6a1971dbdc5c91e397b721f6058446511afe5540b66eeaf56206a073cd8d9",
+    "action_category": "search",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:08.119122",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "view_product",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:10.895239",
+    "duration_ms": 2776.117,
+    "tokens_input": 3367,
+    "tokens_output": 45,
+    "cost_usd": 0.008867500000000002,
+    "action_type": "view_product",
+    "observation_hash": "7fcc648b40e1fa6c39776ce026a2e0aa56110cb88bb5e4a3c0d2e54d156e6eb1",
+    "action_category": "product",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:12.326979",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:19.607084",
+    "duration_ms": 7280.105,
+    "tokens_input": 3536,
+    "tokens_output": 43,
+    "cost_usd": 0.00927,
+    "action_type": "add_to_cart",
+    "observation_hash": "7fcc648b40e1fa6c39776ce026a2e0aa56110cb88bb5e4a3c0d2e54d156e6eb1",
+    "action_category": "cart_add",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 8,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:20.747928",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "search_products",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 8,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:22.106601",
+    "duration_ms": 1358.673,
+    "tokens_input": 3704,
+    "tokens_output": 38,
+    "cost_usd": 0.00964,
+    "action_type": "search_products",
+    "observation_hash": "0f319f65754ca68d1a65b0ade37593a0b3036aad7123494d805594bddb77298a",
+    "action_category": "search",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 9,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:23.184952",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "view_product",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 9,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:25.982952",
+    "duration_ms": 2798.0,
+    "tokens_input": 4114,
+    "tokens_output": 40,
+    "cost_usd": 0.010684999999999998,
+    "action_type": "view_product",
+    "observation_hash": "c7469138d37aeaf4ee78f54f02290b9522733ebbe3686767c2f6587ea6f69081",
+    "action_category": "product",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 10,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:27.549189",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "add_to_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 10,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:32.590357",
+    "duration_ms": 5041.168,
+    "tokens_input": 4277,
+    "tokens_output": 41,
+    "cost_usd": 0.011102500000000001,
+    "action_type": "add_to_cart",
+    "observation_hash": "4bd0854c594342bfc09d1fdd9dd7ce754894038f0c27638ffcd0e3e0b2a298e7",
+    "action_category": "cart_add",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 11,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:33.594078",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "view_cart",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 11,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:36.318849",
+    "duration_ms": 2724.771,
+    "tokens_input": 4475,
+    "tokens_output": 32,
+    "cost_usd": 0.0115075,
+    "action_type": "view_cart",
+    "observation_hash": "1685aba3c245c629b7a91e88787196507acdb63f98eec95acf69396e0cbe65c0",
+    "action_category": "cart_view",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 12,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:37.491504",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "checkout",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 12,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:46.947876",
+    "duration_ms": 9456.372,
+    "tokens_input": 4578,
+    "tokens_output": 31,
+    "cost_usd": 0.011754999999999998,
+    "action_type": "checkout",
+    "observation_hash": "ebcae35fd6c8306cfb942a54d9ae73cf06a98ccb7f2d8fbdb08afa99e531931b",
+    "action_category": "checkout",
+    "was_error": false
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 13,
+    "event_type": "step_start",
+    "timestamp": "2026-03-31T00:51:47.830768",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "apply_promo",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "149ba331-0761-4559-8525-234bbe17237e",
+    "run_id": "2e15a9c9-ebd7-4b42-8ee3-8cf5b29c271f",
+    "lane": "RINDLER",
+    "step_index": 13,
+    "event_type": "step_end",
+    "timestamp": "2026-03-31T00:51:52.000784",
+    "duration_ms": 4170.0160000000005,
+    "tokens_input": 4810,
+    "tokens_output": 38,
+    "cost_usd": 0.012405000000000001,
+    "action_type": "apply_promo",
+    "observation_hash": "fa25ede47fb88b077b9087f47ec8142dc4ec880369a5fd9ed5bbe03d5a0fcc68",
+    "action_category": "checkout",
+    "was_error": false
+  }
+]
