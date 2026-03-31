@@ -1,6 +1,6 @@
 -- VHListings Semantic Site Config Seed Data
 -- Domain: vhlistings.com
--- Mapped: 2026-03-30 (v21: 6th fix — VIP removal timing; page_extractor for checkout visibility)
+-- Mapped: 2026-03-30 (v25: FIX 7 — checkout via drawer; avoids /cart which re-adds VIP)
 --
 -- BUG FIX RATIONALE:
 --   FIX 1 — view_cart VIP removal selector:
@@ -34,13 +34,23 @@
 --     {discount_applied: bool, savings: string} as page_info in the response data.
 --     The description also instructs the agent to trust a no-error response.
 --
---   FIX 6 — view_cart VIP removal timing:
---     Old: click with timeout: 1000 (1000ms to find and click the element)
---     New: selector_visible wait (4000ms, optional) added before the click; timeout removed from click
---     Why: cart-remove-button is a Shopify Dawn custom element that registers async after page load.
---     ClickResilient default is 2000ms; the 1000ms override was too tight for the element to appear.
---     A selector_visible wait ensures the element is in the DOM before the click is attempted.
---     If VIP is not present (edge case), the optional wait times out silently and the click also skips.
+--   FIX 6 — VIP removal: wrong element, wrong action, wrong location:
+--     Old (v19-v21): click cart-remove-button[data-handle="vip-membership"] button in view_cart
+--     New (v22): click the toggle switch in add_to_cart while the cart drawer is open
+--     Why: Live DOM inspection revealed that cart-remove-button lives inside a <li> with display:none
+--     set by VHListings CSS. The VIP list item is always hidden -- the site intentionally does not
+--     show VIP in the cart items list. There is no clickable remove button anywhere on the /cart page.
+--     The correct UI affordance is a toggle switch (cart-drawer-upsell button.upsell__toggle-switch)
+--     that appears in the cart DRAWER while it is open after an add-to-cart. Clicking the toggle
+--     removes VIP from the cart. view_cart no longer attempts VIP removal (no valid target).
+--
+--   FIX 7 — VIP re-added on every add-to-cart; checkout via drawer to avoid /cart:
+--     Root cause: navigating to /cart (view_cart) causes Shopify to re-add VIP (cart jumps 3->4).
+--     The cart-drawer-upsell toggle only exists on non-cart pages (product pages, home page).
+--     New (v25): checkout action navigates to home, clicks the cart icon to open the drawer,
+--     waits for the drawer checkout button to confirm the drawer is open, fires a JS MouseEvent
+--     on the VIP toggle to turn it off (bypasses Playwright visibility checks), then clicks the
+--     drawer's own "Check out" button. This never touches /cart, so VIP is not re-added.
 -- Platform: Shopify (Liquid theme, server-rendered, full page loads between screens)
 --
 -- Key quirks baked into this config:
@@ -151,7 +161,7 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ]
             },
             "add_to_cart": {
-                "description": "Add the current product to cart. Must be on product detail page. Closes the cart drawer after adding.",
+                "description": "Add the current product to cart. Must be on product detail page. Silently removes the auto-added VIP Membership subscription via its toggle in the cart drawer, then closes the drawer.",
                 "params": {},
                 "stays_on_screen": true,
                 "steps": [
@@ -163,8 +173,25 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                         "action": "wait",
                         "strategy": "selector_visible",
                         "selector": "button:has-text(\"Check out\")",
-                        "timeout": 3000,
+                        "timeout": 4000,
                         "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch",
+                        "timeout": 2000,
+                        "optional": true
+                    },
+                    {
+                        "action": "click",
+                        "selector": "cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch",
+                        "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1000
                     },
                     {
                         "action": "click",
@@ -191,20 +218,8 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                     },
                     {
                         "action": "wait",
-                        "strategy": "selector_visible",
-                        "selector": "cart-remove-button[data-handle=\"vip-membership\"] button",
-                        "timeout": 4000,
-                        "optional": true
-                    },
-                    {
-                        "action": "click",
-                        "selector": "cart-remove-button[data-handle=\"vip-membership\"] button",
-                        "optional": true
-                    },
-                    {
-                        "action": "wait",
                         "strategy": "delay",
-                        "timeout": 1500
+                        "timeout": 500
                     }
                 ]
             },
@@ -246,14 +261,47 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
                 ]
             },
             "checkout": {
-                "description": "Proceed to checkout from the cart page",
+                "description": "Proceed to checkout. Navigates to the home page, opens the cart sidebar, toggles off the VIP Membership if present, then clicks the sidebar checkout button. Do NOT call view_cart before this — navigating to /cart re-adds VIP.",
                 "params": {},
                 "stays_on_screen": false,
                 "target_screen": "checkout",
                 "steps": [
                     {
                         "action": "navigate",
-                        "url": "https://vhlistings.com/checkout"
+                        "url": "https://vhlistings.com"
+                    },
+                    {
+                        "action": "click",
+                        "selector": "#cart-icon-bubble",
+                        "fallbacks": [
+                            {"type": "css", "selector": "a[href=\"/cart\"]"}
+                        ],
+                        "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "selector_visible",
+                        "selector": "button:has-text(\"Check out\")",
+                        "timeout": 4000,
+                        "optional": true
+                    },
+                    {
+                        "action": "script",
+                        "script": "(async function(){try{var c=await(await fetch(''/cart.json'')).json();var v=c.items&&c.items.find(function(i){return i.handle===''vip-membership'';});if(v){var t=document.querySelector(''cart-drawer-upsell[data-handle=\"vip-membership\"] button.upsell__toggle-switch'');if(t)t.dispatchEvent(new MouseEvent(''click'',{bubbles:true,cancelable:true}));}}catch(e){}})();",
+                        "optional": true
+                    },
+                    {
+                        "action": "wait",
+                        "strategy": "delay",
+                        "timeout": 1500
+                    },
+                    {
+                        "action": "click",
+                        "selector": "button:has-text(\"Check out\")",
+                        "fallbacks": [
+                            {"type": "css", "selector": "a:has-text(\"Check out\")"},
+                            {"type": "css", "selector": "a[href=\"/checkout\"]"}
+                        ]
                     }
                 ]
             },
@@ -351,6 +399,6 @@ INSERT INTO site_configs (site_id, domain, config, version) VALUES (
         },
         "page_extractor": "() => { try { if (location.href.indexOf(\"/checkouts/\") === -1) return null; var txt = document.body.innerText; var discountApplied = txt.indexOf(\"Order discount\") !== -1; var savingsI = txt.indexOf(\"TOTAL SAVINGS\"); var savings = savingsI >= 0 ? txt.slice(savingsI, savingsI + 35) : null; return { discount_applied: discountApplied, savings: savings }; } catch(e) { return null; } }"
     }',
-    21
+    25
 )
 ON CONFLICT (domain) DO UPDATE SET config = EXCLUDED.config, version = EXCLUDED.version;
