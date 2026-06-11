@@ -68,3 +68,23 @@ export interface SummaryData {
   total_tokens: number;
   phases: Phase[];
 }
+
+// Positional degradation benchmark (#87)
+// Measures whether agent success rate degrades based on where in a result list
+// the target item appears (lost-in-the-middle effect).
+
+export interface PositionalResult {
+  position: number;
+  success: boolean;
+  summary: string;
+  result_state: ResultState;
+}
+
+export interface PositionalRunStatus {
+  run_id: string;
+  status: "running" | "complete" | "error";
+  query: string;
+  positions: number[];
+  results: PositionalResult[];
+  message?: string;
+}
