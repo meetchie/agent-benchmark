@@ -1,5 +1,7 @@
 import type { StatusResponse, Task } from "./types";
 
+type GeneratedTask = Omit<Task, "id"> & { id: string | number };
+
 // Benchmark
 export async function startBenchmark(
   url: string,
@@ -50,17 +52,30 @@ export async function fetchQuota(token: string): Promise<{ remaining: number; re
 
 export async function generateTasks(
   url: string,
+  token: string,
   signal?: AbortSignal
 ): Promise<{ tasks: Task[] }> {
   const res = await fetch("/api/benchmark/generate-tasks", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ url }),
     signal,
   });
+  if (res.status === 401) {
+    throw new Error("AUTH_EXPIRED");
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail?.error || data.detail || "Failed to generate tasks");
   }
-  return res.json();
+  const data = await res.json();
+  return {
+    tasks: (data.tasks ?? []).map((task: GeneratedTask) => ({
+      ...task,
+      id: String(task.id),
+    })),
+  };
 }

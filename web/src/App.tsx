@@ -97,6 +97,11 @@ export default function App() {
     if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
     if (trimmed === lastGeneratedUrlRef.current) return;
     if (tasksLoading) return;
+    if (!isSignedIn) {
+      setTasksError("Sign in to generate benchmark tasks.");
+      setShowSignIn(true);
+      return;
+    }
 
     lastGeneratedUrlRef.current = trimmed;
     setTasksLoading(true);
@@ -108,23 +113,36 @@ export default function App() {
     taskGenAbortRef.current = abort;
 
     try {
-      const data = await generateTasks(trimmed, abort.signal);
+      const token = await getToken();
+      if (abort.signal.aborted) return;
+      if (!token) {
+        throw new Error("AUTH_EXPIRED");
+      }
+      const data = await generateTasks(trimmed, token, abort.signal);
       if (!abort.signal.aborted) {
         setTasks(data.tasks);
       }
     } catch (e) {
       if (!abort.signal.aborted) {
-        setTasksError(
-          e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
-        );
+        lastGeneratedUrlRef.current = "";
+        if (e instanceof Error && e.message === "AUTH_EXPIRED") {
+          setTasksError("Please sign in again to generate benchmark tasks.");
+          setShowSignIn(true);
+        } else {
+          setTasksError(
+            e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+          );
+        }
       }
     } finally {
       if (!abort.signal.aborted) {
         setTasksLoading(false);
       }
-      taskGenAbortRef.current = null;
+      if (taskGenAbortRef.current === abort) {
+        taskGenAbortRef.current = null;
+      }
     }
-  }, [url, tasksLoading]);
+  }, [url, tasksLoading, isSignedIn, getToken]);
 
   const handleStopGenerate = useCallback(() => {
     if (taskGenAbortRef.current) {
@@ -139,6 +157,11 @@ export default function App() {
     const trimmed = url.trim();
     if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
     if (tasksLoading) return;
+    if (!isSignedIn) {
+      setTasksError("Sign in to generate benchmark tasks.");
+      setShowSignIn(true);
+      return;
+    }
 
     lastGeneratedUrlRef.current = "";
     setTasksLoading(true);
@@ -147,17 +170,27 @@ export default function App() {
     setTaskId(null);
 
     try {
-      const data = await generateTasks(trimmed);
+      const token = await getToken();
+      if (!token) {
+        throw new Error("AUTH_EXPIRED");
+      }
+      const data = await generateTasks(trimmed, token);
       setTasks(data.tasks);
       lastGeneratedUrlRef.current = trimmed;
     } catch (e) {
-      setTasksError(
-        e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
-      );
+      lastGeneratedUrlRef.current = "";
+      if (e instanceof Error && e.message === "AUTH_EXPIRED") {
+        setTasksError("Please sign in again to generate benchmark tasks.");
+        setShowSignIn(true);
+      } else {
+        setTasksError(
+          e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
+        );
+      }
     } finally {
       setTasksLoading(false);
     }
-  }, [url, tasksLoading]);
+  }, [url, tasksLoading, isSignedIn, getToken]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -289,7 +322,7 @@ export default function App() {
       setRunStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
     }
-  }, [selectedTask, isSignedIn, getToken, url, startPolling]);
+  }, [selectedTask, isSignedIn, getToken, url, startPolling, quota.remaining]);
 
   const handleRun = useCallback(async () => {
     if (!canRun || !selectedTask) return;
@@ -328,6 +361,17 @@ export default function App() {
   useEffect(() => {
     if (isSignedIn && showSignIn) {
       setShowSignIn(false);
+    }
+    if (isSignedIn) {
+      setTasksError((prev) => {
+        if (
+          prev === "Sign in to generate benchmark tasks." ||
+          prev === "Please sign in again to generate benchmark tasks."
+        ) {
+          return null;
+        }
+        return prev;
+      });
     }
   }, [isSignedIn, showSignIn]);
 
