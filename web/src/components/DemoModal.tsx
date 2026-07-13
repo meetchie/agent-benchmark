@@ -90,7 +90,9 @@ export function DemoModal({ children }: DemoModalProps) {
 
             <div className={[
               "relative w-full max-h-[85vh] overflow-y-auto px-6 pb-4 transform-gpu will-change-transform",
-              isSafari() ? "overflow-x-auto" : "",
+              // Safari's wide-canvas workaround for Cal is desktop-only; on mobile the
+              // forced 1120px width pushed the calendar off-screen (swipe required).
+              isSafari() ? "lg:overflow-x-auto" : "",
               isFirefox() ? "overflow-hidden" : "",
             ].join(" ")}>
               {isLoading && (
@@ -103,7 +105,7 @@ export function DemoModal({ children }: DemoModalProps) {
               )}
               <div className={[
                 "w-full",
-                isSafari() ? "min-w-[1120px]" : "",
+                isSafari() ? "lg:min-w-[1120px]" : "",
                 isFirefox() ? "[&_iframe]:bg-white [&_iframe]:border-0" : "",
               ].join(" ")}>
                 <Cal
