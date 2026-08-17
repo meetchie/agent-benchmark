@@ -33,6 +33,13 @@ export function BackgroundGrid() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Read once at mount, like HeroFluidGradient and FlickeringGrid: the kickoff
+    // below paints one static frame and draw() never re-queues, so no animation
+    // loop runs. Neither neighbour listens for the query CHANGING at runtime, so
+    // neither does this -- a user who flips the OS setting gets the new behaviour
+    // on the next mount.
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     let cw = 0;
     let ch = 0;
 
@@ -72,6 +79,13 @@ export function BackgroundGrid() {
       cw = canvas.width;
       ch = canvas.height;
       initTwinkles();
+      // Reassigning canvas.width/height above CLEARS the bitmap. With motion
+      // reduced, draw() never re-queues, so nothing would ever put the grid back
+      // and a resize would blank it permanently. Repaint the single static frame
+      // here instead; draw() still will not re-queue when reduced, so this starts
+      // no loop. While animating, the next rAF frame is always sooner than the
+      // next resize, so the unreduced path needs nothing here.
+      if (prefersReduced) draw(performance.now());
     };
     resize();
     window.addEventListener("resize", resize);
@@ -166,7 +180,9 @@ export function BackgroundGrid() {
         ctx!.fill();
       }
 
-      animRef.current = requestAnimationFrame(draw);
+      if (!prefersReduced) {
+        animRef.current = requestAnimationFrame(draw);
+      }
     }
 
     animRef.current = requestAnimationFrame(draw);
