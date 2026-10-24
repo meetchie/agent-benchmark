@@ -9,8 +9,8 @@ const RINDLER = {
   avgCostPerRun: 0.1366,
   costPerSuccess: 0.14,
   avgDurationSec: 70.1,
-  avgSteps: 15.1,
-  avgTokens: 52855,
+  avgSteps: 14.1,
+  avgTokens: 52856,
 };
 
 const BROWSERUSE = {
@@ -136,8 +136,8 @@ const SCENARIO_STEPS = [
   },
   {
     num: "3",
-    label: "Complete order",
-    detail: "Checkout without the auto-added VIP Membership",
+    label: "Check the order",
+    detail: "Report the checkout total. The judge also checks that no VIP Membership is in the order",
     note: "VIP Membership is silently added to every cart",
   },
 ];
@@ -149,7 +149,7 @@ function ScenarioSection() {
         <div className="scenario-header">
           <div className="scenario-title">The Task</div>
           <div className="scenario-subtitle">
-            Agents must complete a real purchase on vhlistings.com — a live Shopify store with 3 embedded dark patterns
+            Agents shop on vhlistings.com, a live Shopify store with 3 embedded dark patterns, up to applying a promo code at checkout. No payment details are entered
           </div>
         </div>
         <div className="scenario-steps">

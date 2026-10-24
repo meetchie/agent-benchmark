@@ -1,94 +1,106 @@
-# Rindler Arena Log Analyzer — Shipt Demo
+# Arena log viewer
 
-## What this is
+A small static web app that shows the archived March 2026 arena logs from the
+Rindler vs browser-use benchmark. It only reads files. It does not start agents,
+call any API or need any key.
 
-A Vite + React dashboard for visualizing results from automated browser-agent benchmark runs against Shipt.com. It is a **log viewer and analytics tool**, not a live agent runner — no agents are started from the UI. The dashboard compares two configurations side-by-side: **BrowserUse (raw)** and **BrowserUse + MCP** (augmented with Rindler tooling), surfacing pass rates, token costs, friction points, and step-by-step timelines from pre-recorded arena run logs.
+## What it shows
 
----
+**Results** (`#results`, the default page) is the headline comparison for one task:
+`vhlistings_bundle_promo` on vhlistings.com (add three items to the cart, apply the
+promo code `SPRING`, reach checkout, stop before payment), 60 runs per arm.
+The numbers on this page, and the failure funnel, are hard-coded in
+`src/components/ResultsPage.tsx`. They are not computed from the logs at runtime.
 
-## Quick Start
+**Log Viewer** (`#logs`, also embedded at the bottom of Results) parses any run log
+and shows the judge verdict, duration, cost and tokens, the goal the agent was given,
+a per-step timeline, a cumulative cost chart, and simple friction flags (repeated
+observations, long steps, repeated actions). You can pick one of the bundled runs or
+drop in any arena-format `.log` file.
+
+## Run it
+
+Needs Node 18 or newer.
 
 ```bash
-cd packages/shipt-demo
-pnpm install
-pnpm dev
+npm ci
+npm run dev        # http://localhost:5173
+npm run build      # type-check (tsc) and bundle to dist/
+npm run preview    # serve the built dist/ locally
 ```
 
-No environment variables are required for log viewing. Open `http://localhost:5173` and navigate via the hash-based router.
+`vite --port <n>` changes the port. The app fetches `/logs/...` from the site root,
+so serve `dist/` from the root of a host, not from a sub-path.
 
----
+## The logs
 
-## Scripts
+`public/logs/` holds 128 run logs and `manifest.json`, which lists them. They are
+unchanged from the original repo. The manifest matches the files on disk exactly.
 
-| Script | Description |
-|---|---|
-| `pnpm dev` | Vite dev server (UI only, no Cloudflare Functions) |
-| `pnpm dev:full` | Wrangler Pages dev with Functions wired in |
-| `pnpm build` | Type-check and produce `dist/` for deployment |
-| `pnpm preview` | Serve the built `dist/` through Wrangler locally |
-| `pnpm deploy` | Deploy to Cloudflare Pages |
+| Arm | Logs | Notes |
+|---|---|---|
+| browser-use | 60 | `arena_browseruse_vhlistings_20260331_005641.log` to `_061032.log`, all `vhlistings_bundle_promo` |
+| Rindler | 68 | 66 `vhlistings_bundle_promo` plus 2 `vhlistings_product_attribute_search` |
 
----
+Source: the Rindler arena (the `clean-room` arena in the original monorepo), run on
+2026-03-31. File names carry the runner's local time. Each log is plain text: a header
+(agent, scenario, goal, duration, judge verdict, token burn, cost) followed by a JSON
+list of telemetry events. There are no screenshots and no page content, only hashes of
+observations.
 
-## Pages
+The headline uses all 60 browser-use logs and the last 60 Rindler `vhlistings_bundle_promo`
+logs of that night (`arena_rindler_vhlistings_20260331_002827.log` to `_032405.log`).
+The other eight Rindler logs are in the viewer but not in the headline: four earlier
+runs from 00:11 to 00:24 on 03-31 (before the final mapping change that night), two
+03-27 bundle runs, and the two attribute-search runs.
 
-### Log Viewer (`#viewer`)
+Recomputed from the logs (the judge verdict is what counts as pass):
 
-Load any `.log` file from the bundled set or drag-and-drop a custom file. For each run the viewer shows:
+| | Rindler (60) | browser-use (60) |
+|---|---|---|
+| Pass | 59 (98.3%) | 1 (1.7%) |
+| Mean cost per run | $0.1366 | $0.713 |
+| Mean duration | 70.1 s | 307.3 s |
+| Mean tokens | 52,856 | 272,377 |
+| Mean steps (`step_end` events) | 14.1 | 28.5 |
 
-- **Summary cards** — pass/fail, total steps, token usage, wall-clock duration
-- **Goal panel** — the natural-language task the agent was given
-- **Friction analysis** — categorized obstacles the agent encountered
-- **Cost chart** — per-step token cost breakdown (Recharts bar chart)
-- **Step timeline** — ordered list of agent actions with status indicators
+Costs in the logs are token counts priced at gpt-4o list rates ($2.50 and $10 per
+million input and output tokens), not billed amounts. The one Rindler failure is
+`arena_rindler_vhlistings_20260331_024903.log`. The one browser-use pass is
+`arena_browseruse_vhlistings_20260331_023009.log`.
 
-### Trends (`#trends`)
+`Agent Reported Success: True` appears in every log of both arms. It only means the
+agent run finished without raising, so ignore it. The Status card uses the judge verdict.
 
-Cross-run comparison across all 38 bundled logs:
+## Read the comparison with these caveats
 
-- Pass rates by configuration (BrowserUse raw vs. BrowserUse + MCP)
-- Aggregate and per-run cost comparison
-- Failure classification breakdown
+- **Mapped against unmapped.** Rindler drives a site through a hand-written mapping
+  (25 versions, tuned on this exact site and task, and its own cleanup step is what removes
+  the VIP Membership). browser-use had no mapping.
+- **Prompts use Rindler vocabulary.** Both arms received the same task text, which says
+  things like "Start a session" and "view_cart".
+- **Different setups.** browser-use ran on a Browserbase cloud browser with a 30-step cap.
+  Rindler ran on server-local Playwright with a 25-step cap. Both used gpt-4o.
+- **Judge.** A gpt-4o-mini judge reads the agent's own final report. The single browser-use
+  pass shows the judge can err in either direction. The "no VIP Membership" criterion is
+  checked by the judge but is not stated in the prompt.
+- **One site, one task, one night.** 60 runs per arm against a live third-party Shopify
+  store (with a Klaviyo popup and an asynchronous checkout) on 2026-03-31. The store has
+  changed since, so these runs cannot be reproduced against it.
+- **The funnel is hand-curated.** The judge criteria in the logs reproduce the stages
+  17 (checkout), 8 (promo applied) and 1 (no VIP) exactly. The "added 3 items" stage is 23
+  by the judge's criterion against 25 on the page. The "dark pattern" labels and the reasons
+  for each drop are the original authors' interpretation, not derived from the logs.
+- **Session replay links.** browser-use logs include a Browserbase session id. The replays
+  belonged to the original Rindler account and cannot be opened by anyone else.
 
----
+## Changes from the original viewer
 
-## Log Data
-
-Logs live in `public/logs/` and are referenced by `public/logs/manifest.json`. Files follow the naming convention:
-
-```
-arena_browseruse[_mcp]_shipt_YYYYMMDD_HHmmss.log
-```
-
-- `arena_browseruse_shipt_*` — 19 raw BrowserUse runs
-- `arena_browseruse_mcp_shipt_*` — 19 BrowserUse + MCP runs
-
-You can also drag-and-drop any arena-format `.log` file onto the Log Viewer page to inspect it without modifying the bundle.
-
----
-
-## Cloudflare Functions
-
-API routes are scaffolded under `functions/api/` for future use but are **not currently wired to the UI**:
-
-| Endpoint | File |
-|---|---|
-| `GET /api/health` | `functions/api/health.ts` |
-| `POST /api/agent/run` | `functions/api/agent/run.ts` |
-| `GET /api/agent/status` | `functions/api/agent/status.ts` |
-| `POST /api/browser/scrape` | `functions/api/browser/scrape.ts` |
-| `POST /api/browser/screenshot` | `functions/api/browser/screenshot.ts` |
-
-Run `pnpm dev:full` to serve them locally via Wrangler.
-
----
-
-## Tech Stack
-
-| Layer | Library / Tool |
-|---|---|
-| UI framework | React 19 |
-| Build tool | Vite 6 |
-| Charts | Recharts 3 |
-| Hosting / Functions | Cloudflare Pages + Workers |
-| Language | TypeScript 5 |
+- Removed the Cloudflare Pages Functions, `wrangler.toml` and the related dependencies, and
+  moved from pnpm in a monorepo to a plain npm project with its own lockfile.
+- Rindler runs were labelled "BU" in the run picker. They now show "RINDLER".
+- Corrected the Results page where the logs contradict it. Mean tokens for Rindler is 52,856
+  (was 52,855). Mean steps for Rindler is 14.1 (was 15.1, a value the page never displayed).
+  The task description said agents complete a real purchase, but the prompt tells them to
+  stop after applying the promo code.
+- The session replay panel shows the session id as text instead of a link.

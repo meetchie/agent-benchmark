@@ -11,6 +11,13 @@ import { ResultsPage } from "./components/ResultsPage";
 
 type Page = "results" | "logs";
 
+function agentTag(meta: LogFileMeta): { cls: string; label: string } {
+  if (meta.agent.toUpperCase().includes("RINDLER")) {
+    return { cls: "rindler", label: "RINDLER" };
+  }
+  return meta.isMcp ? { cls: "mcp", label: "MCP" } : { cls: "bu", label: "BU" };
+}
+
 function App() {
   const [page, setPage] = useState<Page>(() => {
     return window.location.hash === "#logs" ? "logs" : "results";
@@ -151,8 +158,8 @@ function App() {
       >
         {selectedMeta ? (
           <span className="log-selector-value">
-            <span className={`agent-tag ${selectedMeta.isMcp ? "mcp" : "bu"}`}>
-              {selectedMeta.isMcp ? "MCP" : "BU"}
+            <span className={`agent-tag ${agentTag(selectedMeta).cls}`}>
+              {agentTag(selectedMeta).label}
             </span>
             <span className="log-selector-site">{selectedMeta.site}</span>
             <span className="log-selector-date">
@@ -186,8 +193,8 @@ function App() {
                 setDropdownOpen(false);
               }}
             >
-              <span className={`agent-tag ${meta.isMcp ? "mcp" : "bu"}`}>
-                {meta.isMcp ? "MCP" : "BU"}
+              <span className={`agent-tag ${agentTag(meta).cls}`}>
+                {agentTag(meta).label}
               </span>
               <span className="log-selector-site">{meta.site}</span>
               <span className="log-selector-date">
@@ -243,15 +250,15 @@ function App() {
           <StepTimeline log={log} />
           {log.artifactUrl && (
             <div className="panel artifact-panel">
-              <h3>Session Replay</h3>
-              <a
-                href={log.artifactUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="artifact-link"
-              >
-                Open Browserbase Session Replay &rarr;
-              </a>
+              <h3>Browserbase Session</h3>
+              <code className="artifact-link">
+                {log.artifactUrl.split("/").pop()}
+              </code>
+              <p className="artifact-note">
+                Session id from the original run. The replay belonged to the
+                original Rindler Browserbase account and cannot be opened from
+                here.
+              </p>
             </div>
           )}
         </div>

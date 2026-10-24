@@ -207,7 +207,8 @@
   flex-shrink: 0;
 }
 
-.agent-tag.mcp {
+.agent-tag.mcp,
+.agent-tag.rindler {
   background: #dbeafe;
   color: var(--color-primary);
   border: 1px solid #bfdbfe;
@@ -882,13 +883,14 @@
 }
 
 .artifact-link {
-  color: var(--color-primary);
+  font-family: monospace;
   font-size: 0.85rem;
-  text-decoration: none;
 }
 
-.artifact-link:hover {
-  text-decoration: underline;
+.artifact-note {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
 }
 
 /* ─── Results Page (main benchmark view) ──────────────────────────────────── */
