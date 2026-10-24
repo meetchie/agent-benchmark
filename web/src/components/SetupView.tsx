@@ -5,6 +5,7 @@ import { BackgroundGrid } from "./BackgroundGrid";
 import { URLInput } from "./URLInput";
 import { TaskCard } from "./TaskCard";
 import { RunButton } from "./RunButton";
+import { runsRemainingLabel } from "../lib/utils";
 
 interface SetupViewProps {
   url: string;
@@ -22,6 +23,7 @@ interface SetupViewProps {
   onRegenerateTasks: () => void;
   onSignInClick?: () => void;
   remainingRuns?: number;
+  runLimit?: number;
   resetsIn?: number;
 }
 
@@ -41,6 +43,7 @@ export function SetupView({
   onRegenerateTasks,
   onSignInClick,
   remainingRuns,
+  runLimit,
   resetsIn,
 }: SetupViewProps) {
   const hasShifted = useRef(false);
@@ -78,16 +81,18 @@ export function SetupView({
             disabled={runStatus === "running" || exhausted}
           />
 
-          <p
-            className="text-xs text-slate-400 mt-2 transition-all duration-300"
-            style={{
-              opacity: remainingRuns !== undefined && remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? 1 : 0,
-              maxHeight: remainingRuns !== undefined && remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? "20px" : "0",
-              overflow: "hidden",
-            }}
-          >
-            <strong className="text-[#3c49ad]">{remainingRuns}</strong> {remainingRuns === 1 ? "run" : "runs"} remaining
-          </p>
+          {remainingRuns !== undefined && (
+            <p
+              className="text-xs text-slate-400 mt-2 transition-all duration-300"
+              style={{
+                opacity: remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? 1 : 0,
+                maxHeight: remainingRuns > 0 && !exhausted && tasks.length === 0 && !tasksLoading ? "20px" : "0",
+                overflow: "hidden",
+              }}
+            >
+              <strong className="text-[#3c49ad]">{remainingRuns}</strong> {remainingRuns === 1 ? "run" : "runs"} remaining
+            </p>
+          )}
           {exhausted && resetsIn !== undefined && resetsIn > 0 && (
             <p className="text-xs text-red-500 font-semibold mt-1">
               No runs remaining. Resets in {Math.floor(resetsIn / 3600)}h {Math.floor((resetsIn % 3600) / 60)}m
@@ -156,7 +161,7 @@ export function SetupView({
                         <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                       </svg>
                     )}
-                    <strong className="text-[#3c49ad]">{remainingRuns}</strong> of 3 runs remaining
+                    <strong className="text-[#3c49ad]">{remainingRuns}</strong> {runsRemainingLabel(remainingRuns, runLimit)}
                   </p>
                 )}
                 {remainingRuns !== undefined && remainingRuns <= 0 && resetsIn !== undefined && resetsIn > 0 && (

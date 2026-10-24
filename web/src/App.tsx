@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
-import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota } from "./lib/api";
-import type { Task, StepRecord, RunStatus, SummaryData } from "./lib/types";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota, normalizeQuota, UNKNOWN_QUOTA } from "./lib/api";
+import { isClerkMode } from "./lib/auth-mode";
+import type { Task, StepRecord, RunStatus, RunStats, SummaryData, Quota } from "./lib/types";
 
 import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
@@ -10,6 +11,10 @@ import { ExhaustedOverlay } from "./components/ExhaustedOverlay";
 import { HeroSection } from "./components/HeroSection";
 
 type View = "home" | "setup" | "running";
+
+// Shown in local mode (no Clerk key) when the backend answers 401 anyway.
+const LOCAL_AUTH_REJECTED =
+  "The backend rejected the request as unauthenticated. Run it with AUTH_MODE=none, or set VITE_CLERK_PUBLISHABLE_KEY to sign in with Clerk.";
 
 const MAX_POLLS = 300; // 5 min — backend handles 3-min agent timeout + judge
 const POLL_INTERVAL_MS = 1000;
@@ -37,27 +42,24 @@ export default function App() {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [analyzingStats, setAnalyzingStats] = useState<{
-    total_ms: number;
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null>(null);
+  const [analyzingStats, setAnalyzingStats] = useState<RunStats | null>(null);
 
-  // Usage quota
-  const [quota, setQuota] = useState<{ remaining: number; resets_in: number }>({ remaining: 3, resets_in: 0 });
+  // Usage quota. remaining is null until the backend reports a limit (and
+  // stays null when it enforces none, e.g. local mode).
+  const [quota, setQuota] = useState<Quota>(UNKNOWN_QUOTA);
 
-  // Fetch quota on sign-in
+  // Fetch quota once the visitor is signed in and has left the landing page,
+  // which has no use for it (and so makes no request to a backend that may not
+  // be running yet). In local mode there is no token: ask without one.
+  const atHome = view === "home";
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isSignedIn || atHome) return;
     (async () => {
       const token = await getToken();
-      if (token) {
-        const q = await fetchQuota(token);
-        setQuota({ remaining: q.remaining, resets_in: q.resets_in });
-      }
+      if (!token && isClerkMode()) return;
+      setQuota(await fetchQuota(token));
     })();
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, atHome]);
 
   const [showExhausted, setShowExhausted] = useState(false);
 
@@ -115,7 +117,7 @@ export default function App() {
     try {
       const token = await getToken();
       if (abort.signal.aborted) return;
-      if (!token) {
+      if (!token && isClerkMode()) {
         throw new Error("AUTH_EXPIRED");
       }
       const data = await generateTasks(trimmed, token, abort.signal);
@@ -126,8 +128,12 @@ export default function App() {
       if (!abort.signal.aborted) {
         lastGeneratedUrlRef.current = "";
         if (e instanceof Error && e.message === "AUTH_EXPIRED") {
-          setTasksError("Please sign in again to generate benchmark tasks.");
-          setShowSignIn(true);
+          if (isClerkMode()) {
+            setTasksError("Please sign in again to generate benchmark tasks.");
+            setShowSignIn(true);
+          } else {
+            setTasksError(LOCAL_AUTH_REJECTED);
+          }
         } else {
           setTasksError(
             e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
@@ -171,7 +177,7 @@ export default function App() {
 
     try {
       const token = await getToken();
-      if (!token) {
+      if (!token && isClerkMode()) {
         throw new Error("AUTH_EXPIRED");
       }
       const data = await generateTasks(trimmed, token);
@@ -180,8 +186,12 @@ export default function App() {
     } catch (e) {
       lastGeneratedUrlRef.current = "";
       if (e instanceof Error && e.message === "AUTH_EXPIRED") {
-        setTasksError("Please sign in again to generate benchmark tasks.");
-        setShowSignIn(true);
+        if (isClerkMode()) {
+          setTasksError("Please sign in again to generate benchmark tasks.");
+          setShowSignIn(true);
+        } else {
+          setTasksError(LOCAL_AUTH_REJECTED);
+        }
       } else {
         setTasksError(
           e instanceof Error ? e.message : "This site may not allow automated browsing. Try a different URL."
@@ -238,6 +248,8 @@ export default function App() {
               input_tokens: data.input_tokens,
               output_tokens: data.output_tokens,
               total_tokens: data.total_tokens,
+              cost_usd: data.cost_usd,
+              agent_model: data.agent_model,
             });
             // Don't stop polling — wait for "complete"
           }
@@ -253,6 +265,8 @@ export default function App() {
               input_tokens: data.input_tokens,
               output_tokens: data.output_tokens,
               total_tokens: data.total_tokens,
+              cost_usd: data.cost_usd,
+              agent_model: data.agent_model,
               phases: data.phases ?? [],
             });
           }
@@ -280,16 +294,16 @@ export default function App() {
     }
 
     const token = await getToken();
-    if (!token) {
+    if (!token && isClerkMode()) {
       setErrorMsg("Could not get auth token. Please sign in again.");
       return;
     }
 
-    // Check quota before starting
-    if (quota.remaining <= 0) {
+    // Check quota before starting (a null remaining means no limit is enforced)
+    if (quota.remaining !== null && quota.remaining <= 0) {
       const q = await fetchQuota(token);
-      setQuota({ remaining: q.remaining, resets_in: q.resets_in });
-      if (q.remaining <= 0) {
+      setQuota(q);
+      if (q.remaining !== null && q.remaining <= 0) {
         setShowExhausted(true);
         return;
       }
@@ -314,13 +328,19 @@ export default function App() {
       const vpHeight = isMobile
         ? Math.round(window.innerHeight * 0.45)
         : Math.round(window.innerHeight * 0.55);
-      const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight }) as { run_id: string; remaining?: number; resets_in?: number };
+      const data = await startBenchmark(url, selectedTask.goal, selectedTask.label, token, { width: vpWidth, height: vpHeight }) as { run_id: string; remaining?: number | null; resets_in?: number; limit?: number | null };
       currentRunIdRef.current = data.run_id;
-      if (data.remaining !== undefined) setQuota({ remaining: data.remaining, resets_in: data.resets_in ?? 0 });
+      if (data.remaining !== undefined) {
+        setQuota((prev) => normalizeQuota({ remaining: data.remaining, resets_in: data.resets_in, limit: data.limit ?? prev.limit }));
+      }
       startPolling(data.run_id);
     } catch (e) {
       setRunStatus("error");
-      setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
+      if (e instanceof Error && e.message === "AUTH_EXPIRED") {
+        setErrorMsg(isClerkMode() ? "Your session expired. Sign in again to run a benchmark." : LOCAL_AUTH_REJECTED);
+      } else {
+        setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
+      }
     }
   }, [selectedTask, isSignedIn, getToken, url, startPolling, quota.remaining]);
 
@@ -395,10 +415,11 @@ export default function App() {
           errorMsg={errorMsg}
           onRunAgain={handleRunAgain}
           onNewTest={handleNewTest}
-          remainingRuns={quota.remaining}
+          remainingRuns={quota.remaining ?? undefined}
+          runLimit={quota.limit ?? undefined}
           resetsIn={quota.resets_in}
         />
-        {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
+        {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} onClose={() => setShowExhausted(false)} />}
       </>
     );
   }
@@ -432,11 +453,12 @@ export default function App() {
         onRun={handleRun}
         onRegenerateTasks={handleRegenerateTasks}
         onSignInClick={() => setShowSignIn(true)}
-        remainingRuns={isSignedIn ? quota.remaining : undefined}
+        remainingRuns={isSignedIn ? quota.remaining ?? undefined : undefined}
+        runLimit={isSignedIn ? quota.limit ?? undefined : undefined}
         resetsIn={isSignedIn ? quota.resets_in : undefined}
       />
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
-      {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} />}
+      {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} onClose={() => setShowExhausted(false)} />}
     </div>
   );
 }

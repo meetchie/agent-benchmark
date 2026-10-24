@@ -3,12 +3,6 @@ import { describe, it, expect, vi } from "vitest";
 import { ResultsOverlay } from "../ResultsOverlay";
 import type { SummaryData, StepRecord } from "../../lib/types";
 
-// DemoModal uses @calcom/embed-react which is a DOM-heavy external dependency.
-// Mock it to a simple passthrough wrapper.
-vi.mock("../DemoModal", () => ({
-  DemoModal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 const makeStep = (step: number, description = "Step description", elapsed_ms = 100): StepRecord => ({
   step,
   description,
@@ -153,13 +147,73 @@ describe("ResultsOverlay", () => {
   });
 
   it("shows stats when summary is provided", () => {
-    const summary = makeSummary({ total_ms: 5000, total_tokens: 12000 });
+    const summary = makeSummary({ total_ms: 5000, total_tokens: 12000, cost_usd: 0.0423 });
     render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
     // Stats section should show Time, Steps, Tokens, Cost
     expect(screen.getByText("Time")).toBeInTheDocument();
     expect(screen.getByText("Steps")).toBeInTheDocument();
     expect(screen.getByText("Tokens")).toBeInTheDocument();
     expect(screen.getByText("Cost")).toBeInTheDocument();
+  });
+
+  describe("cost and agent model", () => {
+    it("shows the backend's cost_usd and agent_model", () => {
+      const summary = makeSummary({ cost_usd: 0.0423, agent_model: "claude-sonnet-5-5" });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.getByText("$0.04")).toBeInTheDocument();
+      expect(screen.getByText("claude-sonnet-5-5")).toBeInTheDocument();
+    });
+
+    it("does not recompute the cost from the token counts", () => {
+      // 10,000 input + 2,000 output tokens priced at the old hard-coded GPT-4o
+      // rates would read $0.05; the backend says $1.23 and that is what shows.
+      const summary = makeSummary({ cost_usd: 1.234, agent_model: "claude-opus-5-5" });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.getByText("$1.23")).toBeInTheDocument();
+      expect(screen.queryByText("$0.05")).not.toBeInTheDocument();
+    });
+
+    it("shows a sub-cent cost as <$0.01", () => {
+      const summary = makeSummary({ cost_usd: 0.004 });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.getByText("<$0.01")).toBeInTheDocument();
+    });
+
+    it("shows tokens only when cost_usd is null", () => {
+      const summary = makeSummary({ cost_usd: null, agent_model: "some-unpriced-model" });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.queryByText("Cost")).not.toBeInTheDocument();
+      expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+      expect(screen.getByText("Tokens")).toBeInTheDocument();
+      expect(screen.getByText("12.0k")).toBeInTheDocument();
+    });
+
+    it("shows tokens only when cost_usd is absent from the payload", () => {
+      render(<ResultsOverlay {...defaultProps} summary={makeSummary()} steps={[makeStep(1)]} />);
+      expect(screen.queryByText("Cost")).not.toBeInTheDocument();
+      expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Agent model/)).not.toBeInTheDocument();
+      expect(screen.getByText("12.0k")).toBeInTheDocument();
+    });
+
+    it("shows the cost while the judge is still analyzing", () => {
+      render(
+        <ResultsOverlay
+          {...defaultProps}
+          isAnalyzing
+          analyzingStats={{
+            total_ms: 9000,
+            input_tokens: 20000,
+            output_tokens: 1000,
+            total_tokens: 21000,
+            cost_usd: 0.05,
+            agent_model: "claude-sonnet-5-5",
+          }}
+          steps={[makeStep(1)]}
+        />
+      );
+      expect(screen.getByText("$0.05")).toBeInTheDocument();
+    });
   });
 
   it("shows no steps message for error with no steps", () => {

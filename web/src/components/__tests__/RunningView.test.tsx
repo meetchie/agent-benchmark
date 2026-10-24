@@ -3,11 +3,6 @@ import { describe, it, expect, vi } from "vitest";
 import { RunningView } from "../RunningView";
 import type { StepRecord, SummaryData } from "../../lib/types";
 
-// DemoModal uses @calcom/embed-react which is a DOM-heavy external dependency.
-vi.mock("../DemoModal", () => ({
-  DemoModal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 // ResultsOverlay is complex and tested separately; mock it to a lightweight stub.
 vi.mock("../ResultsOverlay", () => ({
   ResultsOverlay: () => <div data-testid="results-overlay-mock">ResultsOverlay</div>,
@@ -132,8 +127,90 @@ describe("RunningView", () => {
     expect(stepCountEls.length).toBeGreaterThan(0);
   });
 
-  it("renders CTA content promoting Rindler", () => {
+  describe("cost and agent model", () => {
+    const finished = (overrides: Partial<SummaryData> = {}) =>
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          summary={{ ...makeSummary(), ...overrides }}
+          steps={[makeStep(1), makeStep(2)]}
+        />
+      );
+
+    it("shows the backend's cost_usd and the agent model", () => {
+      finished({ cost_usd: 0.0423, agent_model: "claude-sonnet-5-5" });
+      expect(screen.getAllByText("$0.04").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("claude-sonnet-5-5").length).toBeGreaterThan(0);
+    });
+
+    it("does not recompute the cost from the token counts", () => {
+      // 8,000 input + 2,000 output tokens at the old GPT-4o rates would be $0.04.
+      finished({ cost_usd: 2.5 });
+      expect(screen.getAllByText("$2.50").length).toBeGreaterThan(0);
+      expect(screen.queryByText("$0.04")).not.toBeInTheDocument();
+    });
+
+    it("shows tokens only when cost_usd is null", () => {
+      finished({ cost_usd: null, agent_model: "some-unpriced-model" });
+      expect(screen.queryByText("Cost")).not.toBeInTheDocument();
+      expect(screen.getAllByText("10,000").length).toBeGreaterThan(0);
+      expect(document.body.textContent).not.toMatch(/\$/);
+    });
+
+    it("explains in the agent card why there is no cost", () => {
+      finished({ cost_usd: null, agent_model: "some-unpriced-model" });
+      for (const card of screen.getAllByTestId("agent-card")) {
+        expect(card).toHaveTextContent("some-unpriced-model");
+        expect(card).toHaveTextContent(/no per-token rate/);
+      }
+    });
+
+    it("shows tokens only when cost_usd is absent from the payload", () => {
+      finished();
+      expect(screen.queryByText("Cost")).not.toBeInTheDocument();
+      expect(screen.getAllByText("10,000").length).toBeGreaterThan(0);
+      expect(document.body.textContent).not.toMatch(/\$/);
+    });
+
+    it("shows a placeholder, not an estimate, while the run is in progress", () => {
+      render(<RunningView {...defaultProps} steps={[makeStep(1), makeStep(2)]} />);
+      expect(screen.getAllByText("Cost").length).toBeGreaterThan(0);
+      expect(document.body.textContent).not.toMatch(/\$/);
+      // The stats block renders once per layout (desktop and mobile).
+      for (const card of screen.getAllByTestId("agent-card")) {
+        expect(card).toHaveTextContent("Reported when the run finishes");
+      }
+    });
+
+    it("shows cost and model as soon as the judge phase reports them", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          isAnalyzing
+          analyzingStats={{
+            total_ms: 4000,
+            input_tokens: 5000,
+            output_tokens: 500,
+            total_tokens: 5500,
+            cost_usd: 0.015,
+            agent_model: "claude-haiku-5-5",
+          }}
+          steps={[makeStep(1)]}
+        />
+      );
+      expect(screen.getAllByText("$0.01").length).toBeGreaterThan(0);
+      for (const card of screen.getAllByTestId("agent-card")) {
+        expect(card).toHaveTextContent("claude-haiku-5-5");
+      }
+    });
+  });
+
+  it("has no external links or booking buttons", () => {
     render(<RunningView {...defaultProps} />);
-    expect(screen.getAllByText(/Make your site agent-accessible/).length).toBeGreaterThan(0);
+    expect(document.querySelector("a[href]")).toBeNull();
+    expect(screen.queryByText(/book a demo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/agent-accessible/i)).not.toBeInTheDocument();
   });
 });

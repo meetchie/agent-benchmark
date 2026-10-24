@@ -3,8 +3,9 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import App from "./App";
 import "./index.css";
 
-const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-if (!CLERK_KEY) throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
+// With a key this is the real Clerk provider. Without one the build aliases
+// "@clerk/clerk-react" to src/lib/auth-local.tsx, which ignores the prop.
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? "";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");

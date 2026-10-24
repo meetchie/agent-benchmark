@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cancelBenchmark, generateTasks } from "../api";
+import {
+  UNKNOWN_QUOTA,
+  cancelBenchmark,
+  fetchQuota,
+  generateTasks,
+  normalizeQuota,
+  startBenchmark,
+} from "../api";
 
 describe("generateTasks", () => {
   afterEach(() => {
@@ -62,5 +69,111 @@ describe("cancelBenchmark", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
 
     await expect(cancelBenchmark("run-123")).resolves.toBeUndefined();
+  });
+});
+
+function headersOf(fetchMock: ReturnType<typeof vi.fn>): Record<string, string> {
+  return fetchMock.mock.calls[0][1].headers;
+}
+
+describe("local mode (no token)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends no Authorization header when generating tasks", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tasks: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await generateTasks("https://example.com", null);
+
+    expect(headersOf(fetchMock)).toEqual({ "Content-Type": "application/json" });
+  });
+
+  it("sends no Authorization header when starting a run", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ run_id: "r1" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(startBenchmark("https://example.com", "goal", "label", null)).resolves.toEqual({ run_id: "r1" });
+
+    expect(headersOf(fetchMock)).toEqual({ "Content-Type": "application/json" });
+  });
+
+  it("sends no Authorization header when fetching the quota", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ remaining: 3, resets_in: 0, limit: 3 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchQuota(null);
+
+    expect(headersOf(fetchMock)).toEqual({});
+  });
+
+  it("still sends the bearer token when there is one", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ run_id: "r1" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startBenchmark("https://example.com", "goal", "label", "tok-1");
+
+    expect(headersOf(fetchMock).Authorization).toBe("Bearer tok-1");
+  });
+});
+
+describe("backend unreachable", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("explains an empty 500 from the dev proxy when generating tasks", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+
+    await expect(generateTasks("https://example.com", null)).rejects.toThrow(/Can't reach the benchmark server/);
+  });
+
+  it("explains an empty 500 from the dev proxy when starting a run", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+
+    await expect(startBenchmark("https://example.com", "g", "l", null)).rejects.toThrow(/Can't reach the benchmark server/);
+  });
+
+  it("keeps the backend's own error text when it sends one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "That site does not look like a store." }), { status: 422 }))
+    );
+
+    await expect(generateTasks("https://example.com", null)).rejects.toThrow("That site does not look like a store.");
+  });
+
+  it("treats a failed quota request as an unknown quota", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+    await expect(fetchQuota(null)).resolves.toEqual(UNKNOWN_QUOTA);
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    await expect(fetchQuota(null)).resolves.toEqual(UNKNOWN_QUOTA);
+  });
+});
+
+describe("normalizeQuota", () => {
+  it("passes a normal daily allowance through", () => {
+    expect(normalizeQuota({ remaining: 2, resets_in: 3600, limit: 3 })).toEqual({ remaining: 2, resets_in: 3600, limit: 3 });
+  });
+
+  it("keeps an exhausted allowance exhausted", () => {
+    expect(normalizeQuota({ remaining: 0, resets_in: 120, limit: 3 })).toEqual({ remaining: 0, resets_in: 120, limit: 3 });
+  });
+
+  it("reads a limit of 0 as unlimited", () => {
+    expect(normalizeQuota({ remaining: 0, resets_in: 0, limit: 0 })).toEqual({ remaining: null, resets_in: 0, limit: null });
+  });
+
+  it("reads a missing, null or negative remaining as unlimited", () => {
+    expect(normalizeQuota({ resets_in: 0, limit: 3 })).toEqual({ remaining: null, resets_in: 0, limit: null });
+    expect(normalizeQuota({ remaining: null, limit: null })).toEqual({ remaining: null, resets_in: 0, limit: null });
+    expect(normalizeQuota({ remaining: -1, limit: 3 })).toEqual({ remaining: null, resets_in: 0, limit: null });
+  });
+
+  it("copes with a non-object body", () => {
+    expect(normalizeQuota(null)).toEqual(UNKNOWN_QUOTA);
+    expect(normalizeQuota(undefined)).toEqual(UNKNOWN_QUOTA);
   });
 });

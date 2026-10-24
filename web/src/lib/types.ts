@@ -33,6 +33,10 @@ export interface StatusAnalyzing {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  /** US dollars for the agent's tokens at the agent model's rates; null when the backend has no rate for the model. */
+  cost_usd?: number | null;
+  /** Model id the agent ran on, e.g. "claude-sonnet-5-5". */
+  agent_model?: string | null;
 }
 
 export interface StatusComplete {
@@ -45,6 +49,8 @@ export interface StatusComplete {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cost_usd?: number | null;
+  agent_model?: string | null;
   phases: Phase[];
 }
 
@@ -58,15 +64,29 @@ export type StatusResponse = StatusRunning | StatusAnalyzing | StatusComplete | 
 
 export type RunStatus = "idle" | "running" | "analyzing" | "complete" | "error";
 
-export interface SummaryData {
-  success: boolean;
-  summary: string;
-  result_state: ResultState;
+/** Totals the backend reports once the agent has finished (status "analyzing" and "complete"). */
+export interface RunStats {
   total_ms: number;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  /** Absent or null: the backend could not price the run, so the UI shows tokens only. */
+  cost_usd?: number | null;
+  agent_model?: string | null;
+}
+
+export interface SummaryData extends RunStats {
+  success: boolean;
+  summary: string;
+  result_state: ResultState;
   phases: Phase[];
+}
+
+/** Daily run allowance. remaining and limit are null when the backend enforces none. */
+export interface Quota {
+  remaining: number | null;
+  resets_in: number;
+  limit: number | null;
 }
 
 // Positional degradation benchmark (#87)

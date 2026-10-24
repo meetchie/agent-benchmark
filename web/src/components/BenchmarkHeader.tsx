@@ -30,14 +30,6 @@ export function BenchmarkHeader({ onSignInClick }: BenchmarkHeaderProps) {
             </button>
           )}
         </SignedOut>
-        <a
-          href="https://rindler.ai"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs sm:text-sm font-semibold text-[#3c49ad] border-2 border-[#3c49ad] px-3 sm:px-5 py-1 sm:py-1.5 hover:bg-[#3c49ad] hover:text-white transition-colors whitespace-nowrap"
-        >
-          Learn More
-        </a>
       </div>
     </header>
   );

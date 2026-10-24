@@ -1,21 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import type { StepRecord, SummaryData } from "../lib/types";
+import type { RunStats, StepRecord, SummaryData } from "../lib/types";
+import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
+import { AgentCard } from "./AgentCard";
 import { RunningHeader } from "./RunningHeader";
 import { StepLog } from "./StepLog";
 import { ResultsOverlay } from "./ResultsOverlay";
-import { DemoModal } from "./DemoModal";
-
-/** GPT-4o pricing: $2.50/1M input, $10/1M output */
-function formatCost(inputTokens: number, outputTokens: number): string {
-  const cost = (inputTokens / 1_000_000) * 2.5 + (outputTokens / 1_000_000) * 10;
-  if (cost < 0.01) return "<$0.01";
-  return "$" + cost.toFixed(2);
-}
 
 function LiveStats({
   url, taskLabel, steps, elapsedMs, finalMs,
-  finalInputTokens, finalOutputTokens,
+  finalInputTokens, finalOutputTokens, finalCostUsd, agentModel,
 }: {
   url: string;
   taskLabel: string;
@@ -24,6 +18,8 @@ function LiveStats({
   finalMs?: number;
   finalInputTokens?: number;
   finalOutputTokens?: number;
+  finalCostUsd?: number | null;
+  agentModel?: string | null;
 }) {
   // Snap to real server time when done, otherwise show shared live counter
   const displayMs = finalMs ?? elapsedMs;
@@ -33,17 +29,21 @@ function LiveStats({
   const displayInputTokens = hasRealTokens ? finalInputTokens! : Math.round(steps.length * 3000 * 0.8);
   const displayOutputTokens = hasRealTokens ? finalOutputTokens! : Math.round(steps.length * 3000 * 0.2);
   const displayTotalTokens = displayInputTokens + displayOutputTokens;
-  const displayCost = formatCost(displayInputTokens, displayOutputTokens);
 
   const domain = (() => {
     try { return new URL(url).hostname.replace("www.", ""); }
     catch { return url; }
   })();
 
+  // Cost is whatever the backend priced the run at. Until the run finishes
+  // there is nothing to show, and if the backend has no rate for the model
+  // (cost_usd null or absent) the row is dropped and tokens stand alone.
+  const costValue = hasRealTokens ? formatCostUsd(finalCostUsd) : "—";
+
   const statItems = [
     { label: "Time", value: formatTimer(displayMs) },
     { label: "Steps", value: String(steps.length) },
-    { label: "Cost", value: steps.length > 0 ? (hasRealTokens ? displayCost : `~${displayCost}`) : "—" },
+    ...(costValue !== null ? [{ label: "Cost", value: steps.length > 0 ? costValue : "—" }] : []),
     { label: "Tokens", value: steps.length > 0 ? (hasRealTokens ? displayTotalTokens.toLocaleString() : `~${displayTotalTokens.toLocaleString()}`) : "—" },
   ];
 
@@ -62,8 +62,13 @@ function LiveStats({
               <span className="text-sm font-bold text-slate-900 font-mono">{s.value}</span>
             </div>
           ))}
-
         </div>
+        {agentModel && (
+          <div className="flex justify-between gap-3 px-4 py-2 border-t border-slate-100 text-[11px] text-slate-500">
+            <span className="uppercase tracking-wider">Agent model</span>
+            <span className="font-mono text-slate-900 truncate">{agentModel}</span>
+          </div>
+        )}
       </div>
 
       {/* Desktop: vertical sidebar */}
@@ -81,35 +86,7 @@ function LiveStats({
             </div>
           ))}
         </div>
-
-        {/* CTA card — I5 style: left-aligned, divider accent */}
-        <div className="flex-1 bg-white border-t-[3px] border-t-[#3c49ad] p-5 flex flex-col justify-center">
-          <p className="text-base font-bold text-slate-900 mb-1.5">Make your site agent-accessible</p>
-          <p className="text-xs text-slate-500 mb-5 leading-relaxed">No website changes needed.</p>
-          <div className="flex flex-col gap-2 w-full">
-            <a
-              href="https://rindler.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all"
-            >
-              <span className="relative inline-flex items-center">
-                <span className="transition-transform duration-200 group-hover:-translate-x-2">Check out Rindler</span>
-                <span className="absolute left-full ml-1 opacity-0 translate-x-[-6px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">→</span>
-              </span>
-            </a>
-            <DemoModal>
-              <button
-                className="group border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all w-full"
-              >
-                <span className="relative inline-flex items-center">
-                  <span className="transition-transform duration-200 group-hover:-translate-x-2">Book a Demo</span>
-                  <span className="absolute left-full ml-1 opacity-0 translate-x-[-6px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">→</span>
-                </span>
-              </button>
-            </DemoModal>
-          </div>
-        </div>
+        <AgentCard model={agentModel} priced={hasRealTokens ? costValue !== null : true} />
       </div>
     </>
   );
@@ -120,12 +97,7 @@ interface RunningViewProps {
   taskLabel: string;
   isRunning: boolean;
   isAnalyzing: boolean;
-  analyzingStats: {
-    total_ms: number;
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null;
+  analyzingStats: RunStats | null;
   steps: StepRecord[];
   screenshot: string | null;
   summary: SummaryData | null;
@@ -133,12 +105,13 @@ interface RunningViewProps {
   onRunAgain: () => void;
   onNewTest: () => void;
   remainingRuns?: number;
+  runLimit?: number;
   resetsIn?: number;
 }
 
 export function RunningView({
   url, taskLabel, isRunning, isAnalyzing, analyzingStats,
-  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns, resetsIn,
+  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns, runLimit, resetsIn,
 }: RunningViewProps) {
   const isDone = !!summary || (!!errorMsg && !isRunning && !isAnalyzing);
   const showOverlayTrigger = isDone || isAnalyzing;
@@ -146,6 +119,9 @@ export function RunningView({
   const finalMs = summary?.total_ms ?? analyzingStats?.total_ms;
   const finalInputTokens = summary?.input_tokens ?? analyzingStats?.input_tokens;
   const finalOutputTokens = summary?.output_tokens ?? analyzingStats?.output_tokens;
+  const finalStats = summary ?? analyzingStats;
+  const finalCostUsd = finalStats?.cost_usd;
+  const agentModel = finalStats?.agent_model;
 
   // Timer starts when first step arrives (server is ready), stops when server gives final time
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -207,6 +183,7 @@ export function RunningView({
         totalMs={finalMs}
         onNewTest={onNewTest}
         remainingRuns={remainingRuns}
+        runLimit={runLimit}
         resetsIn={resetsIn}
       />
 
@@ -253,6 +230,7 @@ export function RunningView({
           url={url} taskLabel={taskLabel} steps={steps}
           elapsedMs={elapsedMs} finalMs={finalMs}
           finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens}
+          finalCostUsd={finalCostUsd} agentModel={agentModel}
         />
       </div>
 
@@ -292,26 +270,10 @@ export function RunningView({
           )}
         </div>
         {/* Horizontal stats bar */}
-        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens} />
+        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} />
         {/* Steps */}
         <div className="h-[200px] min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
           <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} />
-        </div>
-        {/* CTA card */}
-        <div className="bg-white border-t-[3px] border-t-[#3c49ad] p-5">
-          <p className="text-base font-bold text-slate-900 mb-1.5">Make your site agent-accessible</p>
-          <p className="text-xs text-slate-500 mb-4 leading-relaxed">No website changes needed.</p>
-          <div className="flex gap-2 w-full">
-            <a href="https://rindler.ai" target="_blank" rel="noopener noreferrer"
-              className="flex-1 border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all">
-              Learn More
-            </a>
-            <DemoModal>
-              <button className="flex-1 border-2 border-[#3c49ad] bg-white text-[#3c49ad] py-2.5 text-sm font-semibold text-center hover:bg-[#3c49ad] hover:text-white transition-all">
-                Book a Demo
-              </button>
-            </DemoModal>
-          </div>
         </div>
       </div>
 

@@ -10,3 +10,12 @@ export function formatTimer(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+/**
+ * Text after the bold count in "2 of 3 runs remaining". Without a known daily
+ * limit (the backend reports none) it is just "runs remaining".
+ */
+export function runsRemainingLabel(remaining: number, limit?: number): string {
+  if (limit !== undefined) return `of ${limit} runs remaining`;
+  return `${remaining === 1 ? "run" : "runs"} remaining`;
+}

@@ -1,45 +1,26 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    outDir: "dist",
-  },
-  server: {
-    port: 5180,
+import { ENV_PREFIXES, apiProxy, apiUrl, authAlias, devPort, repoRoot } from "./config/vite-helpers";
+
+export default defineConfig(({ mode }) => {
+  // .env at the repository root (also read by the backend) plus the shell.
+  const env = loadEnv(mode, repoRoot, ENV_PREFIXES);
+
+  // The browser calls /api/benchmark/*; Vite forwards them to the Python
+  // backend (BENCHMARK_API_URL), exactly as the Cloudflare functions did in
+  // the hosted setup. Same for `vite preview`.
+  const server = {
+    port: devPort(env),
     strictPort: true,
-    // Local dev: Vite proxies API calls directly to the Python FastAPI container (http://localhost:8000).
-    // This bypasses the Cloudflare Functions (functions/api/benchmark/) which are used in production only.
-    // Reason: wrangler v3.114.17 conflicts when wrangler.toml has pages_build_output_dir set + proxy command.
-    proxy: {
-      // Rewrite Cloudflare function paths to Python container paths for local dev
-      "/api/benchmark/status": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: (path) =>
-          path.replace("/api/benchmark/status", "/benchmark/status"),
-      },
-      "/api/benchmark/run": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: () => "/benchmark/start",
-      },
-      "/api/benchmark/cancel": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: (path) =>
-          path.replace("/api/benchmark/cancel", "/benchmark/cancel"),
-      },
-      "/api/benchmark/generate-tasks": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: () => "/benchmark/generate-tasks",
-      },
-      "/api/benchmark/quota": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: () => "/benchmark/quota",
-      },
-    },
-  },
+    proxy: apiProxy(apiUrl(env)),
+  };
+
+  return {
+    plugins: [react()],
+    envDir: repoRoot,
+    resolve: { alias: authAlias(env) },
+    build: { outDir: "dist" },
+    server,
+    preview: server,
+  };
 });

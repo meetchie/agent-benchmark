@@ -1,14 +1,8 @@
 import { useEffect } from "react";
-import type { StepRecord, SummaryData, ResultState } from "../lib/types";
+import type { RunStats, StepRecord, SummaryData, ResultState } from "../lib/types";
+import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
 import { PhaseList } from "./PhaseList";
-import { DemoModal } from "./DemoModal";
-
-function formatCost(inputTokens: number, outputTokens: number): string {
-  const cost = (inputTokens / 1_000_000) * 2.5 + (outputTokens / 1_000_000) * 10;
-  if (cost < 0.01) return "<$0.01";
-  return "$" + cost.toFixed(2);
-}
 
 interface ResultsOverlayProps {
   url: string;
@@ -17,12 +11,7 @@ interface ResultsOverlayProps {
   errorMsg: string | null;
   steps: StepRecord[];
   isAnalyzing: boolean;
-  analyzingStats: {
-    total_ms: number;
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null;
+  analyzingStats: RunStats | null;
   onClose: () => void;
   onRunAgain: () => void;
   onNewTest: () => void;
@@ -58,6 +47,8 @@ export function ResultsOverlay({
   const resultState = summary?.result_state ?? (errorMsg ? "error" : null);
   const config = resultState ? RESULT_CONFIG[resultState] : null;
   const stats = summary ?? analyzingStats;
+  // Priced by the backend at the agent model's rates; no cost cell when it has none.
+  const cost = formatCostUsd(stats?.cost_usd);
 
   const domain = (() => {
     try { return new URL(url).hostname.replace("www.", ""); }
@@ -107,13 +98,18 @@ export function ResultsOverlay({
                   : stats.total_tokens || 0}
               </span>
             </div>
-            <div className="text-center">
-              <span className="text-xs text-slate-400 block">Cost</span>
-              <span className="text-base font-bold font-mono text-slate-900">
-                {formatCost(stats.input_tokens, stats.output_tokens)}
-              </span>
-            </div>
+            {cost !== null && (
+              <div className="text-center">
+                <span className="text-xs text-slate-400 block">Cost</span>
+                <span className="text-base font-bold font-mono text-slate-900">{cost}</span>
+              </div>
+            )}
           </div>
+        )}
+        {stats?.agent_model && (
+          <p className="text-center text-xs text-slate-400 -mt-2 mb-5">
+            Agent model <span className="font-mono text-slate-600">{stats.agent_model}</span>
+          </p>
         )}
 
         {isAnalyzing && (
@@ -160,22 +156,6 @@ export function ResultsOverlay({
               <button onClick={onNewTest} className="text-sm font-medium text-slate-500 hover:text-slate-700">
                 New Test
               </button>
-            </div>
-
-            <div className="bg-[#f0f4ff] border border-[#3c49ad]/10 p-4 sm:p-5 text-center">
-              <div className="text-xs sm:text-sm text-slate-600 mb-3">Want to make your site work seamlessly with AI agents?</div>
-              <div className="flex gap-2 sm:gap-3">
-                <a href="https://rindler.ai" target="_blank" rel="noopener noreferrer"
-                  className="flex-1 border-2 border-transparent bg-[#3c49ad] text-white py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-center hover:bg-[#5563c9] whitespace-nowrap">
-                  Check out Rindler →
-                </a>
-                <DemoModal>
-                  <button
-                    className="flex-1 border-2 border-slate-300 bg-white text-slate-700 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-center hover:border-[#3c49ad] hover:text-[#3c49ad] whitespace-nowrap">
-                    Book a Demo →
-                  </button>
-                </DemoModal>
-              </div>
             </div>
           </>
         )}
