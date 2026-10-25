@@ -133,10 +133,12 @@ vhlistings_product_attribute_search, one run each:
 | run | verdict | steps | duration | agent cost | judge cost |
 |---|---|---|---|---|---|
 | RINDLER, before the pagination fix | FAIL | 7 | 43.8 s | $0.0262 | $0.0088 |
-| BROWSERUSE | FAIL | 9 | 109.3 s | $0.5890 | $0.0077 |
+| BROWSERUSE, after the adapter fix | FAIL | 23 | 138.9 s | $0.4587 | $0.0088 |
 | RINDLER, after the pagination fix | PASS | 8 | 54.6 s | $0.0278 | $0.0084 |
 
-The store no longer has a chain belt under $35. Both Rindler runs added "Gravechain Crucifix Belt" ($52) and called it a chain belt from its name, as the task allows; its product page says it is genuine leather, which the BrowserUse arm read and so added nothing. The PASS is therefore the judge accepting a name-based report, the weakness caveat 4 below describes. One run per arm proves the setup works; it says nothing about which arm is better.
+The store no longer has a chain belt under $35. Both Rindler runs added "Gravechain Crucifix Belt" ($52) and called it a chain belt from its name, as the task allows; its product page says it is genuine leather. The BrowserUse arm looked through three result pages and a second search, found no chain belt under $35, added the same belt as the closest fallback and said in its report that it was neither a chain belt nor under $35, and the judge failed it. The Rindler PASS is therefore the judge accepting a name-based report, the weakness caveat 4 below describes. One run per arm proves the setup works; it says nothing about which arm is better.
+
+The BrowserUse row was first measured before the browser-use adapter was fixed (9 steps, 109.3 s, $0.5890): the model answered each step by calling the action itself and the adapter made a second request to have it wrapped, 21 API calls for 9 steps. After the fix every step is one API call with no repairs (23 calls for 23 steps). The task cannot be completed on today's store, so the number of steps depends on how long the agent keeps looking and differs from run to run.
 
 ## The March 2026 results (`arena_logs/`)
 

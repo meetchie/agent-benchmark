@@ -1,0 +1,22 @@
+#!/bin/sh
+# Refuse a commit that adds an API key, a private key or a .env file.
+#
+# `make setup` copies this file to .git/hooks/pre-commit when that hook does not exist yet.
+# It checks what is staged, so it only ever looks at the lines a commit adds:
+#   1. key-shaped strings (Anthropic, OpenAI, AWS, GitHub, Stripe, Browserbase, PEM private keys)
+#   2. any .env file except .env.example
+# Deleting a .env file that was committed by mistake is allowed.
+# Skip it for one commit with `git commit --no-verify` (only if a match is a false alarm).
+
+added=$(git diff --cached -U0 --no-color | grep -E '^\+' | grep -vE '^\+\+\+ ')
+if printf '%s\n' "$added" | grep -qE 'sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{40,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk_live_[A-Za-z0-9]{20,}|bb_live_[A-Za-z0-9_-]{20,}'; then
+  echo "pre-commit: a staged change looks like it contains an API key or private key. Remove it (keys belong in .env, which is gitignored)." >&2
+  exit 1
+fi
+
+envfiles=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.env($|\.)')
+if printf '%s\n' "$envfiles" | grep -vE '^$|\.env\.example$' | grep -q .; then
+  echo "pre-commit: refusing to commit a .env file (only .env.example may be committed)." >&2
+  exit 1
+fi
+exit 0
