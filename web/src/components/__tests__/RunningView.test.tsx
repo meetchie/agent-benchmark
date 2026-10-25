@@ -193,18 +193,35 @@ describe("RunningView", () => {
       expect(document.body.textContent).not.toMatch(/6,000/);
     });
 
+    // Every Tokens cell (the stats render once per layout and screen size) shows `value`.
+    const expectEveryTokenCell = (value: string) => {
+      const values = screen.getAllByText("Tokens").map((label) => label.nextElementSibling?.textContent);
+      expect(values.length).toBeGreaterThan(0);
+      expect(values).toEqual(values.map(() => value));
+    };
+
+    // total_tokens includes the cache writes, which input_tokens + output_tokens leaves
+    // out, so the next two fixtures make it larger than that sum (41,000 + 2,500 = 43,500).
     it("shows the backend's real token total once the judge phase reports it", () => {
       render(
         <RunningView
           {...defaultProps}
           isRunning={false}
           isAnalyzing
-          analyzingStats={{ total_ms: 4000, input_tokens: 41000, output_tokens: 2500, total_tokens: 43500, cost_usd: null }}
+          analyzingStats={{ total_ms: 4000, input_tokens: 41000, output_tokens: 2500, total_tokens: 50000, cost_usd: null }}
           steps={[makeStep(1), makeStep(2)]}
         />
       );
-      expect(screen.getAllByText("43,500").length).toBeGreaterThan(0);
+      expectEveryTokenCell("50,000");
+      expect(document.body.textContent).not.toMatch(/43,500/);
       expect(document.body.textContent).not.toMatch(/~/);
+    });
+
+    it("shows the finished run's total_tokens, cache writes included, not input + output", () => {
+      // Real run 21df242f: input 227,454 + cache writes 18,638 + output 3,053 = 249,145.
+      finished({ input_tokens: 227454, output_tokens: 3053, total_tokens: 249145, cost_usd: 0.9 });
+      expectEveryTokenCell("249,145");
+      expect(document.body.textContent).not.toMatch(/230,507/);
     });
 
     it("shows cost and model as soon as the judge phase reports them", () => {

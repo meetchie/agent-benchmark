@@ -3,7 +3,8 @@
 #   make setup    install everything (once), plus a pre-commit check against committed keys
 #   make dev      backend + web UI, needs ANTHROPIC_API_KEY in .env
 #   make demo     the same with canned runs, needs no key
-#   make test     every test suite (all of them run, then the failures are listed)
+#   make test     every test suite (all of them run, then the failures are listed);
+#                 make test SUITES="server hooks" runs only those (unknown names are refused)
 #
 # Needs uv (https://docs.astral.sh/uv/), Node 20+ with npm, and make. uv fetches
 # Python 3.11 itself. Run `make help` for the full list.
@@ -20,9 +21,13 @@ SITE ?= prose
 TASK ?=
 
 # The suites `make test` runs, in this order (each is also a target: make test-<suite>).
-SUITES := server cli web viewer hooks
+# make test SUITES="server hooks" runs only some of them; a name that is not in this
+# list is refused.
+KNOWN_SUITES := server cli web viewer hooks scripts
+SUITES ?= $(KNOWN_SUITES)
+export UNKNOWN_SUITES := $(filter-out $(KNOWN_SUITES),$(SUITES))
 
-.PHONY: help setup install-hooks check-tools dev demo test $(addprefix test-,$(SUITES)) \
+.PHONY: help setup install-hooks check-tools check-suites dev demo test $(addprefix test-,$(KNOWN_SUITES)) \
         arena arena-list analyze analyze-march compare compare-tasks compare-tools viewer
 
 help: ## list the targets
@@ -30,7 +35,7 @@ help: ## list the targets
 	@echo
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  make %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
-	@echo "Variables: AGENT, SCENARIO (arena); SITE, TASK (compare). Settings live in .env (see .env.example)."
+	@echo "Variables: AGENT, SCENARIO (arena); SITE, TASK (compare); SUITES (test). Settings live in .env (see .env.example)."
 
 check-tools:
 	@command -v uv >/dev/null 2>&1 || { echo "uv is not installed. Install it from https://docs.astral.sh/uv/getting-started/installation/" >&2; exit 1; }
@@ -44,7 +49,7 @@ setup: check-tools ## install the Python environment, Chromium, the npm packages
 	cd viewer && npm ci --no-audit --no-fund
 	@./scripts/hooks/install.sh
 	@echo
-	@if [ -f .env ]; then echo "Setup done. Run 'make dev'."; else echo "Setup done. Next: 'cp .env.example .env' and put your key after ANTHROPIC_API_KEY=, then 'make dev'. ('make demo' runs without a key.)"; fi
+	@./scripts/setup-done.sh
 
 install-hooks: ## install the pre-commit check that refuses API keys and .env files (setup does this too)
 	@./scripts/hooks/install.sh
@@ -55,7 +60,11 @@ dev: check-tools ## backend (127.0.0.1) and web UI together; Ctrl-C stops both
 demo: check-tools ## the same with canned runs: no API key, no browser
 	@DEMO_MODE=true ./scripts/dev.sh
 
-test: check-tools ## every test suite: all of them run, the failed ones are listed at the end (offline, no key needed)
+check-suites:
+	@[ -n "$(strip $(SUITES))" ] || { echo "No test suite named. Known suites: $(KNOWN_SUITES)" >&2; exit 2; }
+	@[ -z "$$UNKNOWN_SUITES" ] || { printf 'Unknown test suite: %s\nKnown suites: %s\n' "$$UNKNOWN_SUITES" "$(KNOWN_SUITES)" >&2; exit 2; }
+
+test: check-suites check-tools ## every test suite (all run, failures listed at the end; offline, no key); SUITES="server hooks" picks some
 	@passed=""; failed=""; \
 	for suite in $(SUITES); do \
 	  echo; echo "=== make test-$$suite"; \
@@ -79,6 +88,9 @@ test-viewer: check-tools ## viewer tests (vitest) and a production build
 
 test-hooks: ## tests of the pre-commit check and its installer (needs git, no uv or node)
 	sh scripts/hooks/test.sh
+
+test-scripts: ## tests of the setup message and the SUITES check (needs make and sh, no uv or node)
+	sh scripts/test.sh
 
 arena: check-tools ## one arena run, a real run that costs money: AGENT=RINDLER|BROWSERUSE SCENARIO=... (both required)
 	@{ [ -n "$(AGENT)" ] && [ -n "$(SCENARIO)" ]; } || { echo "usage: make arena AGENT=<RINDLER|BROWSERUSE> SCENARIO=<scenario id>   ('make arena-list' lists them; this is a real run and costs money)" >&2; exit 2; }

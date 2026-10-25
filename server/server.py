@@ -414,20 +414,17 @@ async def _demo_run(state: RunState, url: str, goal: str):
     from benchmark_runner import StepRecord
 
     domain = url.split("//")[-1].split("/")[0].replace("www.", "")
+    # Canned and deliberately generic, so they fit whichever task was picked.
     demo_steps = [
         f"Navigating to {url}",
-        f"Looking for address input on {domain}",
-        "Typing address: 1 Times Square, New York, NY 10036",
-        "Selecting first autocomplete suggestion",
-        f"Browsing product categories on {domain}",
-        "Applying price filter: $15-$25",
-        "Scrolling through filtered results",
-        "Selecting item with 4.5 star rating",
-        "Choosing variant: Size Medium, Color Black",
-        "Adding item to cart",
-        "Checking cart subtotal",
-        "Looking for available promotions",
-        "Verifying cart contents and total",
+        f"Looking over the page on {domain}",
+        "Searching for the product the task asks for",
+        "Opening the first matching result",
+        "Choosing the options the task asks for",
+        "Adding the item to the cart",
+        "Opening the cart",
+        "Checking the item and quantity in the cart",
+        "Confirming the cart total",
     ]
 
     overall_start = datetime.now()
@@ -454,17 +451,17 @@ async def _demo_run(state: RunState, url: str, goal: str):
     await _aio.sleep(2.0)
 
     state.phases = [
-        {"name": "Set delivery address", "steps": [1, 2, 3, 4], "total_ms": sum(s.elapsed_ms for s in state.steps[0:4]), "failed": False, "slow": False},
-        {"name": "Browse and select product", "steps": [5, 6, 7, 8], "total_ms": sum(s.elapsed_ms for s in state.steps[4:8]), "failed": False, "slow": True},
-        {"name": "Configure and add to cart", "steps": [9, 10, 11], "total_ms": sum(s.elapsed_ms for s in state.steps[8:11]), "failed": not success, "slow": False},
-        {"name": "Verify cart contents", "steps": [12, 13], "total_ms": sum(s.elapsed_ms for s in state.steps[11:13]), "failed": False, "slow": False},
+        {"name": "Open the site and find the product", "steps": [1, 2, 3], "total_ms": sum(s.elapsed_ms for s in state.steps[0:3]), "failed": False, "slow": False},
+        {"name": "Open the product and choose options", "steps": [4, 5], "total_ms": sum(s.elapsed_ms for s in state.steps[3:5]), "failed": False, "slow": True},
+        {"name": "Add it to the cart", "steps": [6, 7], "total_ms": sum(s.elapsed_ms for s in state.steps[5:7]), "failed": not success, "slow": False},
+        {"name": "Check the cart", "steps": [8, 9], "total_ms": sum(s.elapsed_ms for s in state.steps[7:9]), "failed": False, "slow": False},
     ]
 
     if success:
-        state.summary = f"Successfully completed the task on {domain}. All items added to cart within budget constraints."
+        state.summary = f"Completed the task on {domain}: the item was added to the cart and the cart checked."
         state.result_state = "pass"
     else:
-        state.summary = f"Agent got stuck trying to interact with the variant picker on {domain}. Could not select the correct size from the dropdown."
+        state.summary = f"Could not complete the task on {domain}: the item did not end up in the cart."
         state.result_state = "fail"
 
     state.success = success

@@ -142,7 +142,7 @@ The BrowserUse row was first measured before the browser-use adapter was fixed (
 
 ## The March 2026 results (`arena_logs/`)
 
-`arena_logs/` holds the 137 archived March logs (131 runs plus 6 Rindler context logs) and stays untouched. The headline result, vhlistings_bundle_promo, is Rindler 59/60 judge passes against BrowserUse 1/60 (`uv run python analyze_runs.py --march-headline` prints it), at $0.14 vs $0.71 mean cost and 70 s vs 307 s mean duration. Read it with these caveats, all checked in the code and history:
+`arena_logs/` holds the 137 archived March logs (131 runs plus 6 Rindler context logs), unchanged since extraction apart from the redactions listed under Provenance in the root README. The headline result, vhlistings_bundle_promo, is Rindler 59/60 judge passes against BrowserUse 1/60 (`uv run python analyze_runs.py --march-headline` prints it), at $0.14 vs $0.71 mean cost and 70 s vs 307 s mean duration. Read it with these caveats, all checked in the code and history:
 
 1. The Rindler arm drove a hand-mapped site (25 mapping versions tuned on this exact site and task); BrowserUse had no mapping. The VIP criterion is met by the mapping's own cleanup step.
 2. The task text both arms got contained Rindler tool vocabulary ("Start a session", "call view_cart", "remove_from_cart"). It has since been removed from the scenarios.

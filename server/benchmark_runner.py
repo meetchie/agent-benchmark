@@ -663,7 +663,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.status = "analyzing"
 
         # Pass result_state hint so judge knows whether agent timed out
-        rs_hint = "too_slow" if timed_out else "unknown"
+        rs_hint = "too_slow" if timed_out else "completed"
         judgment = await _judge(state, rs_hint)
 
         state.success = judgment["success"]

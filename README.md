@@ -5,7 +5,7 @@ A benchmark that puts a **normal browser agent** and a **site-mapped agent** on 
 - The normal agent is [browser-use](https://github.com/browser-use/browser-use): it looks at a page (a screenshot and the element list) and decides what to click, one step at a time.
 - The other is **Rindler**, an agent that drives a site through a hand-written *site mapping*. A mapping lists the site's screens and actions (`search_products`, `add_to_cart`, `checkout`, ...) with the selectors, fallbacks and popup handling needed to run each one. Every action becomes a tool, so the model chooses between a few named tools instead of reading raw pages.
 
-It was built at Rindler in 2026 (see [Provenance](#provenance)). The Rindler servers behind it are retired, so this repository has been adapted to run on one machine with **one Anthropic API key**: no Rindler service, OpenAI key, Clerk account, Cloudflare or Browserbase is needed. A mapping is run in-process by `server/rindler_local/` with Playwright.
+It was built at Rindler from December 2025 to March 2026, with later changes to the web app up to August 2026 (see [Provenance](#provenance)). The Rindler servers behind it are retired, so this repository has been adapted to run on one machine with **one Anthropic API key**: no Rindler service, OpenAI key, Clerk account, Cloudflare or Browserbase is needed. A mapping is run in-process by `server/rindler_local/` with Playwright.
 
 ## What is in here
 
@@ -28,7 +28,7 @@ make setup               # uv sync, Playwright's Chromium, npm ci for web and vi
 make dev                 # backend on 127.0.0.1:8000, web UI on http://localhost:5180
 ```
 
-Open the URL `make dev` prints (`http://localhost:5180` and `http://127.0.0.1:5180` both work) and paste the address of a shop. [https://automationexercise.com](https://automationexercise.com) is a practice shop where a generated task can pass today (see [Live benchmark runs](#live-benchmark-runs)); on books.toscrape.com they usually fail (see [Limits](#limits)). No key yet? `make demo` starts the same UI with canned runs and tasks, so the whole flow works with no key, no browser and no cost. The UI says "Demo mode" on every screen after the landing page, so a canned run is never taken for a real one.
+Open the URL `make dev` prints (`http://localhost:5180` and `http://127.0.0.1:5180` both work) and paste the address of a shop. [https://automationexercise.com](https://automationexercise.com) is a practice shop where a generated task can pass today (see [Live benchmark runs](#live-benchmark-runs)); on books.toscrape.com they usually fail (see [Limits](#limits)). No key yet? `make demo` starts the same UI with canned runs and tasks, so the whole flow works with no key, no browser and no cost. A canned run plays the same generic steps (open the site, find the product, add it to the cart, check the cart) whichever task you pick. The UI says "Demo mode" on every screen after the landing page, so a canned run is never taken for a real one.
 
 `make` with no target lists everything:
 
@@ -37,7 +37,7 @@ Open the URL `make dev` prints (`http://localhost:5180` and `http://127.0.0.1:51
 | `make setup` | Installs the Python environment, Chromium and the npm packages, and the pre-commit check (see [Tests](#tests)). Run once. |
 | `make dev` | Backend and web UI together. Ctrl-C stops both. |
 | `make demo` | The same with `DEMO_MODE=true`: canned runs, no key. |
-| `make test` | Every test suite (offline, no key needed). A failing suite does not stop the others: all of them run, then the failed ones are listed and the exit status is non-zero. |
+| `make test` | Every test suite (offline, no key needed). A failing suite does not stop the others: all of them run, then the failed ones are listed and the exit status is non-zero. `make test SUITES="server hooks"` runs only those; a name that is not a suite is an error. |
 | `make arena AGENT=RINDLER SCENARIO=vhlistings_product_attribute_search` | One arena run. A real run that costs money, so `AGENT` and `SCENARIO` are both required (`make arena` alone prints its usage and exits 2). `make arena-list` shows the options, `make analyze` the results table, `make analyze-march` the March headline. |
 | `make compare TASK=add-hair-towel` | The prose CLI on one task, both arms. A real run that costs money. `make compare-tasks` and `make compare-tools` need no key. |
 | `make viewer` | Browse the archived March 2026 logs. |
@@ -156,7 +156,7 @@ make viewer      # http://localhost:5173 (http://127.0.0.1:5173 works too)
 
 ## The archived March 2026 result
 
-`server/arena_logs/` holds the 137 original logs (131 runs plus 6 Rindler context logs) and is never modified. The headline is one task, `vhlistings_bundle_promo` on the Shopify store vhlistings.com (add three items to the cart, apply the promo code `SPRING`, reach checkout, stop before payment; the judge also fails the run if a "VIP Membership" the site adds on its own is still in the order). 60 runs per arm, all on 2026-03-31, both arms on gpt-4o:
+`server/arena_logs/` holds the 137 original logs (131 runs plus 6 Rindler context logs). They are unchanged since extraction, apart from the redactions listed under [Provenance](#provenance). The headline is one task, `vhlistings_bundle_promo` on the Shopify store vhlistings.com (add three items to the cart, apply the promo code `SPRING`, reach checkout, stop before payment; the judge also fails the run if a "VIP Membership" the site adds on its own is still in the order). 60 runs per arm, all on 2026-03-31, both arms on gpt-4o:
 
 | | Rindler | BrowserUse |
 |---|---|---|
@@ -166,7 +166,7 @@ make viewer      # http://localhost:5173 (http://127.0.0.1:5173 works too)
 | mean tokens | 52,856 | 272,377 |
 | mean steps | 14.1 | 28.5 |
 
-The costs are token counts priced at gpt-4o list rates ($2.50 and $10 per million input and output tokens), not billed amounts. Recomputed from the logs: Rindler $8.20 in total, BrowserUse $42.78. The viewer's results page shows the same figures. `make analyze-march` prints exactly the headline set (the 60 BrowserUse logs and the last 60 Rindler ones, as `59/60 (98.3%)` against `1/60 (1.7%)`). Plain `make analyze` counts all 66 Rindler `vhlistings_bundle_promo` logs, 65 of them passes, because it does not drop the 6 earlier runs; it also shows new arena runs, grouped by scenario, arm and agent model so they never mix with March.
+The costs are token counts priced at gpt-4o list rates ($2.50 and $10 per million input and output tokens), not billed amounts. Recomputed from the logs: Rindler $8.20 in total, BrowserUse $42.78. The viewer's results page shows the same figures. `make analyze-march` prints exactly the headline set (the 60 BrowserUse logs and the last 60 Rindler ones, as `59/60 (98.3%)` against `1/60 (1.7%)`), and its header gives the first and last log time of that set (2026-03-31 00:28:27 to 06:10:32). Plain `make analyze` counts all 66 Rindler `vhlistings_bundle_promo` logs, 65 of them passes, because it does not drop the 6 earlier runs; it also shows new arena runs, grouped by scenario, arm and agent model so they never mix with March.
 
 **Read it with every one of these caveats.** It is evidence that a hand-mapped site makes this task easy for an agent, not a fair contest between two agents.
 
@@ -235,22 +235,23 @@ Restart `make dev` after changing them. In Clerk mode the daily quota defaults t
 make test        # all of it, offline, no key needed
 ```
 
-`make test` runs every suite even when one fails, then lists the failed ones and exits non-zero. `make setup` installs a pre-commit check that refuses API keys and .env files (`scripts/hooks/pre-commit`; only `.env.example` may be committed). It is copied only inside a git checkout that has no pre-commit hook yet, and `core.hooksPath` is never touched. `make install-hooks` runs just that step.
+`make test` runs every suite even when one fails, then lists the failed ones and exits non-zero. `make test SUITES="server hooks"` runs just the named suites and refuses a name it does not know. `make setup` installs a pre-commit check that refuses API keys and .env files (`scripts/hooks/pre-commit`; only `.env.example` may be committed). It is copied only inside a git checkout that has no pre-commit hook yet, and `core.hooksPath` is never touched. `make install-hooks` runs just that step.
 
 | suite | command | what it covers |
 |---|---|---|
 | server | `make test-server` | The API, the LLM layer, the browser-use adapter, the local Rindler interpreter (some tests drive a real headless Chromium against a local fixture shop and are skipped without one), the arena, the scenarios and the mappings. |
 | cli | `make test-cli` | The CLI's arms, judge and results, the prose mapping against a local copy of the site. It must run apart from the server suite because the two have different pytest settings. |
 | web | `make test-web` | The UI's tests (vitest) and a production build. |
-| viewer | `make test-viewer` | The log parser's and the caveats panel's tests (vitest) and a production build. |
+| viewer | `make test-viewer` | The log parser's, the caveats panel's and the cost chart axis's tests (vitest) and a production build. |
 | hooks | `make test-hooks` | The pre-commit check and its installer, in throwaway git repositories. Needs only git. |
+| scripts | `make test-scripts` | The closing message of `make setup` (it says so when `ANTHROPIC_API_KEY` in `.env` is still blank, and never prints the key) and the `SUITES` check. Needs only make and sh. |
 
 No test calls a model API: the SDK base URLs point at a closed local port, so a stray call fails at once instead of costing money. The browser tests run against local fixture sites.
 
 ## Provenance
 
-This was built at Rindler in 2026 by Michelle Serrano (`meetchie`), Michael Serrano and Arthur De Los Santos. By commits before October 2026, the web app is mostly Michelle's (71 of 91), the server and the arena mostly Michael's (115 of 160), and the CLI Arthur's (35 of 36); `git shortlog -sn --before=2026-10-01 -- <folder>` has the exact numbers.
+This was built at Rindler from December 2025 to March 2026 (with later commits to the web app up to August 2026) by Michelle Serrano (`meetchie`), Michael Serrano and Arthur De Los Santos. By commits before October 2026, the web app is mostly Michelle's (71 of 91), the server and the arena mostly Michael's (115 of 160), and the CLI Arthur's (35 of 36); `git shortlog -sn --before=2026-10-01 -- <folder>` has the exact numbers.
 
-This repository keeps the original commit history, with its authors and dates (341 commits: 330 from December 2025 to March 2026 and 11 later ones to the web app, from April to August 2026, re-created with their original authors and dates). It was extracted from the company's monorepo in October 2026 and then adapted to run standalone: the hosted pieces were replaced with local ones (Anthropic models instead of OpenAI, a local file store instead of the Rindler database, an in-process mapping interpreter instead of the Rindler servers, a no-sign-in local mode, with Clerk optional). The commits from October 2026 are that adaptation.
+This repository keeps the original commit history, with its authors and dates (341 commits: 330 from December 2025 to March 2026 and 11 later ones to the web app, from April to August 2026, re-created with their original authors and dates). It was extracted from the company's monorepo in October 2026 and then adapted to run standalone: the hosted pieces were replaced with local ones (Anthropic models instead of OpenAI, a local file store instead of the Rindler database, an in-process mapping interpreter instead of the Rindler servers, a no-sign-in local mode, with Clerk optional). The commits from October 2026 are that adaptation. Commit messages were lightly normalized at extraction: pull-request merge subjects became plain branch merges and trailing pull-request numbers were dropped.
 
 Some values were redacted when the history was extracted: a street address that was used as task input, staff email addresses, and third-party account identifiers (for example the Browserbase account in session replay links).

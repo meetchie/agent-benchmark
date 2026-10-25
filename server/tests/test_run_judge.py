@@ -106,6 +106,32 @@ class TestJudgeRun:
         assert "RESULT STATE: too_slow" in prompt
         assert "Step #2 (3.0s): Search product" in prompt
 
+    def test_a_run_that_finished_on_its_own_is_not_called_unknown(self, monkeypatch):
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+
+        judge_run("Add item to cart", STEPS_3, result_state="completed")
+
+        prompt = calls[0]["messages"][0]["content"]
+        assert "unknown" not in prompt.lower()
+        assert "finished on its own within the time limit" in prompt
+        assert "Decide pass or fail from the task and the steps" in prompt
+        assert "RESULT STATE: completed" in prompt
+
+    def test_the_other_states_keep_their_wording(self, monkeypatch):
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+
+        for state in ("too_slow", "error", "unknown"):
+            judge_run("Add item to cart", STEPS_3, result_state=state)
+
+        for call, state in zip(calls, ("too_slow", "error", "unknown")):
+            prompt = call["messages"][0]["content"]
+            assert f"RESULT STATE: {state}\n" in prompt
+            assert (
+                '(If "too_slow", the agent hit the timeout and did not finish. '
+                'If "fail" or "pass", the agent ran to completion.)'
+            ) in prompt
+            assert "finished on its own" not in prompt
+
     def test_default_judge_model_is_sonnet_5_5(self, monkeypatch):
         calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
         judge_run("Add item to cart", STEPS_3)

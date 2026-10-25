@@ -1046,8 +1046,14 @@ def test_demo_mode_runs_the_whole_loop_without_any_key(no_keys, monkeypatch, ins
 
     assert body["status"] == "complete"
     assert body["result_state"] in ("pass", "fail")
-    assert len(body["steps"]) == 13
-    assert body["phases"]
+    assert len(body["steps"]) == 9
+    # Canned steps fit whichever task was picked: no address, filter or variant of their own.
+    descriptions = " ".join(step["description"] for step in body["steps"])
+    for task_specific in ("Times Square", "address", "price filter", "Size", "Color", "promotion"):
+        assert task_specific.lower() not in descriptions.lower()
+    assert "cart" in descriptions
+    # The phases cover every step exactly once.
+    assert sorted(n for phase in body["phases"] for n in phase["steps"]) == list(range(1, 10))
     assert body["agent_model"] == "claude-sonnet-5-5"
     assert body["cost_usd"] > 0
     assert not (tmp_path / "runs").exists()  # demo runs leave no files

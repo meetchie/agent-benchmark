@@ -212,6 +212,10 @@ def test_march_headline_prints_59_of_60_against_1_of_60(tmp_path, capsys):
     assert "$0.1366" in rows["RINDLER"] and "$0.7130" in rows["BROWSERUSE"]       # the README's $0.14 vs $0.71
     assert "Headline (judge pass): BROWSERUSE 1/60 (1.7%) vs RINDLER 59/60 (98.3%)" in out
     assert "120 runs" in out and "Warning" not in out
+    # The header gives the first and last log of the selected set, not the filter's bounds.
+    # (Rindler's last log is 03:24:05; the last BrowserUse one, 06:10:32, ends the set.)
+    assert "logs from 2026-03-31 00:28:27 to 06:10:32, 60 runs per agent expected" in out
+    assert "23:59:59" not in out
 
     # The set is exact: 60 per agent, the first Rindler log is 00:28:27 and the four earlier ones are out.
     runs = [analyze_runs.parse_log_file(p) for p in sorted(ARCHIVE.glob("arena_*.log"))]
@@ -231,6 +235,16 @@ def test_march_headline_prints_59_of_60_against_1_of_60(tmp_path, capsys):
                    judge_result={"verdict": "PASS", "reason": "ok"}, log_dir=str(tmp_path))
     analyze_runs.main(["--march-headline", "--log-dir", str(ARCHIVE), "--log-dir", str(tmp_path)])
     assert "59/60 (98.3%)" in capsys.readouterr().out
+
+
+def test_time_span_names_the_first_and_last_log():
+    from datetime import datetime
+    run = lambda *a: {"timestamp": datetime(*a) if a else None}
+    one_night = [run(2026, 3, 31, 3, 24, 5), run(2026, 3, 31, 0, 28, 27), run()]
+    assert analyze_runs.time_span(one_night) == "2026-03-31 00:28:27 to 03:24:05"
+    assert analyze_runs.time_span([run(2026, 3, 30, 23, 0, 0), run(2026, 3, 31, 1, 2, 3)]) == \
+        "2026-03-30 23:00:00 to 2026-03-31 01:02:03"
+    assert analyze_runs.time_span([run()]) == "no log times"
 
 
 def test_march_headline_warns_when_the_archive_is_short(tmp_path, capsys):

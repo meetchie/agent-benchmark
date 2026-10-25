@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { costAxis, formatCostTick } from "../lib/costAxis";
 import type { ParsedLog } from "../lib/parseLog";
 
 interface Props {
@@ -30,12 +31,14 @@ export function CostChart({ log }: Props) {
     };
   });
 
+  const { ticks, decimals } = costAxis(cumCost);
+
   return (
     <div className="panel cost-panel">
       <h3>Cost Accumulation</h3>
       <div className="chart-container">
         <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={data} margin={{ top: 10, right: 20, bottom: 0, left: 10 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 20, bottom: 8, left: 10 }}>
             <defs>
               <linearGradient id="costGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#3c49ad" stopOpacity={0.25} />
@@ -47,10 +50,11 @@ export function CostChart({ log }: Props) {
               dataKey="step"
               stroke="#e2e8f0"
               tick={{ fill: "#475569", fontSize: 11 }}
+              height={44}
               label={{
                 value: "Step",
                 position: "insideBottom",
-                offset: -2,
+                offset: 0,
                 fill: "#475569",
                 fontSize: 11,
               }}
@@ -58,7 +62,10 @@ export function CostChart({ log }: Props) {
             <YAxis
               stroke="#e2e8f0"
               tick={{ fill: "#475569", fontSize: 11 }}
-              tickFormatter={(v: number) => `$${v.toFixed(2)}`}
+              ticks={ticks}
+              domain={[0, ticks[ticks.length - 1]]}
+              width={72}
+              tickFormatter={(v: number) => formatCostTick(v, decimals)}
               label={{
                 value: "Cumulative Cost (USD)",
                 angle: -90,
@@ -66,6 +73,8 @@ export function CostChart({ log }: Props) {
                 offset: 10,
                 fill: "#475569",
                 fontSize: 11,
+                // Centre the text on the axis; by default it starts there and runs off the top.
+                style: { textAnchor: "middle" },
               }}
             />
             <Tooltip

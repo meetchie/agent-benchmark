@@ -10,26 +10,28 @@ import { ResultsOverlay } from "./ResultsOverlay";
 
 function LiveStats({
   url, taskLabel, steps, elapsedMs, finalMs,
-  finalInputTokens, finalOutputTokens, finalCostUsd, agentModel,
+  finalTotalTokens, finalCostUsd, agentModel,
 }: {
   url: string;
   taskLabel: string;
   steps: StepRecord[];
   elapsedMs: number;
   finalMs?: number;
-  finalInputTokens?: number;
-  finalOutputTokens?: number;
+  /** The backend's total_tokens: input (cache reads included) + cache writes + output. */
+  finalTotalTokens?: number;
   finalCostUsd?: number | null;
   agentModel?: string | null;
 }) {
   // Snap to real server time when done, otherwise show shared live counter
   const displayMs = finalMs ?? elapsedMs;
 
-  // Tokens are whatever the backend counted. Until the agent finishes there is
-  // no honest number (an estimate from the step count read about 7x low on
-  // current models), so the cell shows "—" just like Cost does.
-  const hasRealTokens = finalInputTokens !== undefined && finalOutputTokens !== undefined;
-  const totalTokens = hasRealTokens ? finalInputTokens! + finalOutputTokens! : null;
+  // Tokens are whatever the backend counted, the same total_tokens the results
+  // card shows. Adding input_tokens and output_tokens here would leave out the
+  // cache writes, which are billed. Until the agent finishes there is no honest
+  // number (an estimate from the step count read about 7x low on current
+  // models), so the cell shows "—" just like Cost does.
+  const totalTokens = finalTotalTokens ?? null;
+  const hasRealTokens = totalTokens !== null;
 
   const domain = (() => {
     try { return new URL(url).hostname.replace("www.", ""); }
@@ -120,8 +122,7 @@ export function RunningView({
   const showOverlayTrigger = isDone || isAnalyzing;
 
   const finalMs = summary?.total_ms ?? analyzingStats?.total_ms;
-  const finalInputTokens = summary?.input_tokens ?? analyzingStats?.input_tokens;
-  const finalOutputTokens = summary?.output_tokens ?? analyzingStats?.output_tokens;
+  const finalTotalTokens = summary?.total_tokens ?? analyzingStats?.total_tokens;
   const finalStats = summary ?? analyzingStats;
   const finalCostUsd = finalStats?.cost_usd;
   const agentModel = finalStats?.agent_model;
@@ -233,7 +234,7 @@ export function RunningView({
         <LiveStats
           url={url} taskLabel={taskLabel} steps={steps}
           elapsedMs={elapsedMs} finalMs={finalMs}
-          finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens}
+          finalTotalTokens={finalTotalTokens}
           finalCostUsd={finalCostUsd} agentModel={agentModel}
         />
       </div>
@@ -274,7 +275,7 @@ export function RunningView({
           )}
         </div>
         {/* Horizontal stats bar */}
-        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalInputTokens={finalInputTokens} finalOutputTokens={finalOutputTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} />
+        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalTotalTokens={finalTotalTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} />
         {/* Steps */}
         <div className="h-[200px] min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
           <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} />

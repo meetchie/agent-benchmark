@@ -141,6 +141,28 @@ describe("App in local mode (no Clerk key)", () => {
       expect(document.body.textContent).not.toMatch(/\$/);
       expect(screen.getAllByText("10,000").length).toBeGreaterThan(0);
     });
+
+    it("shows the same token total in the run view and on the results card when there are cache writes", async () => {
+      // Real run 21df242f: input 227,454 + cache writes 18,638 + output 3,053 = 249,145.
+      // The status reply has no cache-write field; only total_tokens includes them.
+      await runToCompletion({
+        ...COMPLETE,
+        input_tokens: 227454,
+        output_tokens: 3053,
+        total_tokens: 249145,
+        cost_usd: 0.9,
+        agent_model: "claude-sonnet-5-5",
+      });
+
+      const values = screen.getAllByText("Tokens").map((label) => label.nextElementSibling?.textContent);
+      // The results card comes last in the page and rounds to thousands; every cell
+      // of the run view before it shows the full number.
+      const card = values.pop();
+      expect(card).toBe("249.1k");
+      expect(values.length).toBeGreaterThan(0);
+      expect(values).toEqual(values.map(() => "249,145"));
+      expect(document.body.textContent).not.toMatch(/230,507/);
+    });
   });
 
   it("shows no run counter when the backend enforces no limit", async () => {

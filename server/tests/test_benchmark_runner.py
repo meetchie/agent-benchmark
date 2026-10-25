@@ -474,7 +474,11 @@ async def test_successful_run_end_to_end(fake_run, monkeypatch):
 
     # One judge call, on the judge model, and it saw the steps.
     assert len(calls) == 1
-    assert "Step #2" in calls[0]["messages"][0]["content"]
+    prompt = calls[0]["messages"][0]["content"]
+    assert "Step #2" in prompt
+    # A run that finished on its own is not described to the judge as "unknown".
+    assert "unknown" not in prompt.lower()
+    assert "RESULT STATE: completed" in prompt
 
 
 async def test_agent_is_built_from_the_llm_layer_and_the_shared_browser_profile(fake_run, monkeypatch):
@@ -576,6 +580,7 @@ async def test_refusal_mid_run_is_reported_as_an_error_not_a_failure(fake_run, m
     assert state.status == "complete"  # the steps taken are still judged and shown
     assert len(state.steps) == 3
     assert len(calls) == 1
+    assert "RESULT STATE: unknown" in calls[0]["messages"][0]["content"]  # an errored run keeps its wording
 
 
 async def test_a_refusal_the_agent_recovered_from_is_not_an_error(fake_run, monkeypatch):

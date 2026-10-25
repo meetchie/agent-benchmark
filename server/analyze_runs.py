@@ -276,6 +276,17 @@ def headline_summary(runs: list[dict]) -> list[str]:
     return ["Headline (judge pass): " + " vs ".join(passes)] + lines
 
 
+def time_span(runs: list[dict]) -> str:
+    """The first and last log time of these runs, as "2026-03-31 00:28:27 to 03:24:05" (the end
+    carries its date only when it is not the same day). Runs without a time are left out."""
+    times = [r["timestamp"] for r in runs if r.get("timestamp")]
+    if not times:
+        return "no log times"
+    first, last = min(times), max(times)
+    end = f"{last:%H:%M:%S}" if last.date() == first.date() else f"{last:%Y-%m-%d %H:%M:%S}"
+    return f"{first:%Y-%m-%d %H:%M:%S} to {end}"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze arena run logs")
     parser.add_argument("--agents", help="Comma-separated agent filter (e.g., RINDLER,BROWSERUSE)")
@@ -330,8 +341,7 @@ def main(argv=None):
 
     table = aggregate_runs(runs)
     if args.march_headline:
-        print(f"March 2026 headline: {MARCH_HEADLINE['scenario']}, logs from "
-              f"{MARCH_HEADLINE['since']:%Y-%m-%d %H:%M:%S} to {MARCH_HEADLINE['until']:%H:%M:%S}, "
+        print(f"March 2026 headline: {MARCH_HEADLINE['scenario']}, logs from {time_span(runs)}, "
               f"{MARCH_HEADLINE['runs_per_agent']} runs per agent expected\n")
     print(format_table(table))
     print(f"\n{table_notes(table)}")

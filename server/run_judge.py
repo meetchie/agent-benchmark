@@ -49,7 +49,7 @@ TASK THE AGENT WAS GIVEN:
 {goal}
 
 RESULT STATE: {result_state}
-(If "too_slow", the agent hit the timeout and did not finish. If "fail" or "pass", the agent ran to completion.)
+{result_state_note}
 
 STEPS THE AGENT TOOK (with timing):
 {steps_text}
@@ -93,6 +93,17 @@ FAILED FLAG — only on actual mistakes:
 - At most one phase should have failed=true.
 
 Respond with ONLY the JSON object. No markdown, no explanation."""
+
+# What the judge is told about the run's state. A run that ended on its own has no
+# verdict yet (the judge gives it), so it is described as finished, not as unknown.
+_STATE_NOTE = (
+    '(If "too_slow", the agent hit the timeout and did not finish. '
+    'If "fail" or "pass", the agent ran to completion.)'
+)
+_COMPLETED_NOTE = (
+    "(The agent finished on its own within the time limit. "
+    "Decide pass or fail from the task and the steps.)"
+)
 
 
 def _format_steps_for_prompt(steps: list[dict]) -> str:
@@ -157,7 +168,8 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
     Args:
         goal: The task goal the agent was given.
         steps: List of step dicts with keys: step, description, elapsed_ms.
-        result_state: One of "pass", "fail", "too_slow", "error", or "unknown".
+        result_state: One of "completed" (the agent finished on its own and the judge
+            decides pass or fail), "pass", "fail", "too_slow", "error", or "unknown".
             Tells the judge whether the agent timed out so it can avoid
             marking phases as failed on timeout runs.
 
@@ -174,7 +186,12 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
         }
 
     steps_text = _format_steps_for_prompt(steps)
-    prompt = JUDGE_PROMPT.format(goal=goal, steps_text=steps_text, result_state=result_state)
+    prompt = JUDGE_PROMPT.format(
+        goal=goal,
+        steps_text=steps_text,
+        result_state=result_state,
+        result_state_note=_COMPLETED_NOTE if result_state == "completed" else _STATE_NOTE,
+    )
 
     try:
         data = llm.complete_json(
