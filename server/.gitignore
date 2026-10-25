@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 .env
 .quota_data.json
+# Saved benchmark runs (RUNS_DIR default), one JSON file per run
+/runs/

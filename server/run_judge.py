@@ -1,16 +1,47 @@
 # run_judge.py
-"""GPT-4o judge for benchmark runs.
+"""LLM judge for benchmark runs.
 
 Analyzes agent steps and produces:
 - pass/fail judgment
 - human-readable summary
 - phase groupings with failed/slow flags
-"""
-import json
-import logging
-import re
 
-from openai import OpenAI
+The judge model is ``BENCHMARK_JUDGE_MODEL`` (see ``llm.py``). It sees only the
+step text and timings, never screenshots.
+"""
+import logging
+
+import llm
+
+logger = logging.getLogger(__name__)
+
+# The shape the judge must answer in. With Anthropic it is enforced through
+# structured outputs, so the reply always parses; validate_phases still checks that
+# the phases cover the real steps.
+JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "success": {"type": "boolean"},
+        "summary": {"type": "string"},
+        "phases": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "steps": {"type": "array", "items": {"type": "integer"}},
+                    "failed": {"type": "boolean"},
+                    "slow": {"type": "boolean"},
+                },
+                "required": ["name", "steps", "failed", "slow"],
+            },
+        },
+    },
+    "required": ["success", "summary", "phases"],
+}
+
+# A judge call is a few hundred output tokens; this is generous headroom.
+_JUDGE_MAX_TOKENS = 8000
 
 JUDGE_PROMPT = """You are a benchmark judge analyzing an AI browser agent's performance on a task.
 
@@ -75,7 +106,7 @@ def _format_steps_for_prompt(steps: list[dict]) -> str:
 
 
 def validate_phases(phases: list[dict], steps: list[dict]) -> list[dict] | None:
-    """Validate GPT-4o's phase groupings against actual steps.
+    """Validate the judge's phase groupings against actual steps.
 
     Returns enriched phases (with total_ms computed) if valid, None if invalid.
     Validation rules:
@@ -121,7 +152,7 @@ def validate_phases(phases: list[dict], steps: list[dict]) -> list[dict] | None:
 
 
 def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> dict:
-    """Call GPT-4o to judge a benchmark run.
+    """Ask the judge model to judge a benchmark run.
 
     Args:
         goal: The task goal the agent was given.
@@ -132,7 +163,8 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
 
     Returns:
         Dict with keys: success, summary, phases.
-        On API failure, returns a safe fallback with empty phases.
+        On any model failure (API error, refusal, truncated or unparseable reply)
+        returns a safe fallback with success False and empty phases.
     """
     if not steps:
         return {
@@ -145,24 +177,20 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
     prompt = JUDGE_PROMPT.format(goal=goal, steps_text=steps_text, result_state=result_state)
 
     try:
-        client = OpenAI()
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
+        data = llm.complete_json(
+            None, prompt, JUDGE_SCHEMA, role="judge", max_tokens=_JUDGE_MAX_TOKENS
         )
-
-        raw = response.choices[0].message.content
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-        raw = re.sub(r"\s*```$", "", raw.strip())
-        data = json.loads(raw)
 
         success = bool(data.get("success", False))
         summary = str(data.get("summary", ""))[:500]
 
         raw_phases = data.get("phases", [])
         validated = validate_phases(raw_phases, steps)
-        print(f"JUDGE OK: success={success}, phases={len(validated or [])}, summary={summary[:80]}")
+        logger.info(
+            "judge ok: model=%s success=%s phases=%d cost=%s summary=%s",
+            getattr(data, "model", "?"), success, len(validated or []),
+            _fmt_cost(getattr(data, "cost_usd", None)), summary[:80],
+        )
 
         return {
             "success": success,
@@ -170,11 +198,25 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
             "phases": validated or [],
         }
 
+    except llm.LLMError as e:
+        logger.warning("judge failed (%s): %s", e.kind, e)
+        if e.kind == "refusal":
+            summary = (
+                "Could not analyze the run: the judge model declined to review it. "
+                "The agent may have completed the task, but results are unavailable."
+            )
+        else:
+            summary = "Could not analyze the run. The agent may have completed the task, but results are unavailable."
+        return {"success": False, "summary": summary, "phases": []}
+
     except Exception as e:
-        import traceback; traceback.print_exc()
-        print(f"JUDGE FAILED: {type(e).__name__}: {e}")
+        logger.exception("judge failed: %s: %s", type(e).__name__, e)
         return {
             "success": False,
             "summary": "Could not analyze the run. The agent may have completed the task, but results are unavailable.",
             "phases": [],
         }
+
+
+def _fmt_cost(cost: float | None) -> str:
+    return "n/a" if cost is None else f"${cost:.4f}"

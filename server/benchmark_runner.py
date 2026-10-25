@@ -3,7 +3,15 @@ Benchmark Runner - Runs BrowserUse agent with live step tracking and screenshots
 
 Manages in-memory run state, captures screenshots after each agent action,
 and provides step descriptions for the benchmark UI.
+
+Configuration (environment, see ``llm.py`` and ``browser_env.py`` for the rest):
+  BENCHMARK_TIMEOUT_S         hard limit for the agent, in seconds (default 180)
+  BENCHMARK_AGENT_MODEL       model the agent runs on (default claude-sonnet-5-5)
+  BENCHMARK_HEADLESS          run Chromium headless (default true)
+  BENCHMARK_BROWSER_PROVIDER  "local" (default) or "browserbase"
 """
+
+import runtime_env  # noqa: F401  (first: loads .env and turns browser-use telemetry off)
 
 import asyncio
 import base64
@@ -11,13 +19,31 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 import logging
+import math
 import os
 
-from dotenv import load_dotenv
+import llm
 
-# Load env (OPENAI_API_KEY needed for LLM)
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
+DEFAULT_TIMEOUT_S = 180.0
+# The judge is one short model call; a hung connection must not leave the run "analyzing".
+_JUDGE_TIMEOUT_S = 120.0
+
+
+def get_agent_timeout() -> float:
+    """BENCHMARK_TIMEOUT_S: the agent's hard time limit in seconds (default 180).
+
+    Raises ValueError for anything that is not a positive number.
+    """
+    raw = os.getenv("BENCHMARK_TIMEOUT_S", "").strip()
+    if not raw:
+        return DEFAULT_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        value = float("nan")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"BENCHMARK_TIMEOUT_S={raw!r} must be a positive number of seconds")
+    return value
 
 
 _VALID_PROVIDERS = {"local", "browserbase"}
@@ -27,13 +53,11 @@ def _get_browser_provider() -> str:
     """Return the configured browser provider ('local' or 'browserbase').
 
     Reads BENCHMARK_BROWSER_PROVIDER env var. Defaults to 'local'.
-    Note: This is separate from the Go MCP server's BROWSER_PROVIDER env var
-    which controls the worker fleet's browser (local/cdp/browserbase).
     """
     provider = os.getenv("BENCHMARK_BROWSER_PROVIDER", "local").lower().strip()
     if provider not in _VALID_PROVIDERS:
         logging.warning(
-            "Unknown BROWSER_PROVIDER=%r, falling back to 'local'. "
+            "Unknown BENCHMARK_BROWSER_PROVIDER=%r, falling back to 'local'. "
             "Valid options: %s", provider, ", ".join(sorted(_VALID_PROVIDERS))
         )
         return "local"
@@ -49,11 +73,11 @@ def _validate_browser_config() -> None:
     if provider == "browserbase":
         if not os.getenv("BROWSERBASE_API_KEY"):
             raise ValueError(
-                "BROWSERBASE_API_KEY is required when BROWSER_PROVIDER=browserbase"
+                "BROWSERBASE_API_KEY is required when BENCHMARK_BROWSER_PROVIDER=browserbase"
             )
         if not os.getenv("BROWSERBASE_PROJECT_ID"):
             raise ValueError(
-                "BROWSERBASE_PROJECT_ID is required when BROWSER_PROVIDER=browserbase"
+                "BROWSERBASE_PROJECT_ID is required when BENCHMARK_BROWSER_PROVIDER=browserbase"
             )
 
 
@@ -91,11 +115,36 @@ class RunState:
     total_tokens: int = 0
     phases: list[dict] = field(default_factory=list)
     goal: str = ""  # Stored so the judge can access it
-    persisted_run_id: str | None = None  # ID from Go server, None if persistence failed
-    agent_model: str = "gpt-4o"  # Model used by the agent, for cost computation
+    persisted_run_id: str | None = None  # Id of the saved run file, None if it could not be written
+    agent_model: str = field(default_factory=lambda: _default_agent_model())  # Model the agent runs on
+    cost_usd: float | None = None  # Agent tokens at agent_model's rates; None when unknown
+    cache_read_tokens: int = 0  # Part of input_tokens that came from the prompt cache
+    cache_write_tokens: int = 0  # Tokens written to the prompt cache (billed on top of input_tokens)
 
-    def to_response(self) -> dict:
-        """Serialize for API response. Only latest step includes screenshot_b64."""
+    def record_usage(self, summary) -> None:
+        """Take the agent's token usage from a browser-use UsageSummary.
+
+        ``input_tokens`` keeps browser-use's meaning (all prompt tokens, cache reads
+        included). ``cost_usd`` prices the cached part at the cache rates and is None
+        when ``agent_model`` has no known price or there is no usage to price.
+        """
+        if summary is None:
+            return
+        usage = llm.usage_from_browser_use(summary)
+        self.input_tokens = getattr(summary, "total_prompt_tokens", 0) or 0
+        self.output_tokens = getattr(summary, "total_completion_tokens", 0) or 0
+        self.total_tokens = getattr(summary, "total_tokens", 0) or 0
+        self.cache_read_tokens = usage.cache_read_input_tokens
+        self.cache_write_tokens = usage.cache_creation_input_tokens
+        self.cost_usd = usage.cost_usd(self.agent_model)
+
+    def to_dict(self) -> dict:
+        """Serialize for the status API. Only the latest step includes screenshot_b64.
+
+        Once the agent has finished (``analyzing`` and ``complete``) the payload carries
+        the token counts plus ``cost_usd`` (US dollars for the agent's tokens at
+        ``agent_model``'s rates, null when unknown) and ``agent_model`` (model id).
+        """
         steps_data = []
         for i, step in enumerate(self.steps):
             is_latest = i == len(self.steps) - 1
@@ -111,6 +160,8 @@ class RunState:
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "total_tokens": self.total_tokens,
+                "cost_usd": self.cost_usd,
+                "agent_model": self.agent_model,
             }
         elif self.status == "complete":
             return {
@@ -123,6 +174,8 @@ class RunState:
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "total_tokens": self.total_tokens,
+                "cost_usd": self.cost_usd,
+                "agent_model": self.agent_model,
                 "phases": self.phases,
             }
         else:
@@ -131,6 +184,17 @@ class RunState:
                 "message": self.message,
                 "steps": steps_data,
             }
+
+    # Older name for to_dict(), kept for callers that still use it.
+    to_response = to_dict
+
+
+def _default_agent_model() -> str:
+    """The agent model from the environment (BENCHMARK_AGENT_MODEL or the provider default)."""
+    try:
+        return llm.model_for("agent")
+    except llm.LLMError:  # bad LLM_PROVIDER; startup validation reports it properly
+        return ""
 
 
 def _format_action(agent) -> str:
@@ -193,9 +257,10 @@ def _format_action(agent) -> str:
 
 
 async def _take_screenshot(agent) -> Optional[str]:
-    """Capture a JPEG screenshot from the current browser page.
+    """Capture a JPEG screenshot (quality 80) of the current page.
 
-    Caps width at 1280px, JPEG quality 80 — ~50-150 KB per screenshot.
+    The size is the browser viewport (1280x720 unless the run asked for another),
+    about 50-150 KB per screenshot.
     """
     try:
         # browser_use ≥0.11 uses browser_session; older versions used browser_context
@@ -207,17 +272,141 @@ async def _take_screenshot(agent) -> Optional[str]:
         return None
 
 
+def _one_line(text: object, limit: int = 300) -> str:
+    return " ".join(str(text).split())[:limit]
+
+
+def _agent_failure(history) -> tuple[str, bool] | None:
+    """Why a finished agent run counts as an error rather than a pass/fail, if it does.
+
+    browser-use swallows model and browser errors as failed steps, so a run that never
+    got going (bad API key, model unavailable) or one the model refused part-way comes
+    back as a normal history. Returns ``(message, judge)`` for the two cases that are
+    reported as errors, or None. ``judge`` says whether the steps taken so far are
+    worth sending to the judge:
+
+    * the model declined to continue (``stop_reason=refusal``) and the task is not
+      done: the steps before the refusal are real, so they are judged;
+    * every step failed (for example an invalid API key): there is nothing to judge,
+      and the first error is shown.
+    """
+    try:
+        errors = list(history.errors())
+        done = history.is_done()
+    except Exception:
+        return None
+    failed = [e for e in errors if e]
+    if not failed or done:
+        return None
+    if any("stop_reason=refusal" in e for e in failed):
+        return "The agent model declined to continue this task (safety refusal).", True
+    if len(failed) == len(errors):
+        return "The agent could not complete a single step: " + _one_line(failed[0]), False
+    return None
+
+
+async def _judge(state: "RunState", result_state_hint: str) -> dict:
+    """Run the judge on the steps taken so far, off the event loop and with a time limit."""
+    from run_judge import judge_run
+
+    steps_for_judge = [
+        {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+        for s in state.steps
+    ]
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(judge_run, state.goal, steps_for_judge, result_state_hint),
+            timeout=_JUDGE_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        logging.warning("Judge timed out after %ds", _JUDGE_TIMEOUT_S)
+        return {
+            "success": False,
+            "summary": "Could not analyze the run: the judge took too long. The agent may have completed the task, but results are unavailable.",
+            "phases": [],
+        }
+
+
+async def _finish_with_error(
+    state: "RunState", overall_start: datetime, message: str, judge: bool = True
+) -> None:
+    """End the run as an error. If steps exist the judge still groups them into phases."""
+    state.message = message
+    if judge and state.steps:
+        try:
+            state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+            state.status = "analyzing"
+            judgment = await _judge(state, "unknown")
+            state.success = False
+            state.summary = judgment["summary"]
+            state.phases = judgment["phases"]
+            state.result_state = "error"
+            state.status = "complete"
+            return
+        except Exception:
+            logging.exception("Judging the failed run failed")
+    state.status = "error"
+    state.result_state = "error"
+
+
+def _error_message(exc: BaseException) -> str:
+    """What to tell the user about an exception that ended the run.
+
+    Our own configuration errors carry a message written for the user (for example
+    where to install Chromium); anything else stays generic and goes to the log.
+    """
+    from browser_env import ChromiumNotFoundError
+
+    if isinstance(exc, (llm.LLMError, ChromiumNotFoundError, ValueError)):
+        return f"The run encountered an error: {_one_line(exc)}"
+    return "The run encountered an error."
+
+
+async def _persist_result(state: "RunState") -> None:
+    """Write the run's final state to its run file (see persistence.py)."""
+    if not state.persisted_run_id:
+        return
+    from persistence import persist_steps, persist_run_completion, persist_phases
+
+    try:
+        await persist_steps(state.persisted_run_id, [
+            {"step_number": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+            for s in state.steps
+        ])
+        await persist_run_completion(
+            run_id=state.persisted_run_id,
+            status=state.status,
+            result_state=state.result_state,
+            success=state.success,
+            total_ms=state.total_ms,
+            input_tokens=state.input_tokens,
+            output_tokens=state.output_tokens,
+            total_tokens=state.total_tokens,
+            estimated_cost_usd=state.cost_usd,
+            summary=state.summary,
+            cache_read_tokens=state.cache_read_tokens,
+            cache_write_tokens=state.cache_write_tokens,
+            message=state.message,
+        )
+        await persist_phases(state.persisted_run_id, state.phases)
+    except Exception:
+        logging.warning("Could not persist run %s", state.run_id, exc_info=True)
+
+
 async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | None = None) -> None:
     """
     Run a BrowserUse agent for the benchmark and update state with each step.
 
-    Uses a local Playwright browser (no Browserbase required).
-    Requires OPENAI_API_KEY in environment.
+    The agent runs on ``llm.agent_llm()`` (BENCHMARK_AGENT_MODEL, claude-sonnet-5-5 by
+    default) in a throwaway local headless Chromium, or in a Browserbase session when
+    BENCHMARK_BROWSER_PROVIDER=browserbase. It is stopped after BENCHMARK_TIMEOUT_S
+    seconds (default 180); the run is then reported as "too_slow". The judge always
+    runs on whatever steps exist, and the result is written to the run file.
     """
     # Deferred import: keeps the server startable even if browser_use is not installed,
     # and avoids import-time side effects (Playwright browser launch).
     from browser_use import Agent
-    from browser_use.llm.models import get_llm_by_name
+    from browser_env import agent_files_dir, browser_profile, cleanup_profile
 
     overall_start = datetime.now()
     step_start_time: datetime = overall_start
@@ -250,13 +439,14 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             )
         )
 
-    _AGENT_TIMEOUT = 180  # 3 minutes
-
     timed_out = False
     bb = None        # Browserbase client (for session cleanup in finally)
     bb_session = None
+    profile = None   # Browser profile (its temp dirs are removed in finally)
     try:
-        llm = get_llm_by_name("openai_gpt-4o")
+        agent_timeout = get_agent_timeout()
+        agent_chat = llm.agent_llm(state.agent_model or None)
+        logging.info("Run %s: agent=%s timeout=%ss url=%s", state.run_id, state.agent_model, agent_timeout, url)
 
         # Prepend the target URL to the goal so the agent navigates there first
         full_goal = f"Go to {url}\n\n{goal}"
@@ -296,73 +486,63 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             from browser_use.browser.profile import BrowserProfile
             api_key = os.getenv("BROWSERBASE_API_KEY")
             cdp_url = f"wss://connect.browserbase.com?apiKey={api_key}&sessionId={bb_session.id}"
-            browser_profile = BrowserProfile(cdp_url=cdp_url)
-            agent = Agent(
-                task=full_goal,
-                llm=llm,
-                browser_profile=browser_profile,
-            )
+            profile = BrowserProfile(cdp_url=cdp_url)
         else:
-            # Local Playwright (requires a display — headed mode)
-            from browser_use.browser.profile import BrowserProfile
+            # Local Chromium: headless unless BENCHMARK_HEADLESS says otherwise, clean
+            # throwaway profile, macOS keychain prompts disabled (see browser_env.py).
+            profile = browser_profile(viewport=viewport)
 
-            browser_profile = BrowserProfile(
-                user_data_dir=None,
-                headless=False,
-                keep_alive=False,
-                permissions=[],
-                viewport=viewport or {"width": 1280, "height": 720},
-            )
-            agent = Agent(
-                task=full_goal,
-                llm=llm,
-                browser_profile=browser_profile,
-            )
+        # use_judge=False: browser-use's own end-of-run judge would be a second,
+        # unrequested model call; the benchmark has its own judge (run_judge.py).
+        # enable_signal_handler=False: this runs inside a server, whose Ctrl-C is not
+        # the agent's to pause on.
+        agent = Agent(
+            task=full_goal,
+            llm=agent_chat,
+            browser_profile=profile,
+            file_system_path=agent_files_dir(profile),
+            use_judge=False,
+            enable_signal_handler=False,
+        )
 
+        history = None
         try:
             history = await asyncio.wait_for(
                 agent.run(
                     on_step_start=on_step_start,
                     on_step_end=on_step_end,
                 ),
-                timeout=_AGENT_TIMEOUT,
+                timeout=agent_timeout,
             )
 
             # Extract token usage from completed run
             try:
-                usage = history.usage
-                state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
-                state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
-                state.total_tokens = getattr(usage, 'total_tokens', 0)
+                state.record_usage(history.usage)
             except Exception as e:
                 logging.debug(f"Token usage extraction failed: {e}")
 
         except asyncio.TimeoutError:
             timed_out = True
-            logging.info("Agent timed out after %ds", _AGENT_TIMEOUT)
+            logging.info("Agent timed out after %ss", agent_timeout)
             # Extract token usage from the agent's token cost service
             try:
-                usage = await agent.token_cost_service.get_usage_summary()
-                state.input_tokens = getattr(usage, 'total_prompt_tokens', 0)
-                state.output_tokens = getattr(usage, 'total_completion_tokens', 0)
-                state.total_tokens = getattr(usage, 'total_tokens', 0)
+                state.record_usage(await agent.token_cost_service.get_usage_summary())
             except Exception as e:
                 logging.debug(f"Token usage extraction on timeout failed: {e}")
 
         # --- Agent finished or timed out — always run the judge ---
-        total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
-        state.total_ms = total_ms
+        state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+
+        failure = None if timed_out else _agent_failure(history)
+        if failure:
+            await _finish_with_error(state, overall_start, failure[0], judge=failure[1])
+            return
+
         state.status = "analyzing"
 
-        # Call GPT-4o judge on whatever steps we have
-        from run_judge import judge_run
-        steps_for_judge = [
-            {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
-            for s in state.steps
-        ]
         # Pass result_state hint so judge knows whether agent timed out
         rs_hint = "too_slow" if timed_out else "unknown"
-        judgment = judge_run(state.goal, steps_for_judge, result_state=rs_hint)
+        judgment = await _judge(state, rs_hint)
 
         state.success = judgment["success"]
         state.summary = judgment["summary"]
@@ -376,31 +556,16 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
 
         state.status = "complete"
 
-    except Exception as e:
-        logging.error("Benchmark run failed: %s: %s", type(e).__name__, e)
-        # Still try to run judge if we have steps
-        if state.steps:
-            try:
-                state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
-                state.status = "analyzing"
-                from run_judge import judge_run
-                steps_for_judge = [
-                    {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
-                    for s in state.steps
-                ]
-                judgment = judge_run(state.goal, steps_for_judge)
-                state.success = False
-                state.summary = judgment["summary"]
-                state.phases = judgment["phases"]
-                state.result_state = "error"
-                state.message = "The run encountered an error."
-                state.status = "complete"
-                return
-            except Exception:
-                pass
+    except asyncio.CancelledError:
+        # POST /benchmark/cancel/<id>: the run ends here, whatever phase it was in.
         state.status = "error"
-        state.message = "The run encountered an error."
+        state.message = state.message or "Run cancelled by user."
         state.result_state = "error"
+        raise
+    except Exception as e:
+        logging.error("Benchmark run failed: %s: %s", type(e).__name__, e, exc_info=True)
+        # Still try to run judge if we have steps
+        await _finish_with_error(state, overall_start, _error_message(e))
     finally:
         # Release Browserbase session to free quota
         if bb and bb_session:
@@ -412,36 +577,13 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 )
             except Exception as e:
                 logging.debug("Browserbase session release failed: %s", e)
+        # Remove the temp profile and agent-files dirs this run created
+        if profile is not None:
+            cleanup_profile(profile)
 
-    # Persist results to Go server.
-    from persistence import persist_steps, persist_run_completion, persist_phases
-    from constants import COST_RATES
-
-    if state.persisted_run_id:
-        # Persist all steps (batch).
-        await persist_steps(state.persisted_run_id, [
-            {"step_number": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
-            for s in state.steps
-        ])
-
-        # Compute cost.
-        model = getattr(state, 'agent_model', 'gpt-4o')
-        rates = COST_RATES.get(model, {"input": 2.50, "output": 10.00})
-        cost = (state.input_tokens * rates["input"] + state.output_tokens * rates["output"]) / 1_000_000
-
-        # Persist run completion.
-        await persist_run_completion(
-            run_id=state.persisted_run_id,
-            status=state.status,
-            result_state=state.result_state,
-            success=state.success,
-            total_ms=state.total_ms,
-            input_tokens=state.input_tokens,
-            output_tokens=state.output_tokens,
-            total_tokens=state.total_tokens,
-            estimated_cost_usd=cost,
-            summary=state.summary,
+        logging.info(
+            "Run %s finished: status=%s result=%s steps=%d tokens=%d cost=%s",
+            state.run_id, state.status, state.result_state, len(state.steps),
+            state.total_tokens, "n/a" if state.cost_usd is None else f"${state.cost_usd:.4f}",
         )
-
-        # Persist phases.
-        await persist_phases(state.persisted_run_id, state.phases)
+        await _persist_result(state)

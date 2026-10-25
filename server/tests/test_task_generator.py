@@ -3,14 +3,19 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import anthropic
+import httpx
 import pytest
 
+import llm
 from task_generator import (
+    TASKS_SCHEMA,
     extract_metadata,
     fetch_and_generate,
     generate_tasks,
     validate_url,
 )
+from tests.fakes import install_fake_anthropic, refusal_response, text_response
 
 # ---------------------------------------------------------------------------
 # extract_metadata
@@ -147,39 +152,27 @@ def test_validate_url_rejects_empty():
 # ---------------------------------------------------------------------------
 
 
-def _make_openai_response(tasks: list[dict]) -> MagicMock:
-    """Build a minimal mock of an OpenAI ChatCompletion response."""
-    content = json.dumps({"tasks": tasks})
-    message = MagicMock()
-    message.content = content
-    choice = MagicMock()
-    choice.message = message
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+METADATA = {
+    "title": "Acme Store",
+    "description": "Shop online.",
+    "visible_text": "Welcome to Acme.",
+    "url": "https://acme.com",
+}
 
 
-def test_generate_tasks_returns_three_tasks():
+def _tasks_payload(tasks: list[dict]) -> dict:
+    return {"tasks": tasks}
+
+
+def test_generate_tasks_returns_three_tasks(monkeypatch):
     raw_tasks = [
         {"label": "Task A", "goal": "Step 1\nStep 2\nVerify done."},
         {"label": "Task B", "goal": "Step 1\nStep 2\nVerify done."},
         {"label": "Task C", "goal": "Step 1\nStep 2\nVerify done."},
     ]
-    mock_response = _make_openai_response(raw_tasks)
+    install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
 
-    metadata = {
-        "title": "Acme Store",
-        "description": "Shop online.",
-        "visible_text": "Welcome to Acme.",
-        "url": "https://acme.com",
-    }
-
-    with patch("task_generator.OpenAI") as MockOpenAI:
-        mock_client = MagicMock()
-        MockOpenAI.return_value = mock_client
-        mock_client.chat.completions.create.return_value = mock_response
-
-        tasks = generate_tasks(metadata)
+    tasks = generate_tasks(METADATA)
 
     assert len(tasks) == 3
     for i, task in enumerate(tasks):
@@ -191,32 +184,20 @@ def test_generate_tasks_returns_three_tasks():
     assert tasks[2]["label"] == "Task C"
 
 
-def test_generate_tasks_truncates_to_three():
+def test_generate_tasks_truncates_to_three(monkeypatch):
     """If the model returns more than 3 tasks, only the first 3 are kept."""
     raw_tasks = [
         {"label": f"Task {i}", "goal": f"Do thing {i}."}
         for i in range(5)
     ]
-    mock_response = _make_openai_response(raw_tasks)
+    install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
 
-    metadata = {
-        "title": "Site Shop",
-        "description": "Online store",
-        "visible_text": "Buy products here",
-        "url": "https://site.com",
-    }
-
-    with patch("task_generator.OpenAI") as MockOpenAI:
-        mock_client = MagicMock()
-        MockOpenAI.return_value = mock_client
-        mock_client.chat.completions.create.return_value = mock_response
-
-        tasks = generate_tasks(metadata)
+    tasks = generate_tasks(METADATA)
 
     assert len(tasks) == 3
 
 
-def test_generate_tasks_strips_markdown_fences():
+def test_generate_tasks_strips_markdown_fences(monkeypatch):
     """generate_tasks should handle responses wrapped in markdown code fences."""
     raw_tasks = [
         {"label": "Task A", "goal": "Do A."},
@@ -224,30 +205,91 @@ def test_generate_tasks_strips_markdown_fences():
         {"label": "Task C", "goal": "Do C."},
     ]
     fenced_content = "```json\n" + json.dumps({"tasks": raw_tasks}) + "\n```"
+    install_fake_anthropic(monkeypatch, text_response(fenced_content))
 
-    message = MagicMock()
-    message.content = fenced_content
-    choice = MagicMock()
-    choice.message = message
-    mock_response = MagicMock()
-    mock_response.choices = [choice]
-
-    metadata = {
-        "title": "Site Shop",
-        "description": "Online store",
-        "visible_text": "Buy products here",
-        "url": "https://site.com",
-    }
-
-    with patch("task_generator.OpenAI") as MockOpenAI:
-        mock_client = MagicMock()
-        MockOpenAI.return_value = mock_client
-        mock_client.chat.completions.create.return_value = mock_response
-
-        tasks = generate_tasks(metadata)
+    tasks = generate_tasks(METADATA)
 
     assert len(tasks) == 3
     assert tasks[0]["label"] == "Task A"
+
+
+def test_generate_tasks_asks_for_structured_output_from_the_taskgen_model(monkeypatch):
+    calls = install_fake_anthropic(
+        monkeypatch, text_response(_tasks_payload([{"label": "A", "goal": "Do A."}]))
+    )
+    monkeypatch.setenv("BENCHMARK_TASKGEN_MODEL", "claude-haiku-5-5")
+
+    generate_tasks(METADATA)
+
+    (request,) = calls
+    assert request["model"] == "claude-haiku-5-5"
+    assert request["output_config"]["format"]["type"] == "json_schema"
+    assert set(request["output_config"]["format"]["schema"]["properties"]) == {"tasks", "error"}
+    assert not {"temperature", "top_p", "top_k"} & set(request)
+    # The prompt is the unchanged task-design prompt with the site's metadata filled in.
+    prompt = request["messages"][0]["content"]
+    assert "AGENT FAILURE PATTERNS" in prompt
+    assert "Title: Acme Store" in prompt
+    assert "URL: https://acme.com" in prompt
+
+
+def test_generate_tasks_schema_is_accepted_by_the_llm_layer():
+    schema = llm.strict_schema(TASKS_SCHEMA)
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["tasks"]["items"]["additionalProperties"] is False
+
+
+def test_generate_tasks_non_commerce_site_raises_value_error(monkeypatch):
+    install_fake_anthropic(monkeypatch, text_response({"error": "This website is not a commerce site."}))
+    with pytest.raises(ValueError, match="not a commerce site"):
+        generate_tasks(METADATA)
+
+
+def test_generate_tasks_known_non_commerce_domain_never_calls_the_model(monkeypatch):
+    calls = install_fake_anthropic(monkeypatch, text_response(_tasks_payload([])))
+    with pytest.raises(ValueError, match="not a commerce site"):
+        generate_tasks({**METADATA, "url": "https://www.github.com/x"})
+    assert calls == []
+
+
+def test_generate_tasks_empty_task_list_raises_value_error(monkeypatch):
+    install_fake_anthropic(monkeypatch, text_response(_tasks_payload([])))
+    with pytest.raises(ValueError, match="Could not generate"):
+        generate_tasks(METADATA)
+
+
+def test_generate_tasks_refusal_becomes_a_value_error(monkeypatch):
+    """A safety refusal is a 422-style answer for the user, not a server error."""
+    install_fake_anthropic(monkeypatch, refusal_response())
+    with pytest.raises(ValueError, match="declined"):
+        generate_tasks(METADATA)
+
+
+def test_generate_tasks_api_error_propagates_as_llm_error(monkeypatch):
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    error = anthropic.AuthenticationError(
+        "invalid x-api-key", response=httpx.Response(401, request=request), body=None
+    )
+    install_fake_anthropic(monkeypatch, error)
+    with pytest.raises(llm.LLMError) as excinfo:
+        generate_tasks(METADATA)
+    assert excinfo.value.kind == "api"
+    assert excinfo.value.status_code == 401
+
+
+def test_generate_tasks_truncated_reply_propagates_as_llm_error(monkeypatch):
+    install_fake_anthropic(monkeypatch, text_response('{"tasks": [', stop_reason="max_tokens"))
+    with pytest.raises(llm.LLMError) as excinfo:
+        generate_tasks(METADATA)
+    assert excinfo.value.kind == "max_tokens"
+
+
+def test_generate_tasks_known_commerce_domain_adds_the_note(monkeypatch):
+    calls = install_fake_anthropic(
+        monkeypatch, text_response(_tasks_payload([{"label": "A", "goal": "Do A."}]))
+    )
+    generate_tasks({"title": "", "description": "", "visible_text": "", "url": "https://www.amazon.com"})
+    assert "confirmed commerce/transactional website" in calls[0]["messages"][0]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +298,14 @@ def test_generate_tasks_strips_markdown_fences():
 
 
 @pytest.mark.asyncio
-async def test_fetch_and_generate_full_flow():
-    """Mock both aiohttp and OpenAI; verify the full pipeline."""
+async def test_fetch_and_generate_full_flow(monkeypatch):
+    """Mock both aiohttp and the model API; verify the full pipeline."""
     raw_tasks = [
         {"label": "Task A", "goal": "Do A."},
         {"label": "Task B", "goal": "Do B."},
         {"label": "Task C", "goal": "Do C."},
     ]
-    mock_oai_response = _make_openai_response(raw_tasks)
+    calls = install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
 
     # Build a mock aiohttp response
     mock_http_response = AsyncMock()
@@ -279,18 +321,16 @@ async def test_fetch_and_generate_full_flow():
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
     with (
+        patch("task_generator.validate_url", return_value=True),
         patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
-        patch("task_generator.OpenAI") as MockOpenAI,
     ):
-        mock_client = MagicMock()
-        MockOpenAI.return_value = mock_client
-        mock_client.chat.completions.create.return_value = mock_oai_response
-
         tasks = await fetch_and_generate("https://acme.com")
 
     assert len(tasks) == 3
     assert tasks[0]["label"] == "Task A"
     assert tasks[0]["id"] == 1
+    # The page's own title and text reached the prompt.
+    assert "Title: Acme Store" in calls[0]["messages"][0]["content"]
 
 
 @pytest.mark.asyncio
@@ -339,3 +379,36 @@ async def test_fetch_and_generate_http_error():
     ):
         with pytest.raises(ConnectionError, match="HTTP 404"):
             await fetch_and_generate("https://example.com/gone")
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_known_commerce_domain_skips_the_fetch(monkeypatch):
+    """Known shops block server-side fetches, so the model works from the domain alone."""
+    raw_tasks = [{"label": "A", "goal": "Do A."}]
+    calls = install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
+    with (
+        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.aiohttp.ClientSession", side_effect=AssertionError("must not fetch")),
+    ):
+        tasks = await fetch_and_generate("https://www.target.com")
+    assert [t["label"] for t in tasks] == ["A"]
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_keeps_the_event_loop_free(monkeypatch):
+    """The model call is blocking, so it must not run on the event loop thread."""
+    import threading
+
+    seen = {}
+
+    def fake_generate(metadata):
+        seen["thread"] = threading.current_thread()
+        return [{"id": 1, "label": "A", "goal": "Do A."}]
+
+    with (
+        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.generate_tasks", fake_generate),
+    ):
+        await fetch_and_generate("https://www.target.com")
+    assert seen["thread"] is not threading.main_thread()

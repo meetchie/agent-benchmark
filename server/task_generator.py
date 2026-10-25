@@ -8,9 +8,10 @@ Functions:
   fetch_and_generate(url) -> list[dict]
 """
 
-import json
+import asyncio
 import re
 import ipaddress
+import logging
 import socket
 from urllib.parse import urlparse
 
@@ -18,7 +19,34 @@ import ssl
 import certifi
 import aiohttp
 from bs4 import BeautifulSoup
-from openai import OpenAI
+
+import llm
+
+logger = logging.getLogger(__name__)
+
+# What the model must answer with: 3 tasks, or an error for a non-commerce site.
+# With Anthropic this is enforced through structured outputs; both keys are optional
+# so a refusal-by-JSON ({"error": "..."}) stays valid.
+TASKS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "goal": {"type": "string"},
+                },
+                "required": ["label", "goal"],
+            },
+        },
+        "error": {"type": "string"},
+    },
+}
+
+# Three tasks are about 1.5K output tokens; this is generous headroom.
+_TASKGEN_MAX_TOKENS = 8000
 
 PROMPT_TEMPLATE = """You generate benchmark tasks that stress-test AI browser agents on real commerce websites. The goal is to expose the specific UI interactions where agents fail — NOT to test whether the agent is smart, but whether it can actually navigate the website's interface correctly.
 
@@ -295,18 +323,18 @@ def _check_commerce_site(metadata: dict) -> None:
             "e-commerce, food delivery, grocery, and similar shopping/ordering websites."
         )
 
-    # For everything else, let GPT-4o decide if it's commerce or not
+    # For everything else, let the model decide if it's commerce or not
 
 
 def generate_tasks(metadata: dict) -> list[dict]:
-    """Call GPT-4o to generate 3 benchmark tasks for a website.
+    """Ask the task-generation model for 3 benchmark tasks for a website.
 
-    Uses response_format={"type": "json_object"}.
     Returns list of dicts with keys: id, label, goal.
-    Raises ValueError if the site is not a commerce site.
+    Raises ValueError if the site is not a commerce site, or the model declines
+    to write tasks for it. Other model failures (API error, truncated or
+    unparseable reply) raise ``llm.LLMError``.
     """
     _check_commerce_site(metadata)
-    client = OpenAI()
 
     # Sanitize metadata to prevent prompt injection
     safe_url = metadata.get("url", "")[:500].replace("\n", "").replace("\r", "")
@@ -321,7 +349,7 @@ def generate_tasks(metadata: dict) -> list[dict]:
         url=safe_url,
     )
 
-    # If domain is known commerce, tell GPT-4o so it doesn't reject thin SPA shells
+    # If domain is known commerce, tell the model so it doesn't reject thin SPA shells
     domain = _get_domain(metadata.get("url", ""))
     if domain in _KNOWN_COMMERCE_DOMAINS:
         prompt += (
@@ -330,25 +358,33 @@ def generate_tasks(metadata: dict) -> list[dict]:
             "generate tasks based on what you know about this site."
         )
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
+    try:
+        data = llm.complete_json(
+            None, prompt, TASKS_SCHEMA, role="taskgen", max_tokens=_TASKGEN_MAX_TOKENS
+        )
+    except llm.LLMError as e:
+        if e.kind == "refusal":
+            logger.warning("task generation declined: %s", e)
+            raise ValueError(
+                "The model declined to write benchmark tasks for this website. Try a different URL."
+            ) from e
+        raise
+
+    cost = getattr(data, "cost_usd", None)
+    logger.info(
+        "task generation: model=%s cost=%s",
+        getattr(data, "model", "?"), "n/a" if cost is None else f"${cost:.4f}",
     )
 
-    raw = response.choices[0].message.content
+    # The model may reject non-commerce sites
+    if data.get("error"):
+        logger.info("task generation: the model rejected %s: %s", safe_url, str(data["error"])[:200])
+        raise ValueError(str(data["error"]))
 
-    # Strip markdown code fences as safety measure
-    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-    raw = re.sub(r"\s*```$", "", raw.strip())
-
-    data = json.loads(raw)
-
-    # GPT-4o may reject non-commerce sites
-    if "error" in data:
-        raise ValueError(data["error"])
-
-    tasks_raw = data.get("tasks", [])
+    tasks_raw = data.get("tasks") or []
+    if not isinstance(tasks_raw, list) or not tasks_raw:
+        logger.warning("task generation: the model returned no tasks for %s: %s", safe_url, str(dict(data))[:200])
+        raise ValueError("Could not generate benchmark tasks for this website. Try a different URL.")
 
     # Truncate to 3 tasks and add sequential IDs
     tasks = []
@@ -381,10 +417,12 @@ async def fetch_and_generate(url: str) -> list[dict]:
     domain = _get_domain(url)
 
     # Known commerce sites block server-side fetches from data center IPs.
-    # Skip the HTML fetch and generate tasks from GPT-4o's domain knowledge.
+    # Skip the HTML fetch and generate tasks from the model's domain knowledge.
+    # The model call is blocking, so it runs in a thread and the event loop (status
+    # polls, other runs, the client-disconnect check) stays responsive.
     if domain in _KNOWN_COMMERCE_DOMAINS:
         metadata = {"title": "", "description": "", "visible_text": "", "url": url}
-        return generate_tasks(metadata)
+        return await asyncio.to_thread(generate_tasks, metadata)
 
     timeout = aiohttp.ClientTimeout(total=15)
     headers = {
@@ -417,4 +455,4 @@ async def fetch_and_generate(url: str) -> list[dict]:
         raise ConnectionError("This site took too long to respond or is unreachable. Try a different URL.") from exc
 
     metadata = extract_metadata(html, url)
-    return generate_tasks(metadata)
+    return await asyncio.to_thread(generate_tasks, metadata)

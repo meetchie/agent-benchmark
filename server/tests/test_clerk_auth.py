@@ -48,10 +48,12 @@ def test_verify_valid_token(mock_jwks, mock_issuer):
     assert claims["sub"] == "user_abc123"
 
 
+@patch("clerk_auth._get_clerk_issuer", return_value="https://test.clerk.accounts.dev")
 @patch("clerk_auth._fetch_jwks", return_value=_test_jwks)
-def test_reject_expired_token(mock_jwks):
+def test_reject_expired_token(mock_jwks, mock_issuer):
     token = _make_token({
         "sub": "user_abc123",
+        "iss": "https://test.clerk.accounts.dev",
         "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         "iat": datetime.now(timezone.utc) - timedelta(hours=2),
     })

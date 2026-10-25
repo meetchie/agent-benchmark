@@ -9,11 +9,13 @@ from constants import COST_RATES, cost_usd
 def test_telemetry_is_off_by_default(monkeypatch):
     monkeypatch.delenv("ANONYMIZED_TELEMETRY", raising=False)
     monkeypatch.delenv("BROWSER_USE_CLOUD_SYNC", raising=False)
+    monkeypatch.delenv("BROWSER_USE_VERSION_CHECK", raising=False)
     runtime_env.apply_telemetry_defaults()
     import os
 
     assert os.environ["ANONYMIZED_TELEMETRY"] == "false"
     assert os.environ["BROWSER_USE_CLOUD_SYNC"] == "false"
+    assert os.environ["BROWSER_USE_VERSION_CHECK"] == "false"
 
 
 def test_explicit_telemetry_setting_is_respected(monkeypatch):
@@ -27,11 +29,13 @@ def test_explicit_telemetry_setting_is_respected(monkeypatch):
 def test_browser_use_reads_telemetry_off(monkeypatch):
     monkeypatch.delenv("ANONYMIZED_TELEMETRY", raising=False)
     monkeypatch.delenv("BROWSER_USE_CLOUD_SYNC", raising=False)
+    monkeypatch.delenv("BROWSER_USE_VERSION_CHECK", raising=False)
     runtime_env.apply_telemetry_defaults()
     from browser_use.config import CONFIG
 
     assert CONFIG.ANONYMIZED_TELEMETRY is False
     assert CONFIG.BROWSER_USE_CLOUD_SYNC is False
+    assert CONFIG.BROWSER_USE_VERSION_CHECK is False
 
 
 @pytest.mark.parametrize("model, expected", [

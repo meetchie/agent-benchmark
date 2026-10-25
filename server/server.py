@@ -4,12 +4,34 @@ Benchmark HTTP Server — FastAPI server exposing benchmark start and status end
 Start: uv run uvicorn server:app --port 8000 --reload
 
 Endpoints:
-  POST /benchmark/start    → { run_id }
-  GET  /benchmark/status/{run_id} → RunState as JSON
-  GET  /health             → { ok: true }
+  POST /benchmark/start           → { run_id, remaining, resets_in, limit }
+  GET  /benchmark/status/{run_id} → RunState as JSON (see RunState.to_dict)
+  POST /benchmark/cancel/{run_id} → { ok: true }
+  POST /benchmark/generate-tasks  → { tasks: [{id, label, goal} x3] }
+  GET  /benchmark/quota           → { remaining, resets_in, limit }
+  GET  /health                    → { ok, browser_provider, provider, models, ... }
+
+Configuration (environment or .env; the model and browser settings are documented in
+llm.py, browser_env.py and benchmark_runner.py):
+  AUTH_MODE            none (default): no sign-in, every request is the user "local".
+                       clerk: Clerk JWT in "Authorization: Bearer" (needs
+                       CLERK_ISSUER_URL or CLERK_PUBLISHABLE_KEY).
+  DAILY_RUN_QUOTA      runs per user per rolling 24 h; 0 = unlimited.
+                       Default 0 with AUTH_MODE=none, 3 with AUTH_MODE=clerk.
+  MAX_CONCURRENT_RUNS  runs one user may have going at once (default 2); 0 = unlimited.
+  DEMO_MODE            true: canned runs and tasks, no API key and no browser needed.
+  ALLOWED_ORIGINS      CORS origins (default: the Vite dev servers on localhost).
+  INTERNAL_API_KEY     optional shared secret expected in "X-Internal-Key".
+  RUNS_DIR             where finished runs are saved (see persistence.py).
+The server refuses to start (with the reason) when a setting is invalid or the LLM
+provider's API key is missing and DEMO_MODE is off.
 """
 
+import runtime_env  # noqa: F401  (first: loads .env, turns browser-use telemetry off)
+
 import asyncio
+import json as _json
+import logging
 import os
 import time as _time
 import uuid
@@ -19,9 +41,13 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
+import llm
+import persistence
 from benchmark_runner import RunState, run_benchmark
 from task_generator import fetch_and_generate
 from clerk_auth import verify_clerk_jwt
+
+logger = logging.getLogger(__name__)
 
 # In-memory run state store
 _runs: dict[str, RunState] = {}
@@ -30,12 +56,8 @@ _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> asyncio task (for cancella
 # Run eviction settings
 _MAX_STORED_RUNS = 200
 
-# Per-user concurrency limit (max active runs)
+# Per-user concurrency (active runs); the limit is MAX_CONCURRENT_RUNS
 _active_runs: dict[str, int] = {}  # user_id -> count
-_MAX_CONCURRENT_RUNS = 5
-
-# Admin emails get unlimited runs (bypass concurrency limit)
-ADMIN_EMAILS: set[str] = set()
 
 # Internal API key for edge-to-backend auth
 _INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
@@ -44,51 +66,165 @@ _INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 _task_gen_requests: dict[str, list[float]] = {}  # ip -> list of timestamps
 _TASK_GEN_MAX_PER_MINUTE = 5
 
-# Daily quota: 3 runs per 24h rolling window
-# Persisted to disk so quotas survive server restarts
-_DAILY_QUOTA = 3
-_QUOTA_WINDOW = 24 * 60 * 60  # 24 hours in seconds
-_QUOTA_FILE = os.path.join(os.path.dirname(__file__), ".quota_data.json")
+AUTH_NONE = "none"
+AUTH_CLERK = "clerk"
+LOCAL_USER_ID = "local"  # the one user when AUTH_MODE=none
 
-import json as _json
+_QUOTA_WINDOW = 24 * 60 * 60  # 24 hours in seconds
+
+
+class ConfigError(RuntimeError):
+    """A setting is missing or invalid. The message says what to change."""
+
+
+def auth_mode() -> str:
+    """AUTH_MODE: "none" (default) or "clerk"."""
+    mode = (os.getenv("AUTH_MODE") or AUTH_NONE).strip().lower()
+    if mode not in (AUTH_NONE, AUTH_CLERK):
+        raise ConfigError(f"AUTH_MODE={mode!r} is not valid; use 'none' (no sign-in) or 'clerk'.")
+    return mode
+
+
+def _whole_number_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        raise ConfigError(f"{name}={raw.strip()!r} must be a whole number (0 means no limit).") from None
+    if value < 0:
+        raise ConfigError(f"{name}={value} must not be negative (0 means no limit).")
+    return value
+
+
+def daily_run_quota() -> int:
+    """DAILY_RUN_QUOTA: runs per user per 24 h; 0 = unlimited. Default 0 (none) or 3 (clerk)."""
+    return _whole_number_env("DAILY_RUN_QUOTA", 3 if auth_mode() == AUTH_CLERK else 0)
+
+
+def max_concurrent_runs() -> int:
+    """MAX_CONCURRENT_RUNS: runs one user may have going at once (default 2); 0 = unlimited."""
+    return _whole_number_env("MAX_CONCURRENT_RUNS", 2)
+
+
+def validate_startup() -> None:
+    """Check the configuration; raises ConfigError with a message the user can act on.
+
+    Runs when the server starts, so a missing API key stops the server there instead of
+    failing the first run. DEMO_MODE needs no key and no browser, so it skips those checks.
+    """
+    mode = auth_mode()
+    daily_run_quota()
+    max_concurrent_runs()
+
+    import benchmark_runner
+
+    try:
+        benchmark_runner.get_agent_timeout()
+        benchmark_runner._validate_browser_config()
+    except ValueError as e:
+        raise ConfigError(str(e)) from None
+
+    if mode == AUTH_CLERK:
+        import clerk_auth
+        try:
+            clerk_auth._get_clerk_issuer()
+        except Exception:
+            raise ConfigError(
+                "AUTH_MODE=clerk needs CLERK_ISSUER_URL or CLERK_PUBLISHABLE_KEY "
+                "(or use AUTH_MODE=none for a local, single-user setup)."
+            ) from None
+
+    if _check_demo_mode():
+        logger.warning("DEMO_MODE is on: runs and tasks are canned, no model or browser is used.")
+        return
+
+    try:
+        provider = llm.provider()
+        for role in llm.ROLES:
+            llm.effort_for(role, llm.model_for(role))  # raises for a bad effort setting
+    except llm.LLMError as e:
+        raise ConfigError(str(e)) from None
+    if not llm.provider_key_present():
+        key = "OPENAI_API_KEY" if provider == llm.OPENAI else "ANTHROPIC_API_KEY"
+        raise ConfigError(
+            f"{key} is not set (LLM_PROVIDER={provider}). Put it in .env (copy .env.example) "
+            f"or export it, or set DEMO_MODE=true to try the UI without any API key."
+        )
+
+    if benchmark_runner._get_browser_provider() == "local":
+        import browser_env
+        if not browser_env.chromium_path():
+            logger.warning(
+                "No local Chromium found: runs will fail until you install it with: %s",
+                browser_env.INSTALL_HINT,
+            )
+    if mode == AUTH_NONE:
+        logger.info("AUTH_MODE=none: no sign-in. Keep this server on localhost.")
+
+
+def _quota_file() -> str:
+    return str(persistence.runs_dir() / ".quota_data.json")
+
 
 def _load_quota_data() -> dict[str, list[float]]:
     try:
-        with open(_QUOTA_FILE, "r") as f:
+        with open(_quota_file(), "r") as f:
             data = _json.load(f)
         # Clean expired entries on load
         now = _time.time()
         return {uid: [t for t in ts if now - t < _QUOTA_WINDOW] for uid, ts in data.items()}
-    except (FileNotFoundError, _json.JSONDecodeError):
+    except (OSError, ValueError, AttributeError, TypeError):
         return {}
 
 def _save_quota_data():
     try:
-        with open(_QUOTA_FILE, "w") as f:
+        os.makedirs(os.path.dirname(_quota_file()), exist_ok=True)
+        with open(_quota_file(), "w") as f:
             _json.dump(_user_run_timestamps, f)
     except OSError:
         pass
 
-_user_run_timestamps: dict[str, list[float]] = _load_quota_data()
+# Run start times per user, for the daily quota. Loaded lazily (first quota check or
+# first quota-limited start) so that importing this module reads no files.
+_user_run_timestamps: dict[str, list[float]] = {}
+_quota_loaded = False
+
+
+def _ensure_quota_loaded() -> None:
+    global _quota_loaded
+    if not _quota_loaded:
+        _user_run_timestamps.update(_load_quota_data())
+        _quota_loaded = True
 
 
 def _get_quota(user_id: str) -> dict:
-    """Return remaining runs and seconds until next reset for a user."""
+    """Return remaining runs and seconds until next reset for a user.
+
+    With DAILY_RUN_QUOTA=0 there is no limit: ``limit`` is 0 and ``remaining`` is null
+    (the UI shows no counter and never blocks a run).
+    """
+    limit = daily_run_quota()
+    if limit == 0:
+        return {"remaining": None, "resets_in": 0, "limit": 0}
+
+    _ensure_quota_loaded()
     now = _time.time()
     timestamps = _user_run_timestamps.get(user_id, [])
     # Filter to only timestamps within the window
     recent = [t for t in timestamps if now - t < _QUOTA_WINDOW]
     _user_run_timestamps[user_id] = recent
 
-    remaining = max(0, _DAILY_QUOTA - len(recent))
+    remaining = max(0, limit - len(recent))
     resets_in = 0
     if remaining == 0 and recent:
         # Time until the oldest run in the window expires
         resets_in = int(recent[0] + _QUOTA_WINDOW - now)
 
-    return {"remaining": remaining, "resets_in": resets_in, "limit": _DAILY_QUOTA}
+    return {"remaining": remaining, "resets_in": resets_in, "limit": limit}
 
-# Demo mode — returns fake data without calling OpenAI or launching a browser
+# Demo mode — returns fake data without calling a model or launching a browser
 # Set DEMO_MODE=true in .env to enable
 def _check_demo_mode() -> bool:
     return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
@@ -104,9 +240,9 @@ def _evict_stale_runs():
 
 
 def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key")) -> None:
-    """Verify the request comes from our Cloudflare edge functions."""
+    """If INTERNAL_API_KEY is set, require it in X-Internal-Key (a shared secret for a gateway in front)."""
     if not _INTERNAL_API_KEY:
-        return  # Not configured (local dev) — skip check
+        return  # Not configured (the default) — skip check
     if x_internal_key != _INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -126,15 +262,8 @@ def _check_task_gen_rate(request: Request):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load .env files
-    from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
-
-    # Fail fast if browser provider is misconfigured
-    from benchmark_runner import _validate_browser_config
-    _validate_browser_config()
-
+    # .env files are already loaded (runtime_env). Refuse to start on a bad setup.
+    validate_startup()
     yield
 
 
@@ -142,7 +271,7 @@ app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
 
 _ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5180,http://localhost:5173"
+    "http://localhost:5180,http://localhost:5173,http://127.0.0.1:5180,http://127.0.0.1:5173"
 ).split(",")
 
 app.add_middleware(
@@ -154,7 +283,13 @@ app.add_middleware(
 
 
 async def get_current_user(authorization: str = Header(None)) -> dict:
-    """Verify Clerk JWT from Authorization header."""
+    """The user making the request.
+
+    AUTH_MODE=none (default): always the local user, no token needed.
+    AUTH_MODE=clerk: verifies the Clerk JWT in the Authorization header.
+    """
+    if auth_mode() == AUTH_NONE:
+        return {"user_id": LOCAL_USER_ID}
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
     token = authorization.split(" ", 1)[1]
@@ -162,8 +297,7 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
         claims = verify_clerk_jwt(token)
         return {"user_id": claims["sub"]}
     except Exception as e:
-        import traceback; traceback.print_exc()
-        print(f"AUTH FAILED: {type(e).__name__}: {e}")
+        logger.warning("Auth failed: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -195,11 +329,22 @@ class GenerateTasksRequest(BaseModel):
 
 @app.get("/health")
 async def health():
+    """Liveness plus the settings a client or a person debugging would ask about. Never keys."""
     from benchmark_runner import _get_browser_provider
+    info = llm.describe()
     return {
         "ok": True,
         "browser_provider": _get_browser_provider(),
+        "provider": info["provider"],
+        "models": info["models"],
+        "auth_mode": auth_mode(),
+        "demo_mode": _check_demo_mode(),
     }
+
+
+def _model_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    from constants import cost_usd
+    return cost_usd(model, input_tokens, output_tokens)
 
 
 async def _demo_run(state: RunState, url: str, goal: str):
@@ -244,8 +389,9 @@ async def _demo_run(state: RunState, url: str, goal: str):
     state.input_tokens = random.randint(8000, 25000)
     state.output_tokens = random.randint(500, 3000)
     state.total_tokens = state.input_tokens + state.output_tokens
+    state.cost_usd = _model_cost(state.agent_model, state.input_tokens, state.output_tokens)
 
-    # Simulate GPT-4o analysis delay
+    # Simulate the judge's analysis delay
     await _aio.sleep(2.0)
 
     state.phases = [
@@ -269,17 +415,17 @@ async def _demo_run(state: RunState, url: str, goal: str):
 @app.post("/benchmark/start")
 async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
     user_id = user["user_id"]
-    user_email = user.get("email", "").lower()
-    is_admin = user_email in ADMIN_EMAILS
 
     active = _active_runs.get(user_id, 0)
-    if active >= _MAX_CONCURRENT_RUNS and not is_admin:
+    max_active = max_concurrent_runs()
+    if max_active and active >= max_active:
         raise HTTPException(status_code=429, detail={
             "error": "Too many runs in progress. Wait for one to finish.",
         })
 
-    # Daily quota check
-    if not is_admin:
+    # Daily quota check (DAILY_RUN_QUOTA=0 means unlimited)
+    quota_limit = daily_run_quota()
+    if quota_limit:
         quota = _get_quota(user_id)
         if quota["remaining"] <= 0:
             hours = quota["resets_in"] // 3600
@@ -292,56 +438,71 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
 
     _evict_stale_runs()
 
+    # Count the run as active before any await, so two quick requests cannot both pass the check.
     _active_runs[user_id] = active + 1
-    # Record run timestamp for daily quota
-    if user_id not in _user_run_timestamps:
-        _user_run_timestamps[user_id] = []
-    _user_run_timestamps[user_id].append(_time.time())
-    _save_quota_data()
-
     run_id = str(uuid.uuid4())
-    state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
-    _runs[run_id] = state
+    try:
+        if quota_limit:
+            # Record run timestamp for daily quota
+            _user_run_timestamps.setdefault(user_id, []).append(_time.time())
+            _save_quota_data()
 
-    # Fire-and-forget: persist run to Go server.
-    from persistence import persist_run_start
-    persisted_id = await persist_run_start(
-        run_id=run_id,
-        clerk_user_id=user_id,
-        url=req.url,
-        task_label=req.label,
-        task_goal=req.goal,
-    )
-    state.persisted_run_id = persisted_id  # may be None if Go server unavailable
+        state = RunState(run_id=run_id, user_id=user_id, goal=req.goal)
+        _runs[run_id] = state
 
-    viewport = None
-    if req.viewport_width and req.viewport_height:
-        viewport = {"width": req.viewport_width, "height": req.viewport_height}
+        # Save the run's record (RUNS_DIR/<run_id>.json). Demo runs are not saved.
+        if not _check_demo_mode():
+            state.persisted_run_id = await persistence.persist_run_start(
+                run_id=run_id,
+                clerk_user_id=user_id,  # the signed-in user's id, or "local" without sign-in
+                url=req.url,
+                task_label=req.label,
+                task_goal=req.goal,
+                agent_model=state.agent_model,
+            )  # None if the file could not be written
 
-    async def _run_and_decrement(state, url, goal, uid, vp):
-        try:
-            if _check_demo_mode():
-                await _demo_run(state, url, goal)
-            else:
-                await run_benchmark(state, url, goal, viewport=vp)
-        finally:
-            _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
+        viewport = None
+        if req.viewport_width and req.viewport_height:
+            viewport = {"width": req.viewport_width, "height": req.viewport_height}
 
-    task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id, viewport))
+        async def _run_and_decrement(state, url, goal, uid, vp):
+            try:
+                if _check_demo_mode():
+                    await _demo_run(state, url, goal)
+                else:
+                    await run_benchmark(state, url, goal, viewport=vp)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Run %s crashed", state.run_id)
+                if state.status in ("running", "analyzing"):
+                    state.status = "error"
+                    state.result_state = "error"
+                    state.message = state.message or "The run encountered an error."
+            finally:
+                _active_runs[uid] = max(0, _active_runs.get(uid, 1) - 1)
+
+        task = asyncio.create_task(_run_and_decrement(state, req.url, req.goal, user_id, viewport))
+    except BaseException:
+        # Nothing was started: give the slot back and forget the half-made run.
+        _active_runs[user_id] = max(0, _active_runs.get(user_id, 1) - 1)
+        _runs.pop(run_id, None)
+        raise
     _run_tasks[run_id] = task
     task.add_done_callback(lambda _: _run_tasks.pop(run_id, None))
 
     quota = _get_quota(user_id)
-    return {"run_id": run_id, "remaining": quota["remaining"], "resets_in": quota["resets_in"]}
+    return {
+        "run_id": run_id,
+        "remaining": quota["remaining"],
+        "resets_in": quota["resets_in"],
+        "limit": quota["limit"],
+    }
 
 
 @app.get("/benchmark/quota")
 async def get_quota(user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
-    user_id = user["user_id"]
-    user_email = user.get("email", "").lower()
-    if user_email in ADMIN_EMAILS:
-        return {"remaining": 999, "resets_in": 0, "limit": _DAILY_QUOTA}
-    return _get_quota(user_id)
+    return _get_quota(user["user_id"])
 
 
 @app.get("/benchmark/status/{run_id}")
@@ -349,7 +510,7 @@ async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     state = _runs.get(run_id)
     if not state:
         raise HTTPException(status_code=404, detail="Not found")
-    return state.to_response()
+    return state.to_dict()
 
 
 @app.post("/benchmark/cancel/{run_id}")
@@ -358,7 +519,7 @@ async def cancel_benchmark(run_id: str, _: None = Depends(verify_internal_key)):
     if task and not task.done():
         task.cancel()
     state = _runs.get(run_id)
-    if state and state.status == "running":
+    if state and state.status in ("running", "analyzing"):
         state.status = "error"
         state.message = "Run cancelled by user."
         state.result_state = "error"
@@ -366,7 +527,12 @@ async def cancel_benchmark(run_id: str, _: None = Depends(verify_internal_key)):
 
 
 @app.post("/benchmark/generate-tasks")
-async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _: None = Depends(verify_internal_key)):
+async def generate_tasks_endpoint(
+    req: GenerateTasksRequest,
+    request: Request,
+    _: None = Depends(verify_internal_key),
+    user: dict = Depends(get_current_user),
+):
     _check_task_gen_rate(request)
     if _check_demo_mode():
         import asyncio as _aio
@@ -394,8 +560,17 @@ async def generate_tasks_endpoint(req: GenerateTasksRequest, request: Request, _
         raise HTTPException(status_code=422, detail=str(e))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except llm.LLMError as e:
+        logger.error("Task generation: model call failed (%s): %s", e.kind, e)
+        if e.kind == "api":
+            # Usually a bad or exhausted API key, or the API being down.
+            raise HTTPException(
+                status_code=502,
+                detail="The language model request failed. Check the API key and the server log.",
+            )
+        raise HTTPException(status_code=500, detail="Task generation failed")
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback; traceback.print_exc()
+    except Exception:
+        logger.exception("Task generation failed")
         raise HTTPException(status_code=500, detail="Task generation failed")
