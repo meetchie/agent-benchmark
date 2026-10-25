@@ -1,0 +1,4 @@
+# Output of cli/run.py: per-task logs, summary.json and charts
+results/
+__pycache__/
+.pytest_cache/

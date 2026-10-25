@@ -53,7 +53,7 @@ tasks:
       1. The agent navigated to the brushes product page
       2. The Boar Bristle Brush variant was selected (not the mixed or detangling brush)
       3. The "Add to cart" button was clicked
-      4. The cart was viewed and contains a Boar Bristle Brush at $72.00
+      4. The cart was viewed and contains a Boar Bristle Brush at $85.00
 
       The task FAILS if:
       - The wrong brush variant was selected
@@ -169,7 +169,7 @@ tasks:
       1. The Boar + Nylon Bristle Brush was added to cart (NOT the boar-only or detangling brush)
       2. The Hair Towel Wrap was added to cart
       3. The cart contains exactly 2 items
-      4. Total should be approximately $107.00 ($72.00 + $35.00)
+      4. Total should be approximately $120.00 ($85.00 + $35.00)
 
       The task FAILS if:
       - Only one item is in the cart
@@ -201,7 +201,7 @@ tasks:
       The task is SUCCESSFUL if and only if ALL of these conditions are met:
       1. The agent visited the brushes product page
       2. All 3 brush variants were viewed (Boar Bristle, Boar + Nylon, Tipped-Metal)
-      3. For each variant: name, price ($72.00 each), material, and hair type recommendation were reported
+      3. For each variant: name, price ($85.00 each), material, and hair type recommendation were reported
       4. A comparison was presented
 
       The task FAILS if:
@@ -225,18 +225,18 @@ tasks:
       3. Navigate back to accessories.
       4. Add the Prose Candle ($52.00) to cart.
       5. Navigate to the brushes page.
-      6. Select any brush variant you prefer and add it to cart ($72.00).
+      6. Select any brush variant you prefer and add it to cart ($85.00).
       7. Navigate to the cart to verify all 3 items are present.
 
-      VERIFICATION: After completing the task, navigate to the cart page and report the exact cart contents including each product name, quantity, and price. The cart should contain exactly 3 items with a total of approximately $159.00.
+      VERIFICATION: After completing the task, navigate to the cart page and report the exact cart contents including each product name, quantity, and price. The cart should contain exactly 3 items with a total of approximately $172.00.
     start_url: https://www.prose.com
     success_criteria: |
       The task is SUCCESSFUL if and only if ALL of these conditions are met:
       1. The Hair Towel Wrap ($35.00) is in the cart
       2. The Prose Candle ($52.00) is in the cart
-      3. A brush variant ($72.00) is in the cart
+      3. A brush variant ($85.00) is in the cart
       4. The cart contains exactly 3 items
-      5. The total is approximately $159.00
+      5. The total is approximately $172.00
 
       The task FAILS if:
       - Any of the 3 items is missing from the cart
@@ -263,12 +263,12 @@ tasks:
     success_criteria: |
       The task is SUCCESSFUL if and only if ALL of these conditions are met:
       1. The agent browsed the accessories section and compared prices
-      2. The cheapest accessory was correctly identified (Hair Towel Wrap at $35.00)
-      3. The Hair Towel Wrap was added to cart
+      2. The cheapest accessory was correctly identified (Reusable Eye Patches at $26.00)
+      3. The Reusable Eye Patches were added to cart
       4. The cart was verified
 
       The task FAILS if:
-      - The agent added a more expensive item (brush at $72 or candle at $52)
+      - The agent added a more expensive item (Hair Towel Wrap at $35, candle at $52 or a brush at $85)
       - The agent did not compare prices before choosing
       - Gift cards were incorrectly included in the price comparison
       - The cart was never verified

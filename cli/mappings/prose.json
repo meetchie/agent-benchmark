@@ -29,19 +29,21 @@
   },
   "actions": {
     "view_accessories": {
+      "description": "Open the accessories catalog: brushes, hair towel wrap, candle, eye patches and digital gift cards. page_info.product_cards lists every product with its own price.",
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "a[href*='/products/'] h2", "timeout": 8000}
       ],
       "target_screen": "accessories"
     },
     "view_product": {
+      "description": "Open a product's page from the accessories catalog. Pass its name as the catalog shows it, for example 'Candle' or 'Tipped-Metal Brush'. page_info describes the product and its price.",
       "params": {
-        "item": {"type": "string", "required": true}
+        "item": {"type": "string", "required": true, "description": "Product name as shown on the accessories page"}
       },
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "a[href*='/products/'] h2", "timeout": 8000},
         {"action": "press_key", "value": "Escape", "optional": true},
         {"action": "click", "selector": "a:has-text('{{item}}')", "timeout": 2000, "fallbacks": [
           {"type": "text", "selector": "{{item}}"},
@@ -52,58 +54,63 @@
       "target_screen": "product_detail"
     },
     "add_to_cart": {
+      "description": "Add one unit of the product whose page is open to the cart. Open the product first with view_product; item is the name of that product.",
       "params": {
-        "item": {"type": "string", "required": true}
+        "item": {"type": "string", "required": true, "description": "Name of the product whose page is open"}
       },
       "steps": [
         {"action": "press_key", "value": "Escape", "optional": true},
-        {"action": "click", "selector": "[data-testid='add-to-cart']", "timeout": 2000, "fallbacks": [
-          {"type": "css", "selector": "button:has-text('Add to cart')"},
+        {"action": "click", "selector": "[data-testid='add-to-cart'] >> nth=0", "timeout": 2000, "fallbacks": [
+          {"type": "css", "selector": "button:has-text('Add to cart') >> nth=0"},
           {"type": "text_exact", "selector": "Add to cart"}
         ]}
       ],
       "stays_on_screen": true
     },
     "view_cart": {
+      "description": "Open the cart page. page_info shows the cart title, each line as cart_items (name, price, quantity) and the order_summary (subtotal, shipping, total).",
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/checkout/accessories"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h1:has-text('Your cart')", "timeout": 8000, "optional": true}
       ],
       "target_screen": "cart"
     },
     "view_gift_cards": {
+      "description": "Open the digital gift card page: the amounts on offer and how gifting works (page_info.main_text).",
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/gift"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "main", "timeout": 2000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "text=Choose your gift amount", "timeout": 8000, "optional": true}
       ],
       "target_screen": "gift"
     },
     "go_back": {
+      "description": "Return to the accessories catalog.",
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "a[href*='/products/'] h2", "timeout": 8000}
       ],
       "target_screen": "accessories"
     },
     "remove_from_cart": {
+      "description": "Remove one item from the cart. Open the cart first with view_cart; item is the name of the line to remove.",
       "params": {
-        "item": {"type": "string", "required": true}
+        "item": {"type": "string", "required": true, "description": "Name of the cart line to remove, as shown in cart_items"}
       },
       "steps": [
-        {"action": "click", "selector": "button:has-text('Remove')", "timeout": 2000, "fallbacks": [
-          {"type": "text", "selector": "Remove"},
-          {"type": "css", "selector": "button[aria-label*='Remove']"}
-        ]}
+        {"action": "click", "selector": "*:has(button:has-text('Remove')):has-text('{{item}}'):not(:has(*:has(button:has-text('Remove')):has-text('{{item}}'))) >> button:has-text('Remove')", "timeout": 2000}
       ],
       "stays_on_screen": true
     },
     "search_products": {
+      "description": "Open the accessories catalog, the only place the site lists products. The query does not filter anything; read the product names from page_info.",
       "params": {
-        "query": {"type": "string", "required": true}
+        "query": {"type": "string", "required": true, "description": "What you are looking for (not used to filter)"}
       },
       "steps": [
         {"action": "navigate", "url": "https://www.prose.com/products/accessories"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "h2", "timeout": 2000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "a[href*='/products/'] h2", "timeout": 8000}
       ],
       "target_screen": "accessories"
     }

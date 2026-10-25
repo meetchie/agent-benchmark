@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
-cd "$(dirname "$0")" && uv run python visualize.py "$@"
+# Draw the charts for a finished comparison, from any directory:
+#   cli/viz.sh cli/results/prose-2026-10-24
+# A relative path is tried against the current directory first, then against cli/.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec uv run --project "$HERE/../server" python "$HERE/visualize.py" "$@"
