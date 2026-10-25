@@ -7,10 +7,9 @@ from __future__ import annotations
 # directly). "cache_read" and "cache_write" (5-minute TTL) are optional; when a
 # model has none, cached tokens are priced at the input rate.
 #
-# Claude prices are Anthropic first-party API list prices (as published,
-# checked 2026-10-06). claude-haiku-5-5 has a second rate card ($0.50 / $2.50) for
-# prompts over 100K tokens; benchmark prompts stay far below that, so only the
-# standard card is listed.
+# Claude prices are Anthropic's API list prices as of October 2026. claude-haiku-5-5
+# has a second rate card ($0.50 / $2.50) for prompts over 100K tokens; benchmark
+# prompts stay far below that, so only the standard card is listed.
 COST_RATES = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.00},

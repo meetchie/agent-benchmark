@@ -9,7 +9,8 @@ Endpoints:
   POST /benchmark/cancel/{run_id} → { ok: true }
   POST /benchmark/generate-tasks  → { tasks: [{id, label, goal} x3] }
   GET  /benchmark/quota           → { remaining, resets_in, limit }
-  GET  /health                    → { ok, browser_provider, provider, models, ... }
+  GET  /health                    → { ok, browser_provider, provider, models, auth_mode,
+                                      demo_mode, timeout_s }
 
 Configuration (environment or .env; the model and browser settings are documented in
 llm.py, browser_env.py and benchmark_runner.py):
@@ -43,7 +44,7 @@ from pydantic import BaseModel, field_validator
 
 import llm
 import persistence
-from benchmark_runner import RunState, run_benchmark
+from benchmark_runner import RunState, get_agent_timeout, run_benchmark
 from task_generator import fetch_and_generate
 from clerk_auth import verify_clerk_jwt
 
@@ -260,14 +261,71 @@ def _check_task_gen_rate(request: Request):
     _task_gen_requests[ip] = timestamps
 
 
+def configure_logging() -> None:
+    """Log INFO and above to stderr from the moment the server starts.
+
+    uvicorn sets up only its own loggers, and browser-use sets up the rest (root logger at
+    INFO, its own line format, noisy HTTP libraries silenced) the first time a run
+    imports it. Until then the INFO lines this app writes, such as the cost of a task
+    generation or the startup notes, go nowhere. This does that setup at startup, by
+    importing browser-use's logging module (importing the package runs its setup, and
+    the explicit call keeps it that way if a later version stops doing so; it does
+    nothing when a handler exists). The log therefore looks the same before and after
+    the first run, and BROWSER_USE_LOGGING_LEVEL still applies. Without browser-use
+    installed, a plain INFO handler is used.
+    """
+    try:
+        from browser_use.logging_config import setup_logging
+    except ImportError:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)-8s [%(name)s] %(message)s")
+    else:
+        setup_logging()
+
+
+# Why the server could not start, kept for _StartupErrorMiddleware (None when it started).
+_startup_error: ConfigError | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _startup_error
+    configure_logging()
     # .env files are already loaded (runtime_env). Refuse to start on a bad setup.
-    validate_startup()
+    _startup_error = None
+    try:
+        validate_startup()
+    except ConfigError as e:
+        _startup_error = e
+        raise
     yield
 
 
+class _StartupErrorMiddleware:
+    """When a bad setting stops the server, tell uvicorn the reason and nothing else.
+
+    Starlette reports a failed lifespan to uvicorn as a full traceback; for a missing
+    API key that buries the one sentence that says what to do. The exception still
+    propagates (uvicorn exits with status 3); only the logged message is shortened.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "lifespan":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_short(message):
+            if message["type"] == "lifespan.startup.failed" and _startup_error is not None:
+                message = {**message, "message": str(_startup_error)}
+            await send(message)
+
+        await self.app(scope, receive, send_short)
+
+
 app = FastAPI(title="Rindler Benchmark Server", lifespan=lifespan)
+app.add_middleware(_StartupErrorMiddleware)
 
 _ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
@@ -339,6 +397,7 @@ async def health():
         "models": info["models"],
         "auth_mode": auth_mode(),
         "demo_mode": _check_demo_mode(),
+        "timeout_s": max(1, round(get_agent_timeout())),  # BENCHMARK_TIMEOUT_S
     }
 
 

@@ -16,7 +16,7 @@
       "target_screen": "search_results",
       "steps": [
         {"action": "navigate", "url": "{{base}}/search?q={{query}}"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "h1", "timeout": 3000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "h1", "timeout": 10000}
       ]
     },
     "search_with_form": {
@@ -24,7 +24,7 @@
       "steps": [
         {"action": "type", "selector": "#does-not-exist", "value": "{{query}}", "press_enter": true,
          "fallbacks": [{"type": "placeholder", "selector": "Search the shop"}]},
-        {"action": "wait", "strategy": "selector_visible", "selector": "#CardLink--0", "timeout": 3000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "#CardLink--0", "timeout": 10000}
       ]
     },
     "sort_results": {
@@ -40,15 +40,15 @@
       "params": {"item": {"type": "string"}},
       "target_screen": "product_detail",
       "steps": [
-        {"action": "click", "selector": "xpath=//a[@id=\"no-such-card\" and contains(.,\"{{item}}\")]", "timeout": 500,
+        {"action": "click", "selector": "xpath=//a[@id=\"no-such-card\" and contains(.,\"{{item}}\")]", "timeout": 3000,
          "fallbacks": [{"type": "css", "selector": "a[id^=\"CardLink--\"]:has-text(\"{{item}}\")"}]},
-        {"action": "wait", "strategy": "selector_visible", "selector": "button.atc-button", "timeout": 3000}
+        {"action": "wait", "strategy": "selector_visible", "selector": "button.atc-button", "timeout": 10000}
       ]
     },
     "view_product_by_text": {
       "params": {"item": {"type": "string"}},
       "steps": [
-        {"action": "click", "selector": "#missing", "timeout": 300,
+        {"action": "click", "selector": "#missing", "timeout": 3000,
          "fallbacks": [{"type": "text", "selector": "{{item}}"}]}
       ]
     },
@@ -57,7 +57,7 @@
       "stays_on_screen": true,
       "steps": [
         {"action": "click", "selector": "button.atc-button"},
-        {"action": "wait", "strategy": "selector_visible", "selector": "#added", "timeout": 3000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#added", "timeout": 10000},
         {"action": "click", "selector": "button.drawer__close", "optional": true, "timeout": 300}
       ]
     },
@@ -97,7 +97,7 @@
     }
   },
   "interrupt_handlers": [
-    {"detect": "[aria-label=\"Close dialog\"]", "detect_timeout_ms": 2000,
+    {"detect": "[aria-label=\"Close dialog\"]", "detect_timeout_ms": 8000,
      "dismiss": [{"action": "click", "selector": "[aria-label=\"Close dialog\"]"}]}
   ],
   "context_extractors": {

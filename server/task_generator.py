@@ -3,7 +3,8 @@ task_generator.py — Generates benchmark tasks for browser automation agents.
 
 Functions:
   extract_metadata(html, url) -> dict
-  validate_url(url) -> bool
+  validate_url(url) -> bool           (blocking DNS lookup)
+  check_url(url) -> None              (async; raises ValueError saying why a URL is refused)
   generate_tasks(metadata) -> list[dict]
   fetch_and_generate(url) -> list[dict]
 """
@@ -177,54 +178,86 @@ def extract_metadata(html: str, url: str) -> dict:
     }
 
 
-def validate_url(url: str) -> bool:
-    """Validate URL scheme and block private/internal IPs (including via DNS resolution)."""
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _url_host(url: str) -> str | None:
+    """The host of an http(s) URL that is worth resolving, or None if the URL is not allowed.
+
+    Rejects other schemes, a missing host, and the host names that are internal by name.
+    """
     try:
         parsed = urlparse(url)
     except Exception:
-        return False
-
+        return None
     if parsed.scheme not in ("http", "https"):
-        return False
-
+        return None
     hostname = parsed.hostname
     if not hostname:
-        return False
-
+        return None
     # Block obviously dangerous hostnames
     if hostname in ("localhost", "metadata.google.internal"):
-        return False
+        return None
+    return hostname
 
-    # Resolve hostname to IPs and check all of them
-    try:
-        addrinfo = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        return False  # Can't resolve — reject
 
-    private_networks = [
-        ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("10.0.0.0/8"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("192.168.0.0/16"),
-        ipaddress.ip_network("169.254.0.0/16"),
-        ipaddress.ip_network("100.64.0.0/10"),
-        ipaddress.ip_network("0.0.0.0/8"),
-        ipaddress.ip_network("::1/128"),
-        ipaddress.ip_network("fc00::/7"),
-        ipaddress.ip_network("fe80::/10"),
-    ]
-
+def _resolves_to_public_addresses(addrinfo) -> bool:
+    """False if any resolved address is private, loopback, link-local or otherwise internal."""
     for info in addrinfo:
         addr = info[4][0]
         try:
             ip = ipaddress.ip_address(addr)
-            for network in private_networks:
-                if ip in network:
-                    return False
         except ValueError:
             continue
-
+        if any(ip in network for network in _PRIVATE_NETWORKS):
+            return False
     return True
+
+
+def validate_url(url: str) -> bool:
+    """Validate URL scheme and block private/internal IPs (including via DNS resolution).
+
+    Blocking: the DNS lookup runs on the calling thread. Async code uses ``check_url``.
+    """
+    hostname = _url_host(url)
+    if hostname is None:
+        return False
+    # Resolve hostname to IPs and check all of them
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, UnicodeError):
+        return False  # Can't resolve — reject
+    return _resolves_to_public_addresses(addrinfo)
+
+
+async def check_url(url: str) -> None:
+    """Raise ValueError unless ``url`` is an http(s) URL on a public host.
+
+    The same rules as ``validate_url``, with the DNS lookup off the event loop and a
+    message that says why: "Could not resolve this host: ..." when the host name has no
+    address (a typo or a dead domain), "Invalid or disallowed URL: ..." for everything
+    the SSRF guard blocks.
+    """
+    hostname = _url_host(url)
+    if hostname is None:
+        raise ValueError(f"Invalid or disallowed URL: {url}")
+    try:
+        addrinfo = await asyncio.get_running_loop().getaddrinfo(hostname, None)
+    except (socket.gaierror, UnicodeError):
+        raise ValueError(f"Could not resolve this host: {hostname}") from None
+    if not _resolves_to_public_addresses(addrinfo):
+        raise ValueError(f"Invalid or disallowed URL: {url}")
 
 
 # Domains that are obviously not commerce sites
@@ -408,11 +441,11 @@ async def fetch_and_generate(url: str) -> list[dict]:
     Content-Type is text/html, extracts metadata, and calls generate_tasks.
 
     Raises:
-        ValueError: for invalid URL or non-HTML content type.
+        ValueError: for an invalid or disallowed URL, a host name that does not resolve,
+            or non-HTML content type.
         ConnectionError: for fetch failures (network errors, bad status codes).
     """
-    if not validate_url(url):
-        raise ValueError(f"Invalid or disallowed URL: {url}")
+    await check_url(url)
 
     domain = _get_domain(url)
 

@@ -1,5 +1,10 @@
 import asyncio
+import os
+import subprocess
+import sys
+import textwrap
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -360,7 +365,7 @@ def test_clerk_mode_requires_a_token_on_start_quota_and_generate_tasks(clerk_mod
     assert client.post("/benchmark/generate-tasks", json={"url": "https://example.com"}).status_code == 401
 
 
-@patch("server.verify_clerk_jwt", return_value={"sub": "user_abc", "email": "someone@rindler.ai"})
+@patch("server.verify_clerk_jwt", return_value={"sub": "user_abc", "email": "someone@example.invalid"})
 def test_clerk_mode_uses_the_token_subject_as_the_user(mock_verify, clerk_mode):
     with patch("server.run_benchmark", side_effect=_fake_run_done):
         resp = client.post("/benchmark/start", json=START, headers={"Authorization": "Bearer t"})
@@ -375,9 +380,9 @@ def test_clerk_mode_failed_verification_is_401_without_details(mock_verify, cler
     assert "signature" not in resp.text
 
 
-@patch("server.verify_clerk_jwt", return_value={"sub": "user_abc", "email": "someone@rindler.ai"})
+@patch("server.verify_clerk_jwt", return_value={"sub": "user_abc", "email": "someone@example.invalid"})
 def test_there_is_no_admin_bypass(mock_verify, clerk_mode, monkeypatch):
-    """An @rindler.ai email in the token buys nothing: the quota applies to everyone."""
+    """No email in the token buys anything: the quota applies to everyone."""
     assert not hasattr(server_module, "ADMIN_EMAILS")
     monkeypatch.setenv("DAILY_RUN_QUOTA", "1")
     headers = {"Authorization": "Bearer t"}
@@ -547,6 +552,80 @@ def test_startup_fails_fast_without_an_anthropic_key(no_keys):
     assert "DEMO_MODE=true" in message  # the way out is in the message
 
 
+SERVER_DIR = Path(__file__).resolve().parent.parent
+
+
+async def _run_lifespan(application):
+    """Drive the ASGI lifespan the way uvicorn does; returns (messages sent, exception raised)."""
+    sent = []
+    inbox = asyncio.Queue()
+    await inbox.put({"type": "lifespan.startup"})
+
+    async def receive():
+        return await inbox.get()
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}, "state": {}}
+    try:
+        await application(scope, receive, send)
+    except BaseException as exc:  # noqa: BLE001 - the test inspects it
+        return sent, exc
+    return sent, None
+
+
+async def test_a_failed_startup_reports_only_the_reason_to_uvicorn(no_keys):
+    sent, exc = await _run_lifespan(app)
+
+    assert isinstance(exc, server_module.ConfigError)  # the server still does not come up
+    assert [m["type"] for m in sent] == ["lifespan.startup.failed"]
+    message = sent[0]["message"]
+    assert message == str(exc)
+    assert "ANTHROPIC_API_KEY" in message and "DEMO_MODE=true" in message
+    assert "Traceback" not in message and "\n" not in message
+
+
+async def test_a_good_startup_is_untouched_by_the_error_reporting(configured):
+    inbox = asyncio.Queue()
+    sent = []
+    await inbox.put({"type": "lifespan.startup"})
+    await inbox.put({"type": "lifespan.shutdown"})
+
+    async def receive():
+        return await inbox.get()
+
+    async def send(message):
+        sent.append(message["type"])
+
+    await app({"type": "lifespan", "asgi": {"version": "3.0"}, "state": {}}, receive, send)
+    assert sent == ["lifespan.startup.complete", "lifespan.shutdown.complete"]
+
+
+def _child_env(**extra):
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}
+    # Set to empty rather than removed, so that a developer's .env cannot fill them in again.
+    env.update(ANTHROPIC_API_KEY="", ANTHROPIC_AUTH_TOKEN="", OPENAI_API_KEY="", DEMO_MODE="")
+    env.update(LLM_PROVIDER="anthropic", AUTH_MODE="none")
+    env.update(extra)
+    return env
+
+
+def test_uvicorn_without_a_key_prints_one_clear_line_and_exits_non_zero():
+    """The real thing: start uvicorn on the app with no key (this is what 'make dev' does)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1", "--port", "0"],
+        cwd=SERVER_DIR, env=_child_env(), capture_output=True, text=True, timeout=120,
+    )
+    log = result.stdout + result.stderr
+    assert result.returncode == 3, log
+    assert "ANTHROPIC_API_KEY is not set" in log
+    assert "DEMO_MODE=true" in log
+    assert "Traceback" not in log
+    assert "Application startup failed. Exiting." in log
+    assert len([line for line in log.splitlines() if "ANTHROPIC_API_KEY" in line]) == 1
+
+
 def test_startup_succeeds_with_a_key(no_keys, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
     with TestClient(app) as c:
@@ -624,6 +703,63 @@ def test_missing_chromium_warns_but_does_not_stop_the_server(configured, monkeyp
 
 
 # ---------------------------------------------------------------------------
+# Logging starts with the server
+# ---------------------------------------------------------------------------
+
+
+def test_the_first_task_generation_cost_line_reaches_the_server_log():
+    """Before the first run imports browser-use nothing configured logging, so this line was lost."""
+    script = textwrap.dedent(
+        """
+        import runtime_env
+        import server
+        from _pytest.monkeypatch import MonkeyPatch
+        from tests.fakes import install_fake_anthropic, text_response
+
+        install_fake_anthropic(MonkeyPatch(), text_response(
+            {"tasks": [{"label": "A", "goal": "Do A."}, {"label": "B", "goal": "Do B."}, {"label": "C", "goal": "Do C."}]}
+        ))
+        server.configure_logging()
+        import task_generator
+        task_generator.generate_tasks({"title": "Shop", "description": "", "visible_text": "", "url": "https://shop.example.com"})
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=SERVER_DIR, env=_child_env(), capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "task generation: model=claude-sonnet-5-5 cost=$" in result.stderr
+
+
+def test_without_configure_logging_that_line_is_lost():
+    """The control for the test above: it fails for the reason it claims."""
+    script = textwrap.dedent(
+        """
+        import runtime_env
+        import task_generator
+        from _pytest.monkeypatch import MonkeyPatch
+        from tests.fakes import install_fake_anthropic, text_response
+
+        install_fake_anthropic(MonkeyPatch(), text_response({"tasks": [{"label": "A", "goal": "Do A."}]}))
+        task_generator.generate_tasks({"title": "Shop", "description": "", "visible_text": "", "url": "https://shop.example.com"})
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=SERVER_DIR, env=_child_env(), capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "task generation" not in result.stderr
+
+
+def test_the_startup_runs_configure_logging(configured, monkeypatch):
+    called = []
+    monkeypatch.setattr(server_module, "configure_logging", lambda: called.append(True))
+    with TestClient(app):
+        pass
+    assert called == [True]
+
+
+# ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
 
@@ -642,6 +778,24 @@ def test_health_reports_provider_and_models(monkeypatch):
     assert body["demo_mode"] is False
 
 
+def test_health_reports_the_effective_run_time_limit(monkeypatch):
+    body = client.get("/health").json()
+    assert body["timeout_s"] == 180 and isinstance(body["timeout_s"], int)
+    assert body["demo_mode"] is False  # still there, still a bool
+    monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "45")
+    assert client.get("/health").json()["timeout_s"] == 45
+    monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "90.4")
+    assert client.get("/health").json()["timeout_s"] == 90
+    monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "0.25")
+    assert client.get("/health").json()["timeout_s"] == 1  # never 0 for a positive limit
+
+
+def test_health_has_exactly_the_documented_fields():
+    assert set(client.get("/health").json()) == {
+        "ok", "browser_provider", "provider", "models", "auth_mode", "demo_mode", "timeout_s",
+    }
+
+
 def test_health_follows_the_model_settings(monkeypatch):
     monkeypatch.setenv("BENCHMARK_AGENT_MODEL", "claude-opus-5-5")
     monkeypatch.setenv("BENCHMARK_JUDGE_MODEL", "claude-haiku-5-5")
@@ -657,9 +811,9 @@ def test_health_never_shows_keys(monkeypatch):
     secrets = {
         # Assembled from pieces so no key-shaped literal sits in the source.
         "ANTHROPIC_API_KEY": "sk-ant-" + "SECRET-anthropic-" + "0001",
-        "OPENAI_API_KEY": "sk-SECRET-openai-0002",
-        "INTERNAL_API_KEY": "SECRET-internal-0003",
-        "BROWSERBASE_API_KEY": "SECRET-bb-0004",
+        "OPENAI_API_KEY": "sk-" + "SECRET-openai-" + "0002",
+        "INTERNAL_API_KEY": "SECRET-" + "internal-" + "0003",
+        "BROWSERBASE_API_KEY": "SECRET-" + "bb-" + "0004",
     }
     for name, value in secrets.items():
         monkeypatch.setenv(name, value)
@@ -849,6 +1003,22 @@ def test_generate_tasks_bad_api_key_is_502_and_names_no_key(monkeypatch):
     resp = client.post("/benchmark/generate-tasks", json=SITE)
     assert resp.status_code == 502
     assert "SECRET" not in resp.text
+
+
+def test_generate_tasks_unresolvable_host_is_422_and_says_so(monkeypatch):
+    import socket
+
+    install_fake_anthropic(monkeypatch, text_response({"tasks": []}))
+    with patch("task_generator.socket.getaddrinfo", side_effect=socket.gaierror(8, "unknown host")):
+        resp = client.post("/benchmark/generate-tasks", json={"url": "https://no-such-shop.example/"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Could not resolve this host: no-such-shop.example"
+
+
+def test_generate_tasks_internal_address_is_422_disallowed():
+    resp = client.post("/benchmark/generate-tasks", json={"url": "http://169.254.169.254/latest/meta-data"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"].startswith("Invalid or disallowed URL")
 
 
 def test_generate_tasks_truncated_reply_is_500(monkeypatch):

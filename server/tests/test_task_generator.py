@@ -1,5 +1,6 @@
 """Tests for task_generator.py"""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ import pytest
 import llm
 from task_generator import (
     TASKS_SCHEMA,
+    check_url,
     extract_metadata,
     fetch_and_generate,
     generate_tasks,
@@ -134,6 +136,110 @@ def test_validate_url_resolves_dns():
     with patch("task_generator.socket.getaddrinfo",
                return_value=[(socket.AF_INET, None, None, None, ("127.0.0.1", 0))]):
         assert validate_url("https://evil.example.com") is False
+
+
+# check_url: the async twin of validate_url, with a reason and a lookup off the event loop
+
+PUBLIC_ADDRINFO = [(2, None, None, None, ("93.184.216.34", 0))]
+
+
+def _addrinfo(address):
+    return [(2, None, None, None, (address, 0))]
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000/admin",
+    "http://10.0.0.1",
+    "http://192.168.1.100",
+    "http://169.254.169.254/latest/meta-data",  # cloud metadata, link-local
+    "http://172.16.0.1",
+    "http://172.31.255.255",
+    "http://100.64.0.1",
+    "http://100.100.100.100",
+    "http://0.0.0.0",
+    "http://[::1]",
+    "http://[fe80::1]",
+    "http://[fc00::1]",
+    "http://localhost",
+    "http://localhost:8080",
+    "http://metadata.google.internal",
+    "ftp://example.com",
+    "file:///etc/passwd",
+    "javascript:alert(1)",
+    "",
+    "not-a-url",
+])
+async def test_check_url_keeps_blocking_what_the_ssrf_guard_blocked(url):
+    # Literal addresses are parsed, not looked up, and the internal names are refused
+    # by name, so none of these needs the network.
+    with pytest.raises(ValueError) as excinfo:
+        await check_url(url)
+    assert str(excinfo.value) == f"Invalid or disallowed URL: {url}"
+    assert validate_url(url) is False  # the blocking twin agrees
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "10.1.2.3", "192.168.0.7", "169.254.169.254", "100.64.0.9", "::1", "fd00::1"])
+async def test_check_url_blocks_a_host_that_resolves_to_an_internal_address(address):
+    with patch("task_generator.socket.getaddrinfo", return_value=_addrinfo(address)):
+        with pytest.raises(ValueError, match="Invalid or disallowed URL: https://evil.example.com"):
+            await check_url("https://evil.example.com")
+
+
+async def test_check_url_blocks_a_host_when_any_one_address_is_internal():
+    mixed = PUBLIC_ADDRINFO + _addrinfo("10.0.0.5")
+    with patch("task_generator.socket.getaddrinfo", return_value=mixed):
+        with pytest.raises(ValueError, match="disallowed"):
+            await check_url("https://rebinding.example.com")
+
+
+async def test_check_url_allows_a_public_host():
+    with patch("task_generator.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO):
+        assert await check_url("https://www.example.com/shop?q=1") is None
+
+
+async def test_check_url_says_when_a_host_does_not_resolve():
+    import socket
+
+    with patch("task_generator.socket.getaddrinfo", side_effect=socket.gaierror(8, "nodename nor servname provided")):
+        with pytest.raises(ValueError) as excinfo:
+            await check_url("https://no-such-shop.example/products")
+    assert str(excinfo.value) == "Could not resolve this host: no-such-shop.example"
+    assert "disallowed" not in str(excinfo.value)
+
+
+async def test_check_url_treats_an_unencodable_host_name_as_unresolvable():
+    with pytest.raises(ValueError, match="Could not resolve this host"):
+        await check_url("http://bad..name.example/")
+
+
+async def test_check_url_does_not_block_the_event_loop():
+    """The DNS lookup is blocking; it must run off the loop so other requests keep moving."""
+    import threading
+    import time
+
+    seen = {}
+
+    def slow_lookup(host, port, *args, **kwargs):
+        seen["thread"] = threading.current_thread()
+        time.sleep(0.4)
+        return PUBLIC_ADDRINFO
+
+    ticks = []
+
+    async def ticker():
+        while True:
+            ticks.append(1)
+            await asyncio.sleep(0.02)
+
+    watcher = asyncio.create_task(ticker())
+    try:
+        with patch("task_generator.socket.getaddrinfo", slow_lookup):
+            await check_url("https://slow-dns.example.com")
+    finally:
+        watcher.cancel()
+    assert seen["thread"] is not threading.main_thread()
+    assert len(ticks) > 8  # ~0.4 s of lookup at 20 ms ticks
 
 
 def test_validate_url_rejects_non_http():
@@ -321,7 +427,7 @@ async def test_fetch_and_generate_full_flow(monkeypatch):
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.check_url"),
         patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
     ):
         tasks = await fetch_and_generate("https://acme.com")
@@ -340,6 +446,24 @@ async def test_fetch_and_generate_invalid_url():
 
 
 @pytest.mark.asyncio
+async def test_fetch_and_generate_says_when_the_host_does_not_resolve():
+    import socket
+
+    with patch("task_generator.socket.getaddrinfo", side_effect=socket.gaierror(8, "unknown host")):
+        with pytest.raises(ValueError, match="Could not resolve this host: nope.example"):
+            await fetch_and_generate("https://nope.example/")
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_checks_the_host_of_a_known_shop_too(monkeypatch):
+    """A known commerce domain skips the page fetch, not the address check."""
+    install_fake_anthropic(monkeypatch, text_response(_tasks_payload([{"label": "A", "goal": "Do A."}])))
+    with patch("task_generator.socket.getaddrinfo", return_value=_addrinfo("10.0.0.8")):
+        with pytest.raises(ValueError, match="Invalid or disallowed URL"):
+            await fetch_and_generate("https://www.target.com")
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_generate_non_html_content_type():
     mock_http_response = AsyncMock()
     mock_http_response.status = 200
@@ -353,7 +477,7 @@ async def test_fetch_and_generate_non_html_content_type():
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.check_url"),
         patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
     ):
         with pytest.raises(ValueError, match="did not return HTML"):
@@ -374,7 +498,7 @@ async def test_fetch_and_generate_http_error():
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.check_url"),
         patch("task_generator.aiohttp.ClientSession", return_value=mock_session),
     ):
         with pytest.raises(ConnectionError, match="HTTP 404"):
@@ -387,7 +511,7 @@ async def test_fetch_and_generate_known_commerce_domain_skips_the_fetch(monkeypa
     raw_tasks = [{"label": "A", "goal": "Do A."}]
     calls = install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
     with (
-        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.check_url"),
         patch("task_generator.aiohttp.ClientSession", side_effect=AssertionError("must not fetch")),
     ):
         tasks = await fetch_and_generate("https://www.target.com")
@@ -407,7 +531,7 @@ async def test_fetch_and_generate_keeps_the_event_loop_free(monkeypatch):
         return [{"id": 1, "label": "A", "goal": "Do A."}]
 
     with (
-        patch("task_generator.validate_url", return_value=True),
+        patch("task_generator.check_url"),
         patch("task_generator.generate_tasks", fake_generate),
     ):
         await fetch_and_generate("https://www.target.com")

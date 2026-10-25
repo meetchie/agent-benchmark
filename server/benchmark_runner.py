@@ -27,6 +27,8 @@ import llm
 DEFAULT_TIMEOUT_S = 180.0
 # The judge is one short model call; a hung connection must not leave the run "analyzing".
 _JUDGE_TIMEOUT_S = 120.0
+# Reading the token counters of a stopped agent is local bookkeeping; this only guards a hang.
+_USAGE_READ_TIMEOUT_S = 5.0
 
 
 def get_agent_timeout() -> float:
@@ -110,6 +112,9 @@ class RunState:
     result_state: str = ""  # "pass" | "fail" | "too_slow" | "error"
     total_ms: int = 0
     message: str = ""
+    # Token counts of the agent run. input_tokens is browser-use's prompt total (cache
+    # reads included, cache writes not), output_tokens its completion total, and
+    # total_tokens everything billed: input_tokens + cache_write_tokens + output_tokens.
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
@@ -125,17 +130,20 @@ class RunState:
         """Take the agent's token usage from a browser-use UsageSummary.
 
         ``input_tokens`` keeps browser-use's meaning (all prompt tokens, cache reads
-        included). ``cost_usd`` prices the cached part at the cache rates and is None
-        when ``agent_model`` has no known price or there is no usage to price.
+        included, cache writes not) and ``output_tokens`` is its completion total.
+        ``total_tokens`` counts every token that was billed: ``input_tokens`` plus the
+        cache writes plus ``output_tokens`` (browser-use's own ``total_tokens`` leaves the
+        cache writes out). ``cost_usd`` prices the cached parts at the cache rates and is
+        None when ``agent_model`` has no known price or there is no usage to price.
         """
         if summary is None:
             return
         usage = llm.usage_from_browser_use(summary)
         self.input_tokens = getattr(summary, "total_prompt_tokens", 0) or 0
         self.output_tokens = getattr(summary, "total_completion_tokens", 0) or 0
-        self.total_tokens = getattr(summary, "total_tokens", 0) or 0
         self.cache_read_tokens = usage.cache_read_input_tokens
         self.cache_write_tokens = usage.cache_creation_input_tokens
+        self.total_tokens = usage.total_tokens
         self.cost_usd = usage.cost_usd(self.agent_model)
 
     def to_dict(self) -> dict:
@@ -143,7 +151,9 @@ class RunState:
 
         Once the agent has finished (``analyzing`` and ``complete``) the payload carries
         the token counts plus ``cost_usd`` (US dollars for the agent's tokens at
-        ``agent_model``'s rates, null when unknown) and ``agent_model`` (model id).
+        ``agent_model``'s rates, null when unknown) and ``agent_model`` (model id). An
+        ``error`` payload carries the same fields when the agent had already used tokens
+        (a cancelled run), and none when it had not.
         """
         steps_data = []
         for i, step in enumerate(self.steps):
@@ -179,11 +189,23 @@ class RunState:
                 "phases": self.phases,
             }
         else:
-            return {
+            payload = {
                 "status": "error",
                 "message": self.message,
                 "steps": steps_data,
             }
+            if self.total_tokens or self.cost_usd is not None:
+                # The agent ran (and was billed) before the run ended, for example a
+                # cancelled run: report what it used.
+                payload.update(
+                    total_ms=self.total_ms,
+                    input_tokens=self.input_tokens,
+                    output_tokens=self.output_tokens,
+                    total_tokens=self.total_tokens,
+                    cost_usd=self.cost_usd,
+                    agent_model=self.agent_model,
+                )
+            return payload
 
     # Older name for to_dict(), kept for callers that still use it.
     to_response = to_dict
@@ -197,60 +219,146 @@ def _default_agent_model() -> str:
         return ""
 
 
-def _format_action(agent) -> str:
-    """Extract a human-readable description of the last agent action.
+_MAX_DESCRIPTION_CHARS = 200
 
-    Uses the agent's own 'next_goal' from its model output for rich descriptions
-    like 'Click on the Menu link' instead of just 'Clicking element'.
-    Falls back to action type if model output isn't available.
+
+def _clip(text: object, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def _element_label(element) -> str:
+    """A human label for the page element an action touched (aria-label, placeholder, ...)."""
+    attrs = getattr(element, "attributes", None) or {}
+    if not isinstance(attrs, dict):
+        return ""
+    for key in ("aria-label", "placeholder", "title", "alt", "name"):
+        value = attrs.get(key)
+        if value:
+            return _clip(value, 60)
+    return ""
+
+
+def _field_name(index, element) -> str:
+    """'the search box', 'the "Email" field', or 'element 12' for a field the agent typed into."""
+    attrs = (getattr(element, "attributes", None) or {}) if element is not None else {}
+    label = _element_label(element)
+    if (isinstance(attrs, dict) and str(attrs.get("type", "")).lower() == "search") or "search" in label.lower():
+        return "the search box"
+    if label:
+        return f'the "{label}" field'
+    return f"element {index}" if index is not None else "the field"
+
+
+def _describe_action(name: str, params, element=None) -> str:
+    """One browser-use action in plain words, for a step whose model gave no goal text."""
+    p = params if isinstance(params, dict) else {}
+    index = p.get("index")
+    if name == "navigate":
+        where = _clip(p.get("url", ""), 80)
+        return f"Open {where} in a new tab" if p.get("new_tab") else f"Open {where}"
+    if name == "search":
+        return f'Search {p.get("engine") or "the web"} for "{_clip(p.get("query", ""), 60)}"'
+    if name == "go_back":
+        return "Go back"
+    if name == "wait":
+        return f'Wait {p.get("seconds", 3)} seconds'
+    if name == "click":
+        if index is not None:
+            label = _element_label(element)
+            return f'Click element {index} ("{label}")' if label else f"Click element {index}"
+        if p.get("coordinate_x") is not None and p.get("coordinate_y") is not None:
+            return f'Click at ({p["coordinate_x"]}, {p["coordinate_y"]})'
+        return "Click an element"
+    if name == "input":
+        text = p.get("text", "")
+        if text == "":
+            return f"Clear {_field_name(index, element)}"
+        return f"Type '{_clip(text, 50)}' into {_field_name(index, element)}"
+    if name == "upload_file":
+        return "Upload a file"
+    if name == "switch":
+        return "Switch to another tab"
+    if name == "close":
+        return "Close a tab"
+    if name == "extract":
+        query = _clip(p.get("query", ""), 60)
+        return f"Read the page for: {query}" if query else "Read the page content"
+    if name == "search_page":
+        return f'Search the page for "{_clip(p.get("pattern", ""), 60)}"'
+    if name == "find_elements":
+        return f'Look for elements matching {_clip(p.get("selector", ""), 60)}'
+    if name == "scroll":
+        direction = "down" if p.get("down", True) else "up"
+        pages = p.get("pages", 1.0)
+        where = f" in element {index}" if index is not None else ""
+        if isinstance(pages, (int, float)) and pages >= 10:
+            return f"Scroll to the {'bottom' if direction == 'down' else 'top'}{where}"
+        if pages == 0.5:
+            return f"Scroll {direction} half a page{where}"
+        return f"Scroll {direction}{where}"
+    if name == "send_keys":
+        return f"Press {_clip(p.get('keys', ''), 40)}"
+    if name == "find_text":
+        return f'Scroll to the text "{_clip(p.get("text", ""), 60)}"'
+    if name == "screenshot":
+        return "Take a screenshot"
+    if name == "save_as_pdf":
+        return "Save the page as a PDF"
+    if name == "dropdown_options":
+        return f"Read the options of dropdown element {index}"
+    if name == "select_dropdown":
+        return f'Select "{_clip(p.get("text", ""), 60)}" in dropdown element {index}'
+    if name == "write_file":
+        return "Write a file"
+    if name == "replace_file":
+        return "Edit a file"
+    if name == "read_file":
+        return "Read a file"
+    if name == "evaluate":
+        return "Run a script on the page"
+    if name == "done":
+        text = p.get("text", "") if isinstance(params, dict) else params
+        return f"Done: {_clip(text, 80)}"
+    return name.replace("_", " ").capitalize()
+
+
+def _step_actions(history_item) -> list[tuple[str, object, object]]:
+    """(action name, parameters, touched element) for each action of one history step."""
+    mo = getattr(history_item, "model_output", None)
+    actions = list(getattr(mo, "action", None) or [])
+    state = getattr(history_item, "state", None)
+    elements = list(getattr(state, "interacted_element", None) or [])
+    steps = []
+    for i, action in enumerate(actions):
+        dumped = action.model_dump(exclude_none=True, mode="json") if hasattr(action, "model_dump") else action
+        if not isinstance(dumped, dict) or not dumped:
+            continue
+        name = next(iter(dumped))
+        steps.append((name, dumped[name], elements[i] if i < len(elements) else None))
+    return steps
+
+
+def _format_action(agent) -> str:
+    """Describe the step the agent just finished, in a few plain words.
+
+    The agent's own 'next_goal' ("Click on the Menu link") is the best description. Some
+    steps have none (the model left it empty and only chose actions); those are described
+    from their actions instead, for example "Run a script on the page" or
+    "Type 'top' into the search box".
     """
     try:
-        # Try to get the rich description from the agent's model output
         if agent.history.history:
             last_item = agent.history.history[-1]
-            if hasattr(last_item, 'model_output') and last_item.model_output:
-                mo = last_item.model_output
-                # next_goal is the best description of what the agent is doing
-                goal = getattr(mo, 'next_goal', '')
-                if goal:
-                    return str(goal)
-
-        # Fallback: format from raw action data
-        actions = agent.history.model_actions()
-        if not actions:
-            return "Processing..."
-        last = actions[-1]
-        if isinstance(last, dict):
-            action_type = list(last.keys())[0] if last else "action"
-            action_data = last.get(action_type, {})
-            el = last.get("interacted_element")
-
-            if action_type in ("go_to_url", "navigate"):
-                url = action_data.get("url", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Navigating to {url[:80]}"
-            elif action_type in ("click_element", "click"):
-                # Try to get element info
-                if el and hasattr(el, 'node_name'):
-                    tag = getattr(el, 'node_name', '').lower()
-                    attrs = getattr(el, 'attributes', {}) or {}
-                    label = attrs.get('aria-label', '') or attrs.get('title', '') or attrs.get('alt', '')
-                    if label:
-                        return f"Clicking {tag} \"{label[:60]}\""
-                    return f"Clicking <{tag}> element"
-                return "Clicking element"
-            elif action_type in ("input_text", "type"):
-                text = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Typing: \"{str(text)[:50]}\""
-            elif action_type == "scroll":
-                direction = action_data.get("direction", "down") if isinstance(action_data, dict) else "down"
-                return f"Scrolling {direction}"
-            elif action_type == "extract_content":
-                return "Reading page content"
-            elif action_type == "done":
-                result = action_data.get("text", "") if isinstance(action_data, dict) else str(action_data)
-                return f"Done: {str(result)[:80]}"
-            else:
-                return f"{action_type.replace('_', ' ').capitalize()}"
+            mo = getattr(last_item, "model_output", None)
+            goal = getattr(mo, "next_goal", "") if mo else ""
+            if goal and str(goal).strip():
+                return str(goal)
+            parts = [_describe_action(*a) for a in _step_actions(last_item)]
+            if parts:
+                # "Click element 3, then press Enter"
+                text = ", then ".join([parts[0]] + [p[:1].lower() + p[1:] for p in parts[1:]])
+                return _clip(text, _MAX_DESCRIPTION_CHARS)
     except Exception as e:
         logging.debug(f"_format_action failed: {e}")
     return "Processing..."
@@ -362,6 +470,23 @@ def _error_message(exc: BaseException) -> str:
     return "The run encountered an error."
 
 
+async def _record_agent_usage(state: "RunState", agent, shielded: bool = False) -> None:
+    """Put the agent's token usage so far on the run state (after a timeout or a cancel).
+
+    The usage comes from the agent's token cost service, which counts every model call
+    the agent has made, finished or not. ``shielded`` keeps the read going when the
+    surrounding task is being cancelled. Never raises: a run without usage is better
+    than a run that cannot be saved.
+    """
+    try:
+        read = agent.token_cost_service.get_usage_summary()
+        if shielded:
+            read = asyncio.wait_for(asyncio.shield(asyncio.ensure_future(read)), timeout=_USAGE_READ_TIMEOUT_S)
+        state.record_usage(await read)
+    except Exception as e:
+        logging.debug(f"Token usage extraction failed: {type(e).__name__}: {e}")
+
+
 async def _persist_result(state: "RunState") -> None:
     """Write the run's final state to its run file (see persistence.py)."""
     if not state.persisted_run_id:
@@ -440,6 +565,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         )
 
     timed_out = False
+    agent = None     # The browser-use Agent, once it exists (its token usage is read on cancel)
     bb = None        # Browserbase client (for session cleanup in finally)
     bb_session = None
     profile = None   # Browser profile (its temp dirs are removed in finally)
@@ -524,11 +650,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         except asyncio.TimeoutError:
             timed_out = True
             logging.info("Agent timed out after %ss", agent_timeout)
-            # Extract token usage from the agent's token cost service
-            try:
-                state.record_usage(await agent.token_cost_service.get_usage_summary())
-            except Exception as e:
-                logging.debug(f"Token usage extraction on timeout failed: {e}")
+            await _record_agent_usage(state, agent)
 
         # --- Agent finished or timed out — always run the judge ---
         state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
@@ -561,6 +683,12 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.status = "error"
         state.message = state.message or "Run cancelled by user."
         state.result_state = "error"
+        # The agent's calls so far were billed, so the run keeps its time and usage. The
+        # agent has stopped by now; reading its counters must not be cut short by the
+        # cancellation that brought us here.
+        state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+        if agent is not None:
+            await _record_agent_usage(state, agent, shielded=True)
         raise
     except Exception as e:
         logging.error("Benchmark run failed: %s: %s", type(e).__name__, e, exc_info=True)
