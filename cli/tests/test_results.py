@@ -168,6 +168,30 @@ def test_the_comparison_chart_scores_both_arms_not_only_rindler():
     assert rows["Cost per task"]["browseruse_raw"] == "$0.4000" and rows["Steps per task"]["rindler_raw"] == "3.0"
 
 
+def test_the_token_chart_legend_keys_the_shades_of_both_arms():
+    """A plain legend takes its colours from the first bar of each series, which is BrowserUse's, so
+    Rindler's two shades had no key. Every shade drawn on the chart has one now."""
+    from visualize import token_usage_figure  # sets the non-interactive backend before pyplot loads
+    import matplotlib.pyplot as plt
+
+    bu = [make_record(t, agent="browseruse", verdict="fail", steps=9, cost=0.4) for t in TASKS]
+    ri = [make_record(t, agent="rindler", verdict="pass", steps=3, cost=0.04) for t in TASKS]
+    summary = results.build_summary("shop", "d", TASKS, bu, ri, model="m", judge_model="m")
+
+    fig = token_usage_figure(summary)
+    try:
+        ax = fig.axes[0]
+        legend = ax.get_legend()
+        assert [t.get_text() for t in legend.get_texts()] == [
+            "BrowserUse input tokens", "BrowserUse output tokens", "Rindler input tokens", "Rindler output tokens"]
+        keys = [tuple(h.get_facecolor()) for h in legend.legend_handles]
+        drawn = [tuple(p.get_facecolor()) for p in ax.patches]
+        assert len(set(keys)) == 4                  # four different shades, none repeated
+        assert set(keys) == set(drawn)              # and they are the shades the bars use
+    finally:
+        plt.close(fig)
+
+
 def test_visualize_draws_every_chart_from_the_new_summary(tmp_path):
     """visualize.py reads summary.json; run it for real on a two-arm and a one-arm summary."""
     from pathlib import Path

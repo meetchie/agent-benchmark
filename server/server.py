@@ -45,7 +45,7 @@ from pydantic import BaseModel, field_validator
 import llm
 import persistence
 from benchmark_runner import RunState, get_agent_timeout, run_benchmark
-from task_generator import fetch_and_generate
+from task_generator import check_url, fetch_and_generate
 from clerk_auth import verify_clerk_jwt
 
 logger = logging.getLogger(__name__)
@@ -401,11 +401,6 @@ async def health():
     }
 
 
-def _model_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    from constants import cost_usd
-    return cost_usd(model, input_tokens, output_tokens)
-
-
 async def _demo_run(state: RunState, url: str, goal: str):
     """Simulate a benchmark run with fake steps for UI testing."""
     import asyncio as _aio
@@ -445,7 +440,8 @@ async def _demo_run(state: RunState, url: str, goal: str):
     state.input_tokens = random.randint(8000, 25000)
     state.output_tokens = random.randint(500, 3000)
     state.total_tokens = state.input_tokens + state.output_tokens
-    state.cost_usd = _model_cost(state.agent_model, state.input_tokens, state.output_tokens)
+    # The tokens are made up and no model was called, so no dollar figure: the UI shows tokens only.
+    state.cost_usd = None
 
     # Simulate the judge's analysis delay
     await _aio.sleep(2.0)
@@ -471,6 +467,15 @@ async def _demo_run(state: RunState, url: str, goal: str):
 @app.post("/benchmark/start")
 async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_current_user), _: None = Depends(verify_internal_key)):
     user_id = user["user_id"]
+
+    # Same rules and messages as generate-tasks: a public http(s) site only, never this machine
+    # or an internal address. Checked before the run is counted, so there is no await between
+    # the concurrency check and the count. A demo run opens nothing, so there is nothing to guard.
+    if not _check_demo_mode():
+        try:
+            await check_url(req.url)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
 
     active = _active_runs.get(user_id, 0)
     max_active = max_concurrent_runs()
@@ -596,8 +601,8 @@ async def generate_tasks_endpoint(
         domain = req.url.split("//")[-1].split("/")[0].replace("www.", "")
         return {"tasks": [
             {"id": 1, "label": f"Add a specific item to cart on {domain}", "goal": f"Go to {domain}.\nSearch for a popular product using the search bar.\nClick on the first result.\nSelect the default size and color options if applicable.\nClick 'Add to Cart' or 'Add to Bag'.\nVERIFY: Look for a cart icon badge showing '1', or a confirmation message."},
-            {"id": 2, "label": f"Set address and add customized item on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036. Wait for autocomplete dropdown and select the first suggestion.\nBrowse to a product category or menu section.\nSelect a specific item and customize it (choose size, select options, set quantity to 2).\nClick 'Add to Cart' or 'Add to Order'.\nVERIFY: Cart shows the item with correct customizations and quantity of 2."},
-            {"id": 3, "label": f"Add two different items to cart on {domain}", "goal": f"Set delivery address to 1 Times Square, New York, NY 10036. Select the first autocomplete suggestion.\nBrowse to a product section. Select the first item and add it to cart.\nGo back to browsing. Find a different product in a different category.\nAdd the second item to cart.\nVERIFY: Go to cart. Confirm it shows 2 distinct items. Both should have correct names and quantities."},
+            {"id": 2, "label": f"Add an item in a chosen size or colour on {domain}", "goal": f"Go to {domain}.\nSearch for a popular product using the search bar.\nClick on the first result.\nChoose a size or colour other than the default.\nClick 'Add to Cart' or 'Add to Bag'.\nVERIFY: The cart shows the item with the size or colour that was chosen."},
+            {"id": 3, "label": f"Add an item and check the cart total on {domain}", "goal": f"Go to {domain}.\nSearch for a popular product using the search bar.\nClick on the first result and add it to the cart.\nOpen the cart.\nVERIFY: The cart lists the item once and shows a total that matches the item's price."},
         ]}
     try:
         # Run in a task so it can be cancelled if the client disconnects

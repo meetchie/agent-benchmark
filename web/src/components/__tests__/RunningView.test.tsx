@@ -60,6 +60,63 @@ describe("RunningView", () => {
     expect(spinners.length).toBeGreaterThan(0);
   });
 
+  describe("screenshot pane without a screenshot", () => {
+    const NOTE = "No screenshot for this run";
+
+    it("keeps the spinner and no note while the agent is working", () => {
+      render(<RunningView {...defaultProps} />);
+      expect(document.querySelectorAll(".animate-spin").length).toBeGreaterThan(0);
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    });
+
+    it("shows a calm note, not a spinner, once the run is complete", () => {
+      render(<RunningView {...defaultProps} isRunning={false} summary={makeSummary()} steps={[makeStep(1)]} />);
+      // Desktop and mobile each have a screenshot pane.
+      expect(screen.getAllByText(NOTE)).toHaveLength(2);
+      expect(document.querySelectorAll(".animate-spin")).toHaveLength(0);
+    });
+
+    it("shows the note, not a spinner, while the judge is analyzing", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          isAnalyzing
+          analyzingStats={{ total_ms: 4000, input_tokens: 5000, output_tokens: 500, total_tokens: 5500, cost_usd: null }}
+          steps={[makeStep(1)]}
+        />
+      );
+      expect(screen.getAllByText(NOTE)).toHaveLength(2);
+      expect(document.querySelectorAll(".animate-spin")).toHaveLength(0);
+    });
+
+    it("shows the note, not a spinner, when the run ended in an error", () => {
+      render(<RunningView {...defaultProps} isRunning={false} errorMsg="Something went wrong" />);
+      expect(screen.getAllByText(NOTE)).toHaveLength(2);
+      expect(document.querySelectorAll(".animate-spin")).toHaveLength(0);
+    });
+
+    it("shows the note in a finished demo run too", () => {
+      render(<RunningView {...defaultProps} demoMode isRunning={false} summary={makeSummary()} steps={[makeStep(1)]} />);
+      expect(screen.getAllByText(NOTE)).toHaveLength(2);
+      expect(document.querySelectorAll(".animate-spin")).toHaveLength(0);
+    });
+
+    it("shows the picture, and no note, when there is a screenshot", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          summary={makeSummary()}
+          steps={[makeStep(1)]}
+          screenshot="data:image/png;base64,abc"
+        />
+      );
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+      expect(screen.getAllByAltText("Agent screenshot").length).toBeGreaterThan(0);
+    });
+  });
+
   it("shows a screenshot image when screenshot is provided", () => {
     render(<RunningView {...defaultProps} screenshot="data:image/png;base64,abc" />);
     // RunningView renders both desktop and mobile layouts, so there are two img elements.
@@ -259,6 +316,25 @@ describe("RunningView", () => {
     it("keeps the banner after the run finishes", () => {
       render(<RunningView {...defaultProps} demoMode isRunning={false} summary={makeSummary()} steps={[makeStep(1)]} />);
       expect(screen.getByTestId("demo-banner")).toBeInTheDocument();
+    });
+
+    it("shows tokens only, and says why, for a canned run with no cost", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          demoMode
+          isRunning={false}
+          summary={{ ...makeSummary(), cost_usd: null, agent_model: "claude-sonnet-5-5" }}
+          steps={[makeStep(1)]}
+        />
+      );
+      expect(screen.queryByText("Cost")).not.toBeInTheDocument();
+      expect(screen.getAllByText("10,000").length).toBeGreaterThan(0);
+      expect(document.body.textContent).not.toMatch(/\$/);
+      for (const card of screen.getAllByTestId("agent-card")) {
+        expect(card).toHaveTextContent(/no model was called/);
+        expect(card).not.toHaveTextContent(/per-token rate/);
+      }
     });
 
     it("shows no banner against a real backend", () => {

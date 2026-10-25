@@ -9,6 +9,8 @@ interface RunningHeaderProps {
   remainingRuns?: number;
   runLimit?: number;
   resetsIn?: number;
+  /** The backend plays canned runs: nothing is billed, so the dialog says nothing about tokens. */
+  demoMode?: boolean;
 }
 
 function formatResetTime(seconds: number): string {
@@ -18,7 +20,7 @@ function formatResetTime(seconds: number): string {
   return `${m}m`;
 }
 
-function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+function ConfirmLeaveModal({ onConfirm, onCancel, demoMode }: { onConfirm: () => void; onCancel: () => void; demoMode: boolean }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
@@ -32,7 +34,10 @@ function ConfirmLeaveModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
       <div className="absolute inset-0 modal-backdrop" onClick={onCancel} />
       <div className="relative max-w-[400px] w-full border-2 border-slate-200 bg-white p-8 m-4 shadow-2xl text-center">
         <p className="text-lg font-semibold text-slate-900 mb-2">Cancel this run?</p>
-        <p className="text-sm text-slate-500 mb-6">The benchmark is still running. If you leave now, you won't see the results.</p>
+        <p className="text-sm text-slate-500 mb-6">
+          The benchmark is still running. If you leave now, you won't see the results.
+          {!demoMode && " Tokens already used are still billed and kept in the run record."}
+        </p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -60,6 +65,7 @@ export function RunningHeader({
   remainingRuns,
   runLimit,
   resetsIn,
+  demoMode = false,
 }: RunningHeaderProps) {
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -138,6 +144,7 @@ export function RunningHeader({
         <ConfirmLeaveModal
           onConfirm={handleConfirmLeave}
           onCancel={() => setShowConfirm(false)}
+          demoMode={demoMode}
         />
       )}
     </>

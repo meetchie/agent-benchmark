@@ -147,6 +147,23 @@ describe("backend unreachable", () => {
     await expect(generateTasks("https://example.com", null)).rejects.toThrow("That site does not look like a store.");
   });
 
+  it("shows the sentence the backend gives for a refused URL when starting a run", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "Invalid or disallowed URL: http://127.0.0.1:8000" }), { status: 422 }))
+    );
+
+    await expect(startBenchmark("http://127.0.0.1:8000", "g", "l", null)).rejects.toThrow(
+      new Error("Invalid or disallowed URL: http://127.0.0.1:8000")
+    );
+  });
+
+  it("keeps the raw text for an error that is not a detail sentence when starting a run", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
+
+    await expect(startBenchmark("https://example.com", "g", "l", null)).rejects.toThrow("Failed to start benchmark: boom");
+  });
+
   it("treats a failed quota request as an unknown quota", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
     await expect(fetchQuota(null)).resolves.toEqual(UNKNOWN_QUOTA);

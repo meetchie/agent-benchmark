@@ -95,6 +95,14 @@ export async function startBenchmark(
     if (!text.trim() && (res.status === 500 || isBackendUnreachable(res.status))) {
       throw new Error(UNREACHABLE_MESSAGE);
     }
+    // A refused URL comes back as { detail: "..." }; show the sentence, as generate-tasks does.
+    let detail: unknown;
+    try {
+      detail = JSON.parse(text).detail;
+    } catch {
+      detail = undefined;
+    }
+    if (typeof detail === "string" && detail.trim()) throw new Error(detail);
     throw new Error(`Failed to start benchmark: ${text}`);
   }
   return res.json();

@@ -1,5 +1,8 @@
 import asyncio
+import ipaddress
 import os
+import re
+import socket
 import subprocess
 import sys
 import textwrap
@@ -40,6 +43,25 @@ def clear_runs():
     _reset_server_state()
     yield
     _reset_server_state()
+
+
+PUBLIC_ADDRINFO = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch):
+    """Every host name resolves to a public address, so no test needs the network or a working
+    resolver. Address literals still go through the real lookup (they are parsed, not queried)."""
+    real = socket.getaddrinfo
+
+    def lookup(host, *args, **kwargs):
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            return PUBLIC_ADDRINFO
+        return real(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
 
 
 @pytest.fixture
@@ -97,6 +119,60 @@ def test_start_invalid_url():
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     resp = client.post("/benchmark/start", json={"url": "not-a-url", "goal": "Test"})
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000/admin",
+    "http://localhost:8080",
+    "http://[::1]/",
+    "http://0.0.0.0",
+    "http://10.0.0.1",
+    "http://192.168.1.100",
+    "http://172.16.0.1",
+    "http://100.64.0.1",
+    "http://169.254.169.254/latest/meta-data",  # the cloud metadata address
+    "http://metadata.google.internal/computeMetadata/v1/",
+])
+def test_start_refuses_this_machine_and_internal_addresses(url):
+    """The check generate-tasks makes also guards start: a direct API call cannot aim the browser inward."""
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("server.run_benchmark", new_callable=AsyncMock) as run:
+        resp = client.post("/benchmark/start", json={"url": url, "goal": "Test"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == f"Invalid or disallowed URL: {url}"
+    run.assert_not_called()
+    assert not server_module._runs and not server_module._active_runs  # no run, no slot taken
+
+
+def test_start_refuses_a_host_that_resolves_to_an_internal_address():
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    internal = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.1.2.3", 0))]
+    with patch("task_generator.socket.getaddrinfo", return_value=internal), \
+            patch("server.run_benchmark", new_callable=AsyncMock) as run:
+        resp = client.post("/benchmark/start", json={"url": "https://rebinding.example.com", "goal": "Test"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Invalid or disallowed URL: https://rebinding.example.com"
+    run.assert_not_called()
+
+
+def test_start_says_so_when_the_host_does_not_resolve():
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("task_generator.socket.getaddrinfo", side_effect=socket.gaierror(8, "unknown host")), \
+            patch("server.run_benchmark", new_callable=AsyncMock) as run:
+        resp = client.post("/benchmark/start", json={"url": "https://no-such-shop.example/", "goal": "Test"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Could not resolve this host: no-such-shop.example"
+    run.assert_not_called()
+
+
+def test_start_accepts_a_public_url():
+    app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+    with patch("server.run_benchmark", side_effect=_fake_run_done) as run:
+        resp = client.post("/benchmark/start", json={"url": "https://www.example.com/shop?q=1", "goal": "Test"})
+    assert resp.status_code == 200
+    assert resp.json()["run_id"]
+    run.assert_called_once()
 
 
 def test_status_running():
@@ -1055,17 +1131,71 @@ def test_demo_mode_runs_the_whole_loop_without_any_key(no_keys, monkeypatch, ins
     # The phases cover every step exactly once.
     assert sorted(n for phase in body["phases"] for n in phase["steps"]) == list(range(1, 10))
     assert body["agent_model"] == "claude-sonnet-5-5"
-    assert body["cost_usd"] > 0
     assert not (tmp_path / "runs").exists()  # demo runs leave no files
 
 
-def test_demo_cost_matches_the_demo_tokens(no_keys, monkeypatch, instant_sleep):
+def test_demo_run_has_tokens_but_no_dollar_cost(no_keys, monkeypatch, instant_sleep):
+    """The tokens are made up and no model is called, so a dollar figure at real prices would be a lie."""
     monkeypatch.setenv("DEMO_MODE", "true")
     with TestClient(app) as c:
         run_id = c.post("/benchmark/start", json=START).json()["run_id"]
         body = wait_for_status(c, run_id, timeout=15)
-    expected = (body["input_tokens"] * 2.0 + body["output_tokens"] * 10.0) / 1_000_000
-    assert body["cost_usd"] == pytest.approx(expected)
+    assert body["status"] == "complete"
+    assert body["cost_usd"] is None
+    assert body["input_tokens"] > 0 and body["output_tokens"] > 0
+    assert body["total_tokens"] == body["input_tokens"] + body["output_tokens"]
+    assert body["agent_model"] == "claude-sonnet-5-5"  # everything else is still reported
+
+
+def test_demo_start_does_not_look_the_host_up(no_keys, monkeypatch, instant_sleep):
+    """A demo run opens nothing, so there is nothing for the URL check to guard (generate-tasks skips it too)."""
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: pytest.fail("demo mode must not resolve hosts"))
+    with TestClient(app) as c:
+        resp = c.post("/benchmark/start", json={**START, "url": "http://localhost:3000"})
+    assert resp.status_code == 200
+
+
+# What a line of a task can ask for, and the words of the canned step that does it.
+_CANNED_ACTIONS = [
+    (r"\bsearch", "searching for the product"),
+    (r"first result", "first matching result"),
+    (r"\b(size|colou?r|options)\b", "choosing the options"),
+    (r"add (it )?to (the )?(cart|bag)", "adding the item to the cart"),
+    (r"open the cart", "opening the cart"),
+    (r"\btotal\b", "cart total"),
+]
+# Things a canned run never does, so a canned task must not ask for them.
+_NOT_CANNED = [r"address", r"deliver", r"times square", r"\bzip\b", r"quantit", r"\btwo\b", r"\b2\b",
+               r"distinct", r"different", r"second", r"another", r"\bboth\b"]
+
+
+def test_every_canned_task_is_covered_by_the_canned_steps(no_keys, monkeypatch, instant_sleep):
+    """The demo plays one fixed list of steps whichever task is picked, and ends by saying the item was
+    added to the cart and the cart checked. A canned task asking for an address, a quantity of 2 or a
+    second item would be reported as done without any of it having happened."""
+    monkeypatch.setenv("DEMO_MODE", "true")
+    with TestClient(app) as c:
+        tasks = c.post("/benchmark/generate-tasks", json={"url": "https://example.com"}).json()["tasks"]
+        run_id = c.post("/benchmark/start", json={**START, "goal": tasks[0]["goal"]}).json()["run_id"]
+        body = wait_for_status(c, run_id, timeout=15)
+    steps = " ".join(step["description"] for step in body["steps"]).lower()
+    assert body["status"] == "complete"
+    assert len(tasks) == 3
+
+    for task in tasks:
+        for text in (task["label"], task["goal"]):
+            for word in _NOT_CANNED:
+                assert not re.search(word, text, re.I), f"task {task['id']} asks for {word!r}: {text!r}"
+        lines = [line.strip() for line in task["goal"].splitlines() if line.strip()]
+        assert any(line.upper().startswith("VERIFY") for line in lines)
+        for line in lines:
+            matched = [step for pattern, step in _CANNED_ACTIONS if re.search(pattern, line, re.I)]
+            if not line.startswith("Go to") and not line.upper().startswith("VERIFY"):
+                assert matched, f"task {task['id']} asks for something no canned step does: {line!r}"
+            for step in matched:
+                assert step in steps, f"no canned step {step!r} for {line!r}"
+        assert "cart" in lines[-1].lower()  # the check at the end is about the cart, which the steps do reach
 
 
 # ---------------------------------------------------------------------------

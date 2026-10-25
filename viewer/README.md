@@ -26,7 +26,7 @@ drop in any arena-format `.log` file.
 
 ## Run it
 
-Needs Node 18 or newer.
+Needs Node 20 or newer.
 
 ```bash
 npm ci

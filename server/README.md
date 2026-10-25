@@ -128,7 +128,7 @@ shipt.com, driven without a model: start_session, update_address (with the place
 
 ### First local runs (2026-10-24, claude-sonnet-5-5 on both arms and the judge)
 
-vhlistings_product_attribute_search, one run each:
+vhlistings_product_attribute_search, one run each except for BrowserUse, which ran four times while the adapter was fixed (below):
 
 | run | verdict | steps | duration | agent cost | judge cost |
 |---|---|---|---|---|---|
@@ -138,7 +138,7 @@ vhlistings_product_attribute_search, one run each:
 
 The store no longer has a chain belt under $35. Both Rindler runs added "Gravechain Crucifix Belt" ($52) and called it a chain belt from its name, as the task allows; its product page says it is genuine leather. The BrowserUse arm looked through three result pages and a second search, found no chain belt under $35, added the same belt as the closest fallback and said in its report that it was neither a chain belt nor under $35, and the judge failed it. The Rindler PASS is therefore the judge accepting a name-based report, the weakness caveat 4 below describes. One run per arm proves the setup works; it says nothing about which arm is better.
 
-The BrowserUse row was first measured before the browser-use adapter was fixed (9 steps, 109.3 s, $0.5890): the model answered each step by calling the action itself and the adapter made a second request to have it wrapped, 21 API calls for 9 steps. After the fix every step is one API call with no repairs (23 calls for 23 steps). The task cannot be completed on today's store, so the number of steps depends on how long the agent keeps looking and differs from run to run.
+The BrowserUse row is the last of four runs, all FAIL. The first was measured before the browser-use adapter was fixed (9 steps, 109.3 s, $0.5890): the model answered each step by calling the action itself and the adapter made a second request to have it wrapped, 21 API calls for 9 steps. After the fix every step is one API call with no repairs (23 calls for 23 steps). Two earlier runs on the final code took 27 steps ($0.586 and $0.709). The task cannot be completed on today's store, so the number of steps depends on how long the agent keeps looking and differs from run to run.
 
 ## The March 2026 results (`arena_logs/`)
 

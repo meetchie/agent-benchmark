@@ -10,7 +10,7 @@ import { ResultsOverlay } from "./ResultsOverlay";
 
 function LiveStats({
   url, taskLabel, steps, elapsedMs, finalMs,
-  finalTotalTokens, finalCostUsd, agentModel,
+  finalTotalTokens, finalCostUsd, agentModel, demoMode = false,
 }: {
   url: string;
   taskLabel: string;
@@ -21,6 +21,7 @@ function LiveStats({
   finalTotalTokens?: number;
   finalCostUsd?: number | null;
   agentModel?: string | null;
+  demoMode?: boolean;
 }) {
   // Snap to real server time when done, otherwise show shared live counter
   const displayMs = finalMs ?? elapsedMs;
@@ -89,9 +90,29 @@ function LiveStats({
             </div>
           ))}
         </div>
-        <AgentCard model={agentModel} priced={hasRealTokens ? costValue !== null : true} />
+        <AgentCard model={agentModel} priced={hasRealTokens ? costValue !== null : true} demoMode={demoMode} />
       </div>
     </>
+  );
+}
+
+/**
+ * What the screenshot pane shows when there is no picture: a spinner while the
+ * agent is still working, and a calm note once the run is over (a canned demo
+ * run, for one, never has a screenshot, so a spinner there would wait forever).
+ */
+function ScreenshotPlaceholder({ finished }: { finished: boolean }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center">
+      {finished ? (
+        <p data-testid="no-screenshot" className="text-sm text-slate-400">No screenshot for this run</p>
+      ) : (
+        <svg className="animate-spin h-5 w-5 text-[#3c49ad]" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      )}
+    </div>
   );
 }
 
@@ -190,6 +211,7 @@ export function RunningView({
         remainingRuns={remainingRuns}
         runLimit={runLimit}
         resetsIn={resetsIn}
+        demoMode={demoMode}
       />
 
       {/* Desktop layout */}
@@ -199,12 +221,7 @@ export function RunningView({
             {screenshot ? (
               <img src={screenshot} alt="Agent screenshot" className="w-full h-full object-cover object-top" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <svg className="animate-spin h-5 w-5 text-[#3c49ad]" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              </div>
+              <ScreenshotPlaceholder finished={showOverlayTrigger} />
             )}
             {isDone && (
               <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom, rgba(60,73,173,0.1) 0%, rgba(60,73,173,0.3) 100%)" }} />
@@ -235,7 +252,7 @@ export function RunningView({
           url={url} taskLabel={taskLabel} steps={steps}
           elapsedMs={elapsedMs} finalMs={finalMs}
           finalTotalTokens={finalTotalTokens}
-          finalCostUsd={finalCostUsd} agentModel={agentModel}
+          finalCostUsd={finalCostUsd} agentModel={agentModel} demoMode={demoMode}
         />
       </div>
 
@@ -246,12 +263,7 @@ export function RunningView({
           {screenshot ? (
             <img src={screenshot} alt="Agent screenshot" className="w-full h-full object-contain object-top" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <svg className="animate-spin h-5 w-5 text-[#3c49ad]" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            </div>
+            <ScreenshotPlaceholder finished={showOverlayTrigger} />
           )}
           {isDone && (
             <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom, rgba(60,73,173,0.1) 0%, rgba(60,73,173,0.3) 100%)" }} />
@@ -275,7 +287,7 @@ export function RunningView({
           )}
         </div>
         {/* Horizontal stats bar */}
-        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalTotalTokens={finalTotalTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} />
+        <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalTotalTokens={finalTotalTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} demoMode={demoMode} />
         {/* Steps */}
         <div className="h-[200px] min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
           <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} />

@@ -181,27 +181,43 @@ def chart_relative_comparison(summary: dict, charts_dir: Path):
     plt.close()
 
 
-def chart_token_usage(summary: dict, charts_dir: Path):
-    """Stacked bar chart of input vs output tokens per task."""
-    per_task = summary["per_task"]
+# How dark each kind of token is drawn: input is the solid shade, output the paler one on top.
+TOKEN_ALPHA = {"input": 0.7, "output": 0.4}
+
+
+def token_usage_figure(summary: dict):
+    """Stacked bars of input vs output tokens per arm, with a legend key for all four shades."""
+    from matplotlib.patches import Patch
+
     # Aggregate totals from summary.json. Input counts every prompt token, cache reads included.
     input_tokens = [summary["browseruse"]["total_tokens_input"], summary["rindler"]["total_tokens_input"]]
     output_tokens = [summary["browseruse"]["total_tokens_output"], summary["rindler"]["total_tokens_output"]]
+    arms = ("browseruse", "rindler")
+    colors = [COLORS[arm] for arm in arms]
 
     agents = arm_labels(summary)
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(6, 4.4))
     x = np.arange(len(agents))
-    ax.bar(x, input_tokens, 0.5, label="Input Tokens", color=[COLORS["browseruse"], COLORS["rindler"]], alpha=0.7)
-    ax.bar(x, output_tokens, 0.5, bottom=input_tokens, label="Output Tokens",
-           color=[COLORS["browseruse"], COLORS["rindler"]], alpha=0.4)
+    ax.bar(x, input_tokens, 0.5, color=colors, alpha=TOKEN_ALPHA["input"])
+    ax.bar(x, output_tokens, 0.5, bottom=input_tokens, color=colors, alpha=TOKEN_ALPHA["output"])
     ax.set_ylabel("Tokens")
     ax.set_title(f"Token Usage — {summary['benchmark']['site']}")
     ax.set_xticks(x)
     ax.set_xticklabels(agents)
-    ax.legend()
-    plt.tight_layout()
-    plt.savefig(charts_dir / "token_usage.png", dpi=150)
-    plt.close()
+    # One key per arm and kind. A plain legend would take its colours from the first bar of each
+    # series, which is BrowserUse's, and Rindler's shades would have no key.
+    keys = [Patch(facecolor=COLORS[arm], alpha=TOKEN_ALPHA[kind], label=f"{LABELS[arm]} {kind} tokens")
+            for arm in arms for kind in ("input", "output")]
+    ax.legend(handles=keys, loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, frameon=False)
+    fig.tight_layout()
+    return fig
+
+
+def chart_token_usage(summary: dict, charts_dir: Path):
+    """Stacked bar chart of input vs output tokens per arm."""
+    fig = token_usage_figure(summary)
+    fig.savefig(charts_dir / "token_usage.png", dpi=150)
+    plt.close(fig)
 
 
 def print_summary_table(summary: dict):
