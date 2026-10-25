@@ -20,11 +20,11 @@ Each folder has its own README with the details: [web](web/README.md), [server](
 
 ## Quickstart
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (it uses a Python 3.11 you already have, or fetches one itself), Node.js 20 or newer with npm (`web/.nvmrc` says 22), and `make`. It was built and checked on macOS (Apple silicon); Linux should work, Windows was not tried.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (it uses a Python 3.11 you already have, or fetches one itself), Node.js 20 or newer with npm (`web/.nvmrc` says 22), and `make`. It was built and checked on macOS (Apple silicon). It also runs on Linux (checked on Debian 12, arm64), where Chromium needs system libraries that a bare system lacks: run `cd server && uv run playwright install-deps chromium` once after `make setup` (Debian or Ubuntu; it asks for sudo unless you are root), or install them with your package manager. `make setup` ends by starting Chromium once and stops with that advice if it cannot. Windows was not tried.
 
 ```bash
 cp .env.example .env     # then put your key after ANTHROPIC_API_KEY=
-make setup               # uv sync, Playwright's Chromium, npm ci for web and viewer, a pre-commit key check
+make setup               # uv sync, Playwright's Chromium, npm ci for web and viewer, a pre-commit key check, a Chromium start check
 make dev                 # backend on 127.0.0.1:8000, web UI on http://localhost:5180
 ```
 
@@ -34,7 +34,7 @@ Open the URL `make dev` prints (`http://localhost:5180` and `http://127.0.0.1:51
 
 | command | what it does |
 |---|---|
-| `make setup` | Installs the Python environment, Chromium and the npm packages, and the pre-commit check (see [Tests](#tests)). Run once. |
+| `make setup` | Installs the Python environment, Chromium and the npm packages, and the pre-commit check (see [Tests](#tests)), then starts Chromium once and stops with the fix if it cannot (on Linux: missing system libraries). Run once. |
 | `make dev` | Backend and web UI together. Ctrl-C stops both. |
 | `make demo` | The same with `DEMO_MODE=true`: canned runs, no key. |
 | `make test` | Every test suite (offline, no key needed). A failing suite does not stop the others: all of them run, then the failed ones are listed and the exit status is non-zero. `make test SUITES="server hooks"` runs only those; a name that is not a suite is an error. |
@@ -87,7 +87,7 @@ You give the web app a site URL. The server fetches the page and a model propose
 | `pass` | The judge says the agent fully completed the task as written, including verification, and the steps or the final report show the result of every check the task asks for. |
 | `fail` | The agent ran to the end and the judge says it did not. |
 | `too_slow` | The agent was still going after `BENCHMARK_TIMEOUT_S` (default 180 s) and was stopped. The judge still reads the steps it took (there is no final report) and marks no phase as failed. |
-| `error` | The run could not be judged as a pass or fail: the model refused part-way, every step failed (a bad API key, say), Chromium is missing, a setting is invalid, the run crashed, or you cancelled it. The message says which. If the agent had taken steps (a refusal or crash part-way), the judge still reads them and the results card shows its summary and phases under the message. |
+| `error` | The run could not be judged as a pass or fail: the model refused part-way, every step failed (a bad API key, say), Chromium is missing or cannot start, a setting is invalid, the run crashed, or you cancelled it. The message says which. If the agent had taken steps (a refusal or crash part-way), the judge still reads them and the results card shows its summary and phases under the message. |
 
 The judge also groups the steps into 3 to 6 **phases** named for what the user was trying to do ("Find the right yoga mat", "Verify cart contents"). The judge is told to flag a phase as *slow* when it took more than 45 seconds or showed pointless retries (and to flag the slowest one even if nothing was slow; it usually does, but nothing enforces it), and to flag at most one phase as *failed*, the one where the agent actually went wrong, never on a `too_slow` run. The results screen shows the verdict, summary, phases, time, steps, tokens and the cost in dollars for the agent's tokens at the agent model's prices. A model without a price table shows tokens only.
 
@@ -239,12 +239,12 @@ make test        # all of it, offline, no key needed
 
 | suite | command | what it covers |
 |---|---|---|
-| server | `make test-server` | The API, the LLM layer, the browser-use adapter, the local Rindler interpreter (some tests drive a real headless Chromium against a local fixture shop and are skipped without one), the arena, the scenarios and the mappings. |
-| cli | `make test-cli` | The CLI's arms, judge and results, the prose mapping against a local copy of the site. It must run apart from the server suite because the two have different pytest settings. |
+| server | `make test-server` | The API, the LLM layer, the browser-use adapter, the local Rindler interpreter (some tests drive a real headless Chromium against a local fixture shop; without a Chromium that starts they are skipped and pytest prints why), the arena, the scenarios and the mappings. |
+| cli | `make test-cli` | The CLI's arms, judge and results, the prose mapping against a local copy of the site (its browser tests skip like the server's). It must run apart from the server suite because the two have different pytest settings. |
 | web | `make test-web` | The UI's tests (vitest) and a production build. |
 | viewer | `make test-viewer` | The log parser's, the caveats panel's and the cost chart axis's tests (vitest) and a production build. |
 | hooks | `make test-hooks` | The pre-commit check and its installer, in throwaway git repositories. Needs only git. |
-| scripts | `make test-scripts` | The closing message of `make setup` (it says so when `ANTHROPIC_API_KEY` in `.env` is still blank, and never prints the key) and the `SUITES` check. Needs only make and sh. |
+| scripts | `make test-scripts` | The closing message of `make setup` (it says so when `ANTHROPIC_API_KEY` in `.env` is still blank, and never prints the key), that setup starts Chromium before it says it is done, and the `SUITES` check. Needs only make and sh. |
 
 No test calls a model API: the SDK base URLs point at a closed local port, so a stray call fails at once instead of costing money. The browser tests run against local fixture sites.
 

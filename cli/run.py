@@ -101,9 +101,10 @@ def preflight(site: sites.Site, tasks: list) -> None:
     try:
         import browser_env
 
-        if not browser_env.chromium_path():
-            problems.append("Chromium is not installed (run: cd server && uv run playwright install chromium)")
-    except Exception as exc:  # ChromiumNotFoundError carries its own install hint
+        chromium = browser_env.chromium_problem()  # not installed, or installed but cannot start
+        if chromium:
+            problems.append(chromium)
+    except Exception as exc:
         problems.append(str(exc))
     leaks = sites.task_text_leaks(tasks, site.mapping)
     for task_id, words in leaks.items():

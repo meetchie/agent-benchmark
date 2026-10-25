@@ -156,11 +156,9 @@ def validate_startup() -> None:
 
     if benchmark_runner._get_browser_provider() == "local":
         import browser_env
-        if not browser_env.chromium_path():
-            logger.warning(
-                "No local Chromium found: runs will fail until you install it with: %s",
-                browser_env.INSTALL_HINT,
-            )
+        problem = browser_env.chromium_problem()
+        if problem:
+            logger.warning("Runs will fail until Chromium can start. %s", problem)
     if mode == AUTH_NONE:
         logger.info("AUTH_MODE=none: no sign-in. Keep this server on localhost.")
 

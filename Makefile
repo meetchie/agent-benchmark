@@ -43,6 +43,8 @@ check-tools:
 	@command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 || { echo "Node.js 20 or newer with npm is not installed (web/.nvmrc says 22)." >&2; exit 1; }
 	@node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' || { echo "Node.js $$(node --version) is too old; 20 or newer is needed." >&2; exit 1; }
 
+# The last step starts Chromium once (browser_env.py): on Linux it can be installed and
+# still unable to run, for want of system libraries, and then nothing else would work.
 setup: check-tools ## install the Python environment, Chromium, the npm packages and the pre-commit check
 	cd server && uv sync
 	cd server && uv run playwright install chromium
@@ -50,6 +52,7 @@ setup: check-tools ## install the Python environment, Chromium, the npm packages
 	cd viewer && npm ci --no-audit --no-fund
 	@./scripts/hooks/install.sh
 	@echo
+	@cd server && uv run python browser_env.py || { echo; echo "Everything else is installed ('make demo' needs no browser). Fix Chromium, then run 'make setup' again."; exit 1; } >&2
 	@./scripts/setup-done.sh
 
 install-hooks: ## install the pre-commit check that refuses API keys and .env files (setup does this too)

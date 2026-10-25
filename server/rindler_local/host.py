@@ -73,6 +73,17 @@ def _chromium_executable() -> str | None:
     return chromium_path()
 
 
+def _check_chromium_starts(executable: str) -> None:
+    """Raise ChromiumNotFoundError, with the fix, when this Chromium cannot start."""
+    try:
+        from browser_env import ChromiumNotFoundError, chromium_start_problem
+    except ImportError:  # used outside the server package: Playwright's launch error has to do
+        return
+    problem = chromium_start_problem(executable)
+    if problem:
+        raise ChromiumNotFoundError(problem)
+
+
 def _headless_default() -> bool:
     try:
         from browser_env import headless
@@ -154,13 +165,15 @@ class LocalRindlerHost:
             return
         from playwright.async_api import async_playwright
 
+        executable = self.executable_path or _chromium_executable()
+        if executable:
+            _check_chromium_starts(executable)
         self._pw = await async_playwright().start()
         args = _keychain_args()
         for arg in self.extra_args:
             if arg not in args:
                 args.append(arg)
         launch: dict[str, Any] = {"headless": self.headless, "args": args}
-        executable = self.executable_path or _chromium_executable()
         if executable:
             launch["executable_path"] = executable
         self._browser = await self._pw.chromium.launch(**launch)

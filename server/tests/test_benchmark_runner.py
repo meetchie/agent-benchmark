@@ -72,6 +72,8 @@ from benchmark_runner import _format_action, get_agent_timeout, run_benchmark
 from constants import COST_RATES
 from tests.fakes import install_fake_anthropic, text_response
 
+REAL_BROWSER_PROFILE = browser_env.browser_profile
+
 
 def usage_summary(prompt=57696, cached=43599, completion=987, cache_write=14533):
     """What browser-use reports. total_prompt_tokens includes the cache reads."""
@@ -805,6 +807,25 @@ async def test_chromium_missing_gives_the_install_hint(fake_run, monkeypatch):
     assert state.status == "error"
     assert state.result_state == "error"
     assert "playwright install chromium" in state.message
+    assert fake_run.agent_cls.instances == []
+    assert persistence.read_run("run-1")["status"] == "error"
+
+
+async def test_a_chromium_that_cannot_start_says_why_and_how_to_fix_it(fake_run, monkeypatch, tmp_path):
+    # Installed but unable to run (Linux without its system libraries). Without the start
+    # check browser-use failed later with "process not found" and the run said only
+    # "The run encountered an error."
+    chrome = tmp_path / "chrome"
+    chrome.write_text('#!/bin/sh\necho "$0: error while loading shared libraries: libnspr4.so: '
+                      'cannot open shared object file: No such file or directory" >&2\nexit 127\n')
+    chrome.chmod(0o755)
+    monkeypatch.setenv("BENCHMARK_CHROMIUM_PATH", str(chrome))
+    monkeypatch.setattr(browser_env, "browser_profile", REAL_BROWSER_PROFILE)
+    state = make_state()
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+    assert state.status == "error" and state.result_state == "error"
+    assert "libnspr4.so" in state.message
+    assert "playwright install-deps chromium" in state.message
     assert fake_run.agent_cls.instances == []
     assert persistence.read_run("run-1")["status"] == "error"
 

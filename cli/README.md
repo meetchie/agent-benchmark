@@ -17,6 +17,7 @@ You need an Anthropic API key and the server environment (one environment serves
 cd server
 uv sync
 uv run playwright install chromium     # once
+uv run playwright install-deps chromium  # Linux only, once: its system libraries (asks for sudo)
 export ANTHROPIC_API_KEY=...           # or put it in server/.env or a repo-root .env
 cd ..
 

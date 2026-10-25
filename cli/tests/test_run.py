@@ -97,6 +97,7 @@ async def test_unknown_site_or_task_exits_with_a_message(capsys):
 def ready(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
     monkeypatch.setattr(browser_env, "chromium_path", lambda: "/fake/chromium")
+    monkeypatch.setattr(browser_env, "chromium_start_problem", lambda executable: None)
 
 
 def test_preflight_needs_only_the_anthropic_key_and_a_chromium(ready, capsys):
@@ -118,6 +119,17 @@ def test_preflight_reports_every_problem_at_once(monkeypatch, capsys):
     assert "ANTHROPIC_API_KEY" in err and "playwright install chromium" in err
     assert "view_accessories, rindler" in err and "3 problem(s)" in err
     assert "OPENAI" not in err
+
+
+def test_preflight_names_a_chromium_that_cannot_start(ready, monkeypatch, capsys):
+    # Installed but missing its system libraries (Linux): caught before any model call.
+    problem = "Chromium cannot start: the system library libnspr4.so is missing. Install ..."
+    monkeypatch.setattr(browser_env, "chromium_start_problem", lambda executable: problem)
+    site = sites.load_site("prose")
+    with pytest.raises(SystemExit) as exc:
+        run.preflight(site, site.tasks)
+    assert exc.value.code == 2
+    assert "libnspr4.so" in capsys.readouterr().err
 
 
 # -- a whole run with fake arms -----------------------------------------------------------

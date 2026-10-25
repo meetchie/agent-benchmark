@@ -1,6 +1,7 @@
 #!/bin/sh
-# Tests for scripts/setup-done.sh (the closing message of `make setup`) and for the
-# Makefile's checks of SUITES and TASK (`make test-scripts`). They need only make and sh.
+# Tests for scripts/setup-done.sh (the closing message of `make setup`), for the order of
+# setup's last steps and for the Makefile's checks of SUITES and TASK (`make test-scripts`).
+# They need only make and sh.
 # The "key" written into the throwaway .env files is a made-up word.
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -53,6 +54,16 @@ contains "a key in the shell counts" "$NEXT"; lacks "never prints the shell's va
 
 clean sh "$ROOT/scripts/setup-done.sh" "$TMP/no-such-file"
 contains "no .env yet" "cp .env.example .env"
+
+# --- make setup ends by starting Chromium, before it says it is done ----------
+clean make -C "$ROOT" -n setup
+status "make -n setup runs" $? 0
+contains "setup starts Chromium once" "uv run python browser_env.py"
+if awk '/browser_env.py/ { c = NR } /setup-done.sh/ { d = NR } END { exit !(c && d && c < d) }' "$TMP/out"; then
+  ok
+else
+  bad "the Chromium check comes before 'Setup done.' (got: $(cat "$TMP/out"))"
+fi
 
 # --- make test SUITES=... ----------------------------------------------------
 clean make -C "$ROOT" test SUITES="nonesuch hooks"

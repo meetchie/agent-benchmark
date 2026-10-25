@@ -7,7 +7,8 @@ short section in [README.md](README.md).
 ## What you need
 
 - Python 3.11 and [uv](https://docs.astral.sh/uv/)
-- A Chromium that Playwright installed (`uv run playwright install chromium`)
+- A Chromium that Playwright installed (`uv run playwright install chromium`) and, on
+  Linux, the system libraries it needs (`uv run playwright install-deps chromium`)
 - An Anthropic API key in `ANTHROPIC_API_KEY`
 
 Nothing else: no Rindler server or database, no OpenAI key, no Browserbase, Steel or
@@ -19,7 +20,14 @@ Skyvern account. Both arms run a local headless Chromium.
 cd server
 uv sync
 uv run playwright install chromium
+uv run playwright install-deps chromium    # Linux only, once: Chromium's system libraries
+uv run python browser_env.py               # starts Chromium once and says whether it works
 ```
+
+On Linux a bare system lacks libraries Chromium needs (`libnspr4`, `libnss3`, `libgbm` and
+others), so a Chromium that installed fine still cannot start. `install-deps` adds them
+with apt-get (Debian or Ubuntu; it asks for sudo unless you are root). On another
+distribution install the same libraries with its package manager.
 
 If several projects share one Playwright cache, add `PLAYWRIGHT_SKIP_BROWSER_GC=1` so
 the install does not delete other projects' browser builds.
@@ -91,6 +99,12 @@ and the page's element list on every step, so it costs several times more per st
 
 - **`ChromiumNotFoundError` / "No local Chromium found"**: run
   `uv run playwright install chromium`, or set `BENCHMARK_CHROMIUM_PATH`.
+- **"Chromium cannot start: the system library libnspr4.so is missing"** (Linux):
+  Chromium is installed but its system libraries are not. Run
+  `uv run playwright install-deps chromium` (Debian or Ubuntu, asks for sudo) or install
+  them with your package manager, then check with `uv run python browser_env.py`.
+  `make setup` stops with this message, the server logs it at start-up, and a run ends
+  as `error` with it.
 - **"no model API key"**: `ANTHROPIC_API_KEY` is not set in the shell or a `.env` file.
 - **`No site mapping covers ...`** (RINDLER): the start URL's domain has no
   `mappings/*.json`; use `--mapping` or run that scenario on BROWSERUSE.

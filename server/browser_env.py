@@ -42,6 +42,14 @@ How Chromium is found (``chromium_path()``), first match wins:
 If none exists, ``browser_profile()`` raises ``ChromiumNotFoundError`` with the
 install command, instead of letting browser-use fall back to a system Chrome
 (which on macOS would be the user's own Google Chrome app).
+
+Before a profile is handed out, the executable is started once with ``--version``
+(``chromium_start_problem()``). A Chromium that is on disk but cannot run, typically
+on Linux without its system libraries (``libnspr4.so``, ``libnss3.so``, ...), raises
+``ChromiumNotFoundError`` naming the missing library and the fix
+(``LINUX_DEPS_HINT``), instead of browser-use failing later with "process not found".
+``chromium_problem()`` answers the same question for whatever Chromium would be used,
+and ``python browser_env.py`` (the last step of ``make setup``) prints it.
 """
 
 from __future__ import annotations
@@ -54,6 +62,8 @@ import os
 import platform
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -65,6 +75,9 @@ log = logging.getLogger(__name__)
 KEYCHAIN_ARGS: tuple[str, ...] = ("--use-mock-keychain", "--password-store=basic")
 DEFAULT_VIEWPORT: dict[str, int] = {"width": 1280, "height": 720}
 INSTALL_HINT = "cd server && uv run playwright install chromium"
+LINUX_DEPS_HINT = "cd server && uv run playwright install-deps chromium"
+# How long `chromium --version` may take before the start check gives up on it.
+START_CHECK_TIMEOUT_S = 15.0
 # The temp profile dir name carries two browser-use markers on purpose:
 # - "browseruse-tmp-": LocalBrowserWatchdog deletes such a dir when it kills the browser.
 # - "browser-use-user-data-dir-": BrowserProfile then skips _copy_profile(), which would
@@ -125,7 +138,7 @@ _FALSE_WORDS = {"0", "false", "no", "off"}
 
 
 class ChromiumNotFoundError(RuntimeError):
-    """No local Chromium executable could be found."""
+    """No local Chromium that can start: none is installed, or the one found fails to run."""
 
 
 def headless() -> bool:
@@ -226,6 +239,75 @@ def chromium_path() -> str | None:
     return None
 
 
+def _not_found_message() -> str:
+    return (
+        f"No local Chromium found under {playwright_browsers_path()}. Install it with: {INSTALL_HINT} "
+        "(or point BENCHMARK_CHROMIUM_PATH at a Chromium-based browser)."
+    )
+
+
+# executable -> its --version output, for every executable that has started once.
+_started: dict[str, str] = {}
+
+_MISSING_LIBRARY = re.compile(r"error while loading shared libraries: ([^:\s]+)")
+
+
+def chromium_start_problem(executable: str) -> str | None:
+    """Why ``executable`` cannot start, with the fix, or None when it can.
+
+    Runs ``<executable> --version`` (with the keychain args, like every launch). A
+    success is remembered for the life of the process; a failure is checked again next
+    time, so installing the missing libraries needs no restart. Not run on Windows,
+    where ``chrome.exe --version`` opens a browser window instead of printing.
+    """
+    if executable in _started:
+        return None
+    if platform.system() == "Windows":
+        return None
+    try:
+        done = subprocess.run(
+            [executable, "--version", *KEYCHAIN_ARGS],
+            capture_output=True, text=True, errors="replace", timeout=START_CHECK_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        log.warning("`%s --version` took over %.0f s; not checking it further.", executable, START_CHECK_TIMEOUT_S)
+        _started[executable] = ""
+        return None
+    except OSError as exc:
+        return (
+            f"Chromium cannot be run ({exc.strerror or exc}). Install it with: {INSTALL_HINT}, "
+            f"or point BENCHMARK_CHROMIUM_PATH at a Chromium-based browser. Path: {executable}"
+        )
+    if done.returncode == 0:
+        _started[executable] = (done.stdout or "").strip()
+        return None
+
+    output = f"{done.stderr or ''}\n{done.stdout or ''}"
+    missing = _MISSING_LIBRARY.search(output)
+    if missing:
+        return (
+            f"Chromium cannot start: the system library {missing.group(1)} is missing. "
+            f"Install Chromium's libraries with: {LINUX_DEPS_HINT} "
+            "(Debian or Ubuntu; it asks for sudo unless you are root), or with your package manager."
+        )
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    detail = lines[0].replace(executable, Path(executable).name)[:150] if lines else "no output"
+    fix = (
+        f"It may need its system libraries: {LINUX_DEPS_HINT}"
+        if platform.system() == "Linux"
+        else f"Reinstall it with: {INSTALL_HINT}"
+    )
+    return f"Chromium cannot start (exit {done.returncode}: {detail}). {fix}"
+
+
+def chromium_problem() -> str | None:
+    """Why runs here have no Chromium that starts (with the fix), or None when they have one."""
+    executable = chromium_path()
+    if not executable:
+        return _not_found_message()
+    return chromium_start_problem(executable)
+
+
 def browser_profile(
     *,
     viewport: dict[str, int] | None = None,
@@ -247,10 +329,10 @@ def browser_profile(
 
     executable = overrides.pop("executable_path", None) or chromium_path()
     if not executable:
-        raise ChromiumNotFoundError(
-            f"No local Chromium found under {playwright_browsers_path()}. Install it with: {INSTALL_HINT} "
-            "(or point BENCHMARK_CHROMIUM_PATH at a Chromium-based browser)."
-        )
+        raise ChromiumNotFoundError(_not_found_message())
+    problem = chromium_start_problem(str(executable))
+    if problem:
+        raise ChromiumNotFoundError(problem)
 
     use_headless = _headless_default() if headless is None else headless
     size = dict(viewport or DEFAULT_VIEWPORT)
@@ -279,3 +361,19 @@ def browser_profile(
 
 # Module-level alias so browser_profile(headless=...) can shadow the function name.
 _headless_default = headless
+
+
+def main() -> int:
+    """``python browser_env.py``: say whether the Chromium runs would use can start (exit 1 if not)."""
+    problem = chromium_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
+    executable = chromium_path()
+    version = _started.get(str(executable)) or "version unknown"
+    print(f"Chromium starts: {version} ({executable})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

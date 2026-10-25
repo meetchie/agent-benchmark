@@ -4,6 +4,7 @@
 cd server
 uv sync
 uv run playwright install chromium
+uv run playwright install-deps chromium    # Linux only: its system libraries (asks for sudo)
 echo 'ANTHROPIC_API_KEY=...' > .env        # gitignored
 
 # Head-to-head arena: the same task on both arms, then a judge verdict

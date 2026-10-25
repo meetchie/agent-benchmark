@@ -22,16 +22,20 @@ from prose_fixture import ProseShop, localize
 from rindler_local import LocalRindlerHost
 
 
-def _have_chromium() -> bool:
+def _no_chromium_reason() -> str | None:
+    """Why these tests cannot drive a Chromium here (none installed, or it cannot start), or None."""
     try:
         import browser_env
 
-        return bool(browser_env.chromium_path())
-    except Exception:
-        return False
+        return browser_env.chromium_problem()
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
 
 
-pytestmark = pytest.mark.skipif(not _have_chromium(), reason="no local Chromium (cd server && uv run playwright install chromium)")
+_NO_CHROMIUM = _no_chromium_reason()
+
+
+pytestmark = pytest.mark.skipif(_NO_CHROMIUM is not None, reason=f"no Chromium that starts: {_NO_CHROMIUM}")
 
 
 @pytest.fixture(scope="module")

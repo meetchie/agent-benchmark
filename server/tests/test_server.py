@@ -23,6 +23,8 @@ from server import app, get_current_user
 import server as server_module
 from tests.fakes import install_fake_anthropic, text_response
 
+REAL_CHROMIUM_START_PROBLEM = browser_env.chromium_start_problem
+
 client = TestClient(app)
 
 FAKE_USER = {"user_id": "test-user-id"}
@@ -359,9 +361,10 @@ START = {"url": "https://books.toscrape.com", "goal": "Add any book to the baske
 
 @pytest.fixture
 def configured(monkeypatch):
-    """A server that passes startup: a (fake) key is set and Chromium is 'installed'."""
+    """A server that passes startup: a (fake) key is set and Chromium is 'installed' and starts."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
     monkeypatch.setattr(browser_env, "chromium_path", lambda: "/fake/chromium")
+    monkeypatch.setattr(browser_env, "chromium_start_problem", lambda executable: None)
 
 
 @pytest.fixture
@@ -617,6 +620,7 @@ def no_keys(monkeypatch):
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(browser_env, "chromium_path", lambda: "/fake/chromium")
+    monkeypatch.setattr(browser_env, "chromium_start_problem", lambda executable: None)
 
 
 def test_startup_fails_fast_without_an_anthropic_key(no_keys):
@@ -776,6 +780,20 @@ def test_missing_chromium_warns_but_does_not_stop_the_server(configured, monkeyp
     with caplog.at_level("WARNING"):
         server_module.validate_startup()
     assert "playwright install chromium" in caplog.text
+
+
+def test_a_chromium_that_cannot_start_is_named_at_startup(configured, monkeypatch, tmp_path, caplog):
+    # Linux without Chromium's system libraries: say so before anyone pays for a run.
+    chrome = tmp_path / "chrome"
+    chrome.write_text('#!/bin/sh\necho "$0: error while loading shared libraries: libnss3.so: '
+                      'cannot open shared object file: No such file or directory" >&2\nexit 127\n')
+    chrome.chmod(0o755)
+    monkeypatch.setattr(browser_env, "chromium_path", lambda: str(chrome))
+    monkeypatch.setattr(browser_env, "chromium_start_problem", REAL_CHROMIUM_START_PROBLEM)
+    with caplog.at_level("WARNING"):
+        server_module.validate_startup()
+    assert "libnss3.so" in caplog.text
+    assert "playwright install-deps chromium" in caplog.text
 
 
 # ---------------------------------------------------------------------------

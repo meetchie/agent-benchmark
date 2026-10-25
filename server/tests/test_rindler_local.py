@@ -225,15 +225,17 @@ def test_extract_cart_items():
 # ---------------------------------------------------------------------------
 
 
-def _have_chromium() -> bool:
+def _no_chromium_reason() -> str | None:
+    """Why these tests cannot drive a Chromium here (none installed, or it cannot start), or None."""
     try:
-        from browser_env import chromium_path
-    except ImportError:
-        return False
-    return bool(chromium_path())
+        from browser_env import chromium_problem
+    except ImportError as exc:
+        return f"browser_env cannot be imported: {exc}"
+    return chromium_problem()
 
 
-browser = pytest.mark.skipif(not _have_chromium(), reason="no local Chromium (uv run playwright install chromium)")
+_NO_CHROMIUM = _no_chromium_reason()
+browser = pytest.mark.skipif(_NO_CHROMIUM is not None, reason=f"no Chromium that starts: {_NO_CHROMIUM}")
 
 
 @pytest.fixture
@@ -246,6 +248,21 @@ def _host(shop: FixtureShop, **kwargs) -> LocalRindlerHost:
     raw = json.loads(MAPPING_PATH.read_text())
     raw["defaults"]["base"] = shop.base
     return LocalRindlerHost(load_mapping(raw), headless=True, **kwargs)
+
+
+async def test_a_chromium_that_cannot_start_comes_back_as_a_readable_tool_error(shop, tmp_path):
+    chrome = tmp_path / "chrome"
+    chrome.write_text('#!/bin/sh\necho "$0: error while loading shared libraries: libnspr4.so: '
+                      'cannot open shared object file: No such file or directory" >&2\nexit 127\n')
+    chrome.chmod(0o755)
+    host = _host(shop, executable_path=str(chrome))
+    try:
+        env = await host.call("start_session", {"url": shop.base + "/"})
+    finally:
+        await host.close()
+    assert env["error"]["code"] == "internal_error"
+    assert "libnspr4.so" in env["error"]["message"]
+    assert "playwright install-deps chromium" in env["error"]["message"]
 
 
 @browser

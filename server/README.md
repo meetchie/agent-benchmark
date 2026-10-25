@@ -18,6 +18,7 @@ From the repository root, `make setup` and `make dev` do the setup and start-up 
 cd server
 uv sync
 uv run playwright install chromium        # the local Chromium both arms use
+uv run playwright install-deps chromium   # Linux only: its system libraries (asks for sudo)
 echo 'ANTHROPIC_API_KEY=...' > .env       # or export it; .env files are gitignored
 uv run pytest -q                          # offline; no key or network needed
 ```

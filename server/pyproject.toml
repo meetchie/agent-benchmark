@@ -59,3 +59,5 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Say why a test was skipped (the browser tests skip when Chromium is missing or cannot start).
+addopts = "-rs"
