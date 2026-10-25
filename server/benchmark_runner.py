@@ -89,6 +89,10 @@ class StepRecord:
     description: str
     elapsed_ms: int
     screenshot_b64: Optional[str] = None
+    # For the judge only (not in the status payload): the agent's verdict on the step
+    # before this one, and what each of this step's browser actions returned.
+    evaluation: str = ""
+    results: list[str] = field(default_factory=list)
 
     def to_dict(self, include_screenshot: bool = False) -> dict:
         d = {
@@ -156,6 +160,10 @@ class RunState:
         ``agent_model``'s rates, null when unknown) and ``agent_model`` (model id). An
         ``error`` payload carries the same fields when the agent had already used tokens
         (a cancelled run), and none when it had not.
+
+        A run that ended as an error after some steps is still judged, so it is
+        ``complete`` with ``result_state`` "error"; its payload also carries ``message``,
+        the reason it is an error (the model refused, the run crashed).
         """
         steps_data = []
         for i, step in enumerate(self.steps):
@@ -176,7 +184,7 @@ class RunState:
                 "agent_model": self.agent_model,
             }
         elif self.status == "complete":
-            return {
+            payload = {
                 "status": "complete",
                 "steps": steps_data,
                 "success": self.success,
@@ -190,6 +198,9 @@ class RunState:
                 "agent_model": self.agent_model,
                 "phases": self.phases,
             }
+            if self.message:
+                payload["message"] = self.message
+            return payload
         else:
             payload = {
                 "status": "error",
@@ -366,6 +377,36 @@ def _format_action(agent) -> str:
     return "Processing..."
 
 
+# What the judge gets besides each step's description: enough to see what the agent
+# read on the page (a cart row, a price) without sending it whole pages.
+_MAX_EVALUATION_CHARS = 300
+_MAX_RESULT_CHARS = 600
+_MAX_ERROR_CHARS = 300
+
+
+def _step_evidence(agent) -> tuple[str, list[str]]:
+    """The agent's evaluation and its action results for the step it just finished.
+
+    ``evaluation`` is the model's own verdict on the step before ("Success - the cart
+    shows ..."); ``results`` is what each browser action returned: page text the agent
+    read, a short note such as "Clicked button 'View Cart'", or an error. The done
+    action's text is left out here, it is the run's final report.
+    """
+    try:
+        item = agent.history.history[-1]
+    except Exception:
+        return "", []
+    mo = getattr(item, "model_output", None)
+    evaluation = getattr(mo, "evaluation_previous_goal", "") if mo else ""
+    results = []
+    for result in getattr(item, "result", None) or []:
+        if getattr(result, "error", None):
+            results.append("error: " + _clip(result.error, _MAX_ERROR_CHARS))
+        elif getattr(result, "extracted_content", None) and not getattr(result, "is_done", False):
+            results.append(_clip(result.extracted_content, _MAX_RESULT_CHARS))
+    return (_clip(evaluation, _MAX_EVALUATION_CHARS) if evaluation else ""), results
+
+
 async def _take_screenshot(agent) -> Optional[str]:
     """Capture a JPEG screenshot (quality 80) of the current page.
 
@@ -438,7 +479,13 @@ async def _judge(state: "RunState", result_state_hint: str) -> dict:
     from run_judge import judge_run
 
     steps_for_judge = [
-        {"step": s.step, "description": s.description, "elapsed_ms": s.elapsed_ms}
+        {
+            "step": s.step,
+            "description": s.description,
+            "elapsed_ms": s.elapsed_ms,
+            "evaluation": s.evaluation,
+            "results": s.results,
+        }
         for s in state.steps
     ]
     try:
@@ -579,6 +626,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         elapsed_ms = int((now - prev_step_end_time).total_seconds() * 1000)
         prev_step_end_time = now
         description = _format_action(agent)
+        evaluation, results = _step_evidence(agent)
         screenshot_b64 = await _take_screenshot(agent)
 
         state.steps.append(
@@ -587,6 +635,8 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 description=description,
                 elapsed_ms=elapsed_ms,
                 screenshot_b64=screenshot_b64,
+                evaluation=evaluation,
+                results=results,
             )
         )
 
@@ -719,6 +769,9 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         raise
     except Exception as e:
         logging.error("Benchmark run failed: %s: %s", type(e).__name__, e, exc_info=True)
+        # The model calls made before the error were billed: keep their usage.
+        if agent is not None:
+            await _record_agent_usage(state, agent)
         # Still try to run judge if we have steps
         await _finish_with_error(state, overall_start, _error_message(e))
     finally:

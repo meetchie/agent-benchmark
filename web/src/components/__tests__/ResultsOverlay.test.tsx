@@ -226,6 +226,50 @@ describe("ResultsOverlay", () => {
     });
   });
 
+  describe("a run that ended as an error after some steps (judged)", () => {
+    const judgedError = makeSummary({
+      success: false,
+      result_state: "error",
+      summary: "The agent opened the page and searched, then stopped.",
+      total_ms: 9000,
+      total_tokens: 20000,
+      cost_usd: 0.03,
+      phases: [{ name: "Open the site", steps: [1, 2], total_ms: 7000, failed: false, slow: true }],
+    });
+    const twoSteps = [makeStep(1, "Open Products page", 4000), makeStep(2, "Search top", 3000)];
+
+    it("says why it is an error, what the judge saw and the phases", () => {
+      render(
+        <ResultsOverlay
+          {...defaultProps}
+          summary={judgedError}
+          errorMsg="The agent model declined to continue this task (safety refusal)."
+          steps={twoSteps}
+        />
+      );
+      expect(screen.getByText("Error")).toBeInTheDocument();
+      expect(screen.getByText("The agent model declined to continue this task (safety refusal).")).toBeInTheDocument();
+      expect(screen.getByText("The agent opened the page and searched, then stopped.")).toBeInTheDocument();
+      expect(screen.getByText("Phases")).toBeInTheDocument();
+      expect(screen.getByText(/Open the site/)).toBeInTheDocument();
+      expect(screen.queryByText("No steps were completed")).not.toBeInTheDocument();
+    });
+
+    it("still shows the judge's summary and phases when the backend sent no reason", () => {
+      render(<ResultsOverlay {...defaultProps} summary={judgedError} steps={twoSteps} />);
+      expect(screen.getByText("Error")).toBeInTheDocument();
+      expect(screen.getByText("The agent opened the page and searched, then stopped.")).toBeInTheDocument();
+      expect(screen.getByText("Phases")).toBeInTheDocument();
+    });
+  });
+
+  it("does not list the steps of an error run the judge never saw", () => {
+    render(<ResultsOverlay {...defaultProps} errorMsg="Lost connection to server." steps={[makeStep(1, "Open the site")]} />);
+    expect(screen.getByText("Lost connection to server.")).toBeInTheDocument();
+    expect(screen.queryByText("All Steps")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open the site")).not.toBeInTheDocument();
+  });
+
   it("shows no steps message for error with no steps", () => {
     render(
       <ResultsOverlay

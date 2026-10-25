@@ -279,6 +279,9 @@ export default function App() {
           if (data.status === "complete") {
             stopPolling();
             setRunStatus("complete");
+            // A run that ended as an error after some steps is still judged: the
+            // results card shows why it is an error next to the judge's summary.
+            setErrorMsg(data.result_state === "error" ? data.message || null : null);
             setSummary({
               success: data.success,
               summary: data.summary,

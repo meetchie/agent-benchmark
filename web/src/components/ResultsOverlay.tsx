@@ -129,17 +129,18 @@ export function ResultsOverlay({
 
         {!isAnalyzing && (
           <>
-            {summary?.summary && resultState !== "error" && (
-              <p className="text-sm text-slate-600 leading-relaxed mb-5">{summary.summary}</p>
-            )}
-
             {resultState === "error" && errorMsg && (
               <div className="bg-red-50 border border-red-600 px-4 py-3 mb-5">
                 <p className="text-sm text-red-600">{errorMsg}</p>
               </div>
             )}
 
-            {resultState !== "error" && (
+            {/* A summary means the judge read the steps, an error run's too. */}
+            {summary?.summary && (
+              <p className="text-sm text-slate-600 leading-relaxed mb-5">{summary.summary}</p>
+            )}
+
+            {(resultState !== "error" || (summary && steps.length > 0)) && (
               <PhaseList
                 phases={summary?.phases ?? []}
                 steps={steps}

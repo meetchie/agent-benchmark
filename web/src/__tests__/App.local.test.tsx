@@ -112,7 +112,7 @@ describe("App in local mode (no Clerk key)", () => {
       phases: [],
     };
 
-    async function runToCompletion(statusBody: object) {
+    async function runToCompletion(statusBody: object, shownWhenDone = "Added a book to the cart.") {
       stubBackend({
         "/api/benchmark/quota": () => json({ remaining: 0, resets_in: 0, limit: 0 }),
         "/api/benchmark/generate-tasks": () => json({ tasks: [TASK] }),
@@ -124,8 +124,39 @@ describe("App in local mode (no Clerk key)", () => {
       await user.click(await screen.findByText(TASK.label));
       await user.click(screen.getByRole("button", { name: "Run Benchmark" }));
       // The first status poll fires after one second.
-      await screen.findByText("Added a book to the cart.", {}, { timeout: 4000 });
+      await screen.findByText(shownWhenDone, {}, { timeout: 4000 });
     }
+
+    it("says why a run that ended as an error after some steps is an error", async () => {
+      // What the backend sends for a run the model refused part-way: the steps
+      // were judged, so the status is complete with result_state "error".
+      const judgedError = {
+        status: "complete",
+        steps: [
+          { step: 1, description: "Open Products page", elapsed_ms: 4000 },
+          { step: 2, description: "Search top", elapsed_ms: 3000 },
+        ],
+        success: false,
+        summary: "The agent opened the page and searched, then stopped.",
+        result_state: "error",
+        total_ms: 9000,
+        input_tokens: 19000,
+        output_tokens: 1000,
+        total_tokens: 20000,
+        cost_usd: 0.03,
+        agent_model: "claude-sonnet-5-5",
+        phases: [{ name: "Open the site", steps: [1, 2], total_ms: 7000, failed: false, slow: true }],
+        message: "The agent model declined to continue this task (safety refusal).",
+      };
+      await runToCompletion(judgedError, "The agent opened the page and searched, then stopped.");
+
+      const card = screen.getByRole("dialog");
+      expect(card).toHaveTextContent("Error");
+      expect(card).toHaveTextContent("The agent model declined to continue this task (safety refusal).");
+      expect(card).toHaveTextContent("Phases");
+      expect(card).toHaveTextContent("Open the site");
+      expect(card).toHaveTextContent("$0.03");
+    });
 
     it("shows the backend's cost_usd and agent_model", async () => {
       await runToCompletion({ ...COMPLETE, cost_usd: 0.0423, agent_model: "claude-sonnet-5-5" });

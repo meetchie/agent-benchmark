@@ -361,10 +361,22 @@ VERDICT_PASS = {
 }
 
 
+def history_item(goal, evaluation=None, results=()):
+    """One browser-use history step: the model's output and what its actions returned."""
+    return SimpleNamespace(
+        model_output=SimpleNamespace(next_goal=goal, evaluation_previous_goal=evaluation),
+        result=list(results),
+    )
+
+
+def action_result(text=None, error=None, is_done=False):
+    return SimpleNamespace(extracted_content=text, error=error, is_done=is_done)
+
+
 class FakeHistory:
-    def __init__(self, goals, errors=None, done=True, usage=None, final=None, successful=None):
-        self.history = [SimpleNamespace(model_output=SimpleNamespace(next_goal=g)) for g in goals]
-        self._errors = errors if errors is not None else [None] * len(goals)
+    def __init__(self, items, errors=None, done=True, usage=None, final=None, successful=None):
+        self.history = list(items)
+        self._errors = errors if errors is not None else [None] * len(items)
         self._done = done
         self._final = final
         self._successful = successful
@@ -388,13 +400,16 @@ class FakeAgent:
     """Stands in for browser_use.Agent. Class attributes script the run."""
 
     goals = ["Open the site", "Search for a book", "Click add to basket"]
+    evaluations = None  # per step: the model's verdict on the step before
+    results = None  # per step: the ActionResults its actions returned
     errors = None
     done = True
     usage = None
-    final = None
+    final = None  # what final_result() returns: the last action's output, "done" or not
     successful = None
     sleep = 0.0
     raises = None
+    raises_after = None  # raise ``raises`` after this many steps instead of before the first
     instances: list = []
 
     def __init__(self, **kwargs):
@@ -411,18 +426,26 @@ class FakeAgent:
     async def _usage(self):
         return type(self).usage
 
-    async def run(self, on_step_start=None, on_step_end=None):
-        if type(self).raises:
-            raise type(self).raises
-        goals = type(self).goals
-        for i, goal in enumerate(goals):
-            await on_step_start(self)
-            if type(self).sleep:
-                await asyncio.sleep(type(self).sleep)
-            self.history = FakeHistory(goals[: i + 1])
-            await on_step_end(self)
+    def _items(self):
         cls = type(self)
-        self.history = FakeHistory(goals, cls.errors, cls.done, cls.usage, cls.final, cls.successful)
+        evaluations = cls.evaluations or [None] * len(cls.goals)
+        results = cls.results or [()] * len(cls.goals)
+        return [history_item(g, e, r) for g, e, r in zip(cls.goals, evaluations, results)]
+
+    async def run(self, on_step_start=None, on_step_end=None):
+        cls = type(self)
+        if cls.raises and cls.raises_after is None:
+            raise cls.raises
+        items = self._items()
+        for i in range(len(items)):
+            if cls.raises and i == cls.raises_after:
+                raise cls.raises
+            await on_step_start(self)
+            if cls.sleep:
+                await asyncio.sleep(cls.sleep)
+            self.history = FakeHistory(items[: i + 1])
+            await on_step_end(self)
+        self.history = FakeHistory(items, cls.errors, cls.done, cls.usage, cls.final, cls.successful)
         return self.history
 
 
@@ -630,6 +653,111 @@ async def test_refusal_mid_run_is_reported_as_an_error_not_a_failure(fake_run, m
     assert len(state.steps) == 3
     assert len(calls) == 1
     assert "RESULT STATE: unknown" in calls[0]["messages"][0]["content"]  # an errored run keeps its wording
+
+
+async def test_a_judged_error_tells_the_ui_why_it_is_an_error(fake_run, monkeypatch):
+    """A refusal part-way is judged (status complete), and the status still carries the reason."""
+    fake_run.agent_cls.errors = [None, "claude-sonnet-5-5 declined this step (stop_reason=refusal, category=cyber)", None]
+    fake_run.agent_cls.done = False
+    fake_run.agent_cls.usage = usage_summary()
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    payload = state.to_dict()
+    assert (payload["status"], payload["result_state"]) == ("complete", "error")
+    assert payload["message"] == "The agent model declined to continue this task (safety refusal)."
+    assert payload["summary"] == "Added the book to the basket."
+    assert [p["steps"] for p in payload["phases"]] == [[1], [2, 3]]
+    assert payload["total_tokens"] == 73216
+
+
+def test_a_pass_or_fail_has_no_message_in_the_status():
+    for result_state in ("pass", "fail", "too_slow"):
+        state = RunState(run_id="m1", status="complete", result_state=result_state, summary="ok")
+        assert "message" not in state.to_dict()
+
+
+async def test_an_exception_after_some_steps_is_judged_and_keeps_the_usage(fake_run, monkeypatch):
+    """The steps before the crash were billed and are judged; the status says what went wrong."""
+    fake_run.agent_cls.raises = RuntimeError("browser crashed")
+    fake_run.agent_cls.raises_after = 2
+    fake_run.agent_cls.usage = usage_summary()
+    calls = install_fake_anthropic(monkeypatch, text_response({
+        "success": True, "summary": "Opened the site and searched.",
+        "phases": [{"name": "Start", "steps": [1, 2], "failed": False, "slow": False}],
+    }))
+    await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G", agent_model="claude-sonnet-5-5")
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert len(calls) == 1
+    payload = state.to_dict()
+    assert (payload["status"], payload["result_state"], payload["success"]) == ("complete", "error", False)
+    assert payload["message"] == "The run encountered an error."
+    assert payload["total_tokens"] == 73216
+    assert payload["cost_usd"] == pytest.approx(expected_sonnet_cost(14097, 987, 43599, 14533))
+    record = persistence.read_run("run-1")
+    assert record["total_tokens"] == 73216 and record["message"] == "The run encountered an error."
+
+
+async def test_the_judge_reads_what_the_agent_saw_and_its_final_report(fake_run, monkeypatch):
+    """The step goals alone ("Finish") cannot show a verification; the evidence goes to the judge."""
+    fake_run.agent_cls.goals = ["Open the cart", "Read the cart row", "Finish"]
+    fake_run.agent_cls.evaluations = [
+        None,
+        "Success - the cart page is open.",
+        "Success - the row shows Blue Top, quantity 4, total Rs. 2000.",
+    ]
+    fake_run.agent_cls.results = [
+        [action_result("Clicked button 'View Cart'")],
+        [action_result("<url>\nhttps://shop.example/view_cart\n</url>\n<structured_result>\n"
+                       '{"rows": [{"name": "Blue Top", "price": "Rs. 500", "quantity": 4, "total": "Rs. 2000"}]}'
+                       "\n</structured_result>")],
+        [action_result("Cart holds Blue Top x4 at Rs. 500, total Rs. 2000.", is_done=True)],
+    ]
+    fake_run.agent_cls.final = "Cart holds Blue Top x4 at Rs. 500, total Rs. 2000."
+    calls = install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    await persistence.persist_run_start("run-1", "local", "https://shop.example", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://shop.example", "Goal")
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "Step #3 (" in prompt and "): Finish" in prompt
+    assert "evaluation of the step before: Success - the row shows Blue Top, quantity 4, total Rs. 2000." in prompt
+    assert "result: Clicked button 'View Cart'" in prompt
+    assert '"quantity": 4, "total": "Rs. 2000"' in prompt
+    assert "THE AGENT'S FINAL REPORT" in prompt
+    assert prompt.count("Cart holds Blue Top x4 at Rs. 500, total Rs. 2000.") == 1  # the done text only once
+    assert state.final_report == "Cart holds Blue Top x4 at Rs. 500, total Rs. 2000."
+    assert persistence.read_run("run-1")["final_report"] == state.final_report
+    # None of it goes to the UI's status payload.
+    assert all(set(s) == {"step", "description", "elapsed_ms"} for s in state.to_dict()["steps"][:-1])
+
+
+async def test_long_page_text_and_errors_reach_the_judge_cut_short(fake_run, monkeypatch):
+    fake_run.agent_cls.goals = ["Read the page", "Click buy"]
+    fake_run.agent_cls.results = [
+        [action_result("cart " * 2000)],
+        [action_result(error="Element 12 not found\n" + "trace " * 500)],
+    ]
+    fake_run.agent_cls.done = False
+    fake_run.agent_cls.errors = [None, "Element 12 not found"]
+    calls = install_fake_anthropic(monkeypatch, text_response({**VERDICT_PASS, "success": False}))
+    state = make_state()
+
+    await run_benchmark(state, "https://shop.example", "Goal")
+
+    prompt = calls[0]["messages"][0]["content"]
+    page_line = next((line for line in prompt.splitlines() if line.strip().startswith("result: cart cart")), "")
+    assert len(page_line.strip()) < 700 and page_line.endswith("...")
+    error_line = next((line for line in prompt.splitlines() if "error: Element 12" in line), "")
+    assert error_line.strip().startswith("result: error: Element 12 not found") and len(error_line.strip()) < 400
+    assert "(The agent gave no final report.)" in prompt
+    assert state.final_report is None
 
 
 async def test_a_refusal_the_agent_recovered_from_is_not_an_error(fake_run, monkeypatch):

@@ -24,6 +24,8 @@ Record layout (all keys always present once ``persist_run_start`` has run)::
      "steps": [{"step_number", "description", "elapsed_ms"}],
      "phases": [{"name", "step_numbers", "total_ms", "failed", "slow"}]}
 
+A finished run may also have ``message`` (why it is an error).
+
 Screenshots are not stored. ``input_tokens`` includes cache reads (browser-use's
 convention); ``cache_read_tokens`` and ``cache_write_tokens`` say how many of the
 priced tokens were cached. ``final_report`` is the agent's closing report as the judge

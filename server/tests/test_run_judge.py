@@ -99,7 +99,7 @@ class TestJudgeRun:
         assert fmt["type"] == "json_schema"
         assert set(fmt["schema"]["properties"]) == {"success", "summary", "phases"}
         assert not {"temperature", "top_p", "top_k"} & set(request)
-        # The unchanged judge prompt, filled in with this run.
+        # The judge prompt, filled in with this run.
         prompt = request["messages"][0]["content"]
         assert "You are a benchmark judge" in prompt
         assert "Add item to cart" in prompt
@@ -131,6 +131,31 @@ class TestJudgeRun:
                 'If "fail" or "pass", the agent ran to completion.)'
             ) in prompt
             assert "finished on its own" not in prompt
+
+    def test_the_judge_sees_the_agents_evaluations_results_and_final_report(self, monkeypatch):
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+        steps = [
+            {**STEPS_3[0], "results": ["Navigated to https://shop.example"]},
+            {**STEPS_3[1], "evaluation": "Success - the site is open.", "results": []},
+            {**STEPS_3[2], "evaluation": "Success - results list Blue Top.",
+             "results": ["Clicked button 'Add to cart'", "error: modal did not close"]},
+        ]
+
+        judge_run("Add item to cart", steps, result_state="completed", final_report="Cart: Blue Top x4, total Rs. 2000.")
+
+        prompt = calls[0]["messages"][0]["content"]
+        assert (
+            "Step #1 (2.0s): Go to site\n"
+            "    result: Navigated to https://shop.example\n"
+            "Step #2 (3.0s): Search product\n"
+            "    evaluation of the step before: Success - the site is open.\n"
+            "Step #3 (1.0s): Click add to cart\n"
+            "    evaluation of the step before: Success - results list Blue Top.\n"
+            "    result: Clicked button 'Add to cart'\n"
+            "    result: error: modal did not close\n"
+        ) in prompt
+        assert "THE AGENT'S FINAL REPORT" in prompt
+        assert "<agent_report>\nCart: Blue Top x4, total Rs. 2000.\n</agent_report>" in prompt
 
     def test_the_judge_sees_the_final_report_as_the_agents_own_claim(self, monkeypatch):
         calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
@@ -185,6 +210,13 @@ class TestJudgeRun:
         assert "If you cannot see that check and its result" in prompt
         assert '"success" is false' in prompt
         assert "does not count as proof" in prompt
+
+    def test_a_check_the_task_asks_for_must_be_shown_in_a_result_an_evaluation_or_the_report(self, monkeypatch):
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+        judge_run("Add 4 and check the total", STEPS_3, result_state="completed")
+        prompt = calls[0]["messages"][0]["content"]
+        assert "a step result, an evaluation or the final report must show that check" in prompt
+        assert "say in the summary which check is missing" in prompt
 
     def test_default_judge_model_is_sonnet_5_5(self, monkeypatch):
         calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))

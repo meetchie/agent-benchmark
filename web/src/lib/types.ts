@@ -52,6 +52,8 @@ export interface StatusComplete {
   cost_usd?: number | null;
   agent_model?: string | null;
   phases: Phase[];
+  /** Why the run is an error, when result_state is "error" (the steps were still judged). */
+  message?: string;
 }
 
 export interface StatusError {
