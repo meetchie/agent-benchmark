@@ -1,221 +1,106 @@
-# Agent Setup Guide
+# Arena setup
 
-This guide explains how to set up each agent (BROWSERUSE, STEEL, SKYVERN, STAGEHAND) for the arena test runner.
+How to set up and run the head-to-head arena (`arena.py`) on one machine. The live
+benchmark API in the same folder has its own settings; see `.env.example` and the
+short section in [README.md](README.md).
 
-## Prerequisites
+## What you need
 
-All agents require:
-- Python 3.11+
-- Virtual environment activated (`.venv`)
-- `OPENAI_API_KEY` - Required for all agents that use LLMs
+- Python 3.11 and [uv](https://docs.astral.sh/uv/)
+- A Chromium that Playwright installed (`uv run playwright install chromium`)
+- An Anthropic API key in `ANTHROPIC_API_KEY`
 
-## Environment Variables
+Nothing else: no Rindler server or database, no OpenAI key, no Browserbase, Steel or
+Skyvern account. Both arms run a local headless Chromium.
 
-Create a `.env` file in the `clean-room` directory with the following variables:
-
-```bash
-# Required for all agents
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Required for BROWSERUSE agent
-BROWSERBASE_API_KEY=your_browserbase_api_key_here
-BROWSERBASE_PROJECT_ID=your_browserbase_project_id_here
-
-# Required for SKYVERN agent
-SKYVERN_API_KEY=your_skyvern_api_key_here
-
-# Required for STEEL agent
-STEEL_API_KEY=your_steel_api_key_here
-
-# Required for STAGEHAND agent (uses Browserbase)
-# BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID (same as above)
-# OPENAI_API_KEY (same as above)
-```
-
-## Agent-Specific Setup
-
-### 1. BROWSERUSE Agent
-
-**Required:**
-- `BROWSERBASE_API_KEY` - Get from [Browserbase](https://browserbase.com)
-- `BROWSERBASE_PROJECT_ID` - Get from Browserbase dashboard
-- `BROWSERBASE_ORG_ID` - Get from Browserbase dashboard URL (the org ID in your dashboard URL)
-- `OPENAI_API_KEY` - For LLM calls
-
-**Dependencies:**
-- `browser-use` - Browser automation with AI
-- `browserbase` - Cloud browser service
-
-**Setup Steps:**
-1. Sign up at [https://browserbase.com](https://browserbase.com)
-2. Get your API key and Project ID from the dashboard
-3. Add them to your `.env` file
-
-**Usage:**
-```bash
-python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
-```
-
-### 2. STEEL Agent
-
-**Required:**
-- `STEEL_API_KEY` - Get from [Steel.dev](https://steel.dev)
-- `OPENAI_API_KEY` - For LangChain LLM calls
-
-**Dependencies:**
-- `steel-sdk` - Steel SDK package
-- `playwright` - Already included via other dependencies
-- `langchain` and `langchain-openai` - Already in dependencies
-
-**Setup Steps:**
-1. Sign up at [https://steel.dev](https://steel.dev)
-2. Get your API key from the dashboard
-3. Install Steel SDK:
-   ```bash
-   pip install steel-sdk
-   ```
-   Or if using uv:
-   ```bash
-   uv pip install steel-sdk
-   ```
-
-4. Add `STEEL_API_KEY` to your `.env` file
-5. Ensure `OPENAI_API_KEY` is set
-
-**Usage:**
-```bash
-python arena.py --agent STEEL --scenario google_search
-```
-
-**Reference:** [github.com/steel-dev/steel-browser](https://github.com/steel-dev/steel-browser)
-
-### 3. SKYVERN Agent
-
-**Required:**
-- `SKYVERN_API_KEY` - Get from [Skyvern](https://skyvern.com)
-
-**Dependencies:**
-- `requests` - For API calls (standard library)
-- `aiohttp` - For async API calls
-
-**Setup Steps:**
-1. Sign up at [https://app.skyvern.com](https://app.skyvern.com)
-2. Get your API key from the dashboard
-3. Add `SKYVERN_API_KEY` to your `.env` file
-
-**Usage:**
-```bash
-python arena.py --agent SKYVERN --scenario amazon_search
-```
-
-**Reference:** [github.com/skyvern-ai/skyvern](https://github.com/skyvern-ai/skyvern)
-
-**Notes:**
-- Skyvern is a cloud-based service - no local browser needed
-- Uses polling to track task progress
-- Supports structured data extraction
-
-### 4. STAGEHAND Agent
-
-**Required:**
-- `BROWSERBASE_API_KEY` - Get from [Browserbase](https://browserbase.com)
-- `BROWSERBASE_PROJECT_ID` - Get from Browserbase dashboard
-- `OPENAI_API_KEY` - For AI-driven automation
-
-**Dependencies:**
-- Node.js 18+ - Required for running Stagehand
-- `@browserbasehq/stagehand` - Stagehand npm package
-
-**Setup Steps:**
-1. Sign up at [https://browserbase.com](https://browserbase.com)
-2. Get your API key and Project ID from the dashboard
-3. Install Node.js dependencies in the `clean-room` directory:
-   ```bash
-   npm init -y
-   npm install @browserbasehq/stagehand
-   ```
-
-4. Add Browserbase credentials and OpenAI key to your `.env` file
-
-**Usage:**
-```bash
-python arena.py --agent STAGEHAND --scenario hacker_news_browse
-```
-
-**Reference:** [github.com/browserbase/stagehand](https://github.com/browserbase/stagehand)
-
-**Notes:**
-- Stagehand is a TypeScript/JavaScript library
-- The Python adapter runs it via subprocess
-- Provides `act()`, `extract()`, `observe()`, and `agent()` methods
-- For full native integration, use the JavaScript SDK directly
-
-## Quick Setup Checklist
-
-- [ ] Create `.env` file in `clean-room/` directory
-- [ ] Add `OPENAI_API_KEY` to `.env`
-- [ ] For BROWSERUSE: Add `BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`, and `BROWSERBASE_ORG_ID`
-- [ ] For STEEL: Add `STEEL_API_KEY` and install `steel-sdk`
-- [ ] For SKYVERN: Add `SKYVERN_API_KEY` (no extra packages needed)
-- [ ] For STAGEHAND: Same Browserbase keys + install Node.js dependencies
-
-## Testing Your Setup
-
-Test each agent individually:
+## Install
 
 ```bash
-# Test BROWSERUSE
-python arena.py --agent BROWSERUSE --scenario shipt_add_to_cart
-
-# Test STEEL
-python arena.py --agent STEEL --scenario google_search
-
-# Test SKYVERN
-python arena.py --agent SKYVERN --scenario amazon_search
-
-# Test STAGEHAND
-python arena.py --agent STAGEHAND --scenario hacker_news_browse
-
-# List all available scenarios
-python arena.py --list-scenarios
+cd server
+uv sync
+uv run playwright install chromium
 ```
+
+If several projects share one Playwright cache, add `PLAYWRIGHT_SKIP_BROWSER_GC=1` so
+the install does not delete other projects' browser builds.
+
+## Environment
+
+Put these in `server/.env` or the repo-root `.env` (both are gitignored and loaded by
+`runtime_env.py`; variables already set in the shell win), or export them.
+
+| variable | default | used for |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | (required) | both arms and the judge (`ANTHROPIC_AUTH_TOKEN` also works) |
+| `BENCHMARK_AGENT_MODEL` | `claude-sonnet-5-5` | agent model of both arms (`--model` overrides) |
+| `BENCHMARK_JUDGE_MODEL` | `claude-sonnet-5-5` | judge model (`--judge-model` overrides) |
+| `BENCHMARK_AGENT_EFFORT` | `medium` | effort for the agent model: low, medium, high, xhigh, max, or `default` (send none) |
+| `BENCHMARK_JUDGE_EFFORT` | model default | effort for the judge |
+| `LLM_FALLBACKS` | `default` | `off` disables the server-side refusal fallback on Sonnet/Opus |
+| `BENCHMARK_HEADLESS` | `true` | `false` shows the browser windows (both arms) |
+| `BENCHMARK_CHROMIUM_PATH` | the Playwright build | use another Chromium-based browser |
+| `LLM_PROVIDER` | `anthropic` | `openai` runs the original gpt-4o setup (needs `uv sync --extra openai` and `OPENAI_API_KEY`) |
+
+Telemetry is off by construction: `runtime_env.py` sets `ANONYMIZED_TELEMETRY=false`
+and `BROWSER_USE_CLOUD_SYNC=false` before browser-use loads.
+
+## Running each arm
+
+```bash
+# Rindler arm: picks mappings/vhlistings.json from the start URL's domain
+uv run python arena.py --agent RINDLER --scenario vhlistings_product_attribute_search
+
+# Same task on the browser-use arm
+uv run python arena.py --agent BROWSERUSE --scenario vhlistings_product_attribute_search
+
+# Cheaper model, smaller budget, and a full transcript of the Rindler arm
+uv run python arena.py --agent RINDLER --scenario vhlistings_add_to_cart \
+    --model claude-haiku-5-5 --max-steps 15 --context-log
+```
+
+The RINDLER arm only runs on sites that have a mapping (vhlistings.com, shipt.com). Any
+scenario, or your own `--goal` and `--url`, runs on BROWSERUSE.
+
+Each run prints its steps, then the judge's verdict and the token and cost totals, and
+writes `arena_runs/arena_<agent>_<site>_<timestamp>.log`. Compare runs with
+
+```bash
+uv run python analyze_runs.py --log-dir arena_runs
+uv run python analyze_runs.py --scenarios vhlistings_product_attribute_search
+```
+
+## What a run costs
+
+Agent tokens are priced from `constants.COST_RATES` (claude-sonnet-5-5: $2 / $10 per
+million input / output, cache reads $0.20, cache writes $2.50). As a rough guide from
+the 2026-10-24 runs on vhlistings_product_attribute_search: the RINDLER arm used about
+33,000 tokens ($0.03) and the judge about $0.01. The BrowserUse arm sends a screenshot
+and the page's element list on every step, so it costs several times more per step.
+
+## Adding or fixing a site mapping
+
+1. Edit the override in `mappings/overrides/<site>.json` (a JSON merge patch; add a
+   line to `_notes` saying why), or write a new `mappings/<site>.json` by hand in the
+   same format (`rindler_local/mapping.py` documents it).
+2. For a seed-based site, regenerate: `uv run python tools/seed_to_json.py --all`.
+3. Try the actions without a model: `LocalRindlerHost(load_mapping("<site>"))` and
+   `await host.call(...)` each action in turn; a failing step names the selector.
+4. `uv run pytest -q tests/test_seed_to_json.py tests/test_rindler_local.py`.
 
 ## Troubleshooting
 
-### "ModuleNotFoundError: No module named 'steel'"
-- Install Steel: `pip install steel-sdk`
-
-### "SKYVERN_API_KEY not found"
-- Add the key to your `.env` file
-- Get your API key from [Skyvern dashboard](https://app.skyvern.com)
-
-### "STEEL_API_KEY not found"
-- Add the key to your `.env` file
-- Get your API key from [Steel.dev dashboard](https://app.steel.dev)
-
-### "BROWSERBASE_API_KEY not found"
-- Add the key to your `.env` file
-- Get your API key from [Browserbase dashboard](https://browserbase.com)
-
-### Stagehand Node.js issues
-- Ensure Node.js 18+ is installed: `node --version`
-- Install Stagehand: `npm install @browserbasehq/stagehand`
-- Ensure you're in the `clean-room` directory
-
-## API Key Sources
-
-- **OpenAI**: [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- **Browserbase**: [https://www.browserbase.com](https://www.browserbase.com)
-- **Steel**: [https://app.steel.dev](https://app.steel.dev)
-- **Skyvern**: [https://app.skyvern.com](https://app.skyvern.com)
-
-## Architecture Overview
-
-| Agent | Browser Provider | AI Provider | Method |
-|-------|-----------------|-------------|--------|
-| BROWSERUSE | Browserbase | OpenAI | Hook-based telemetry |
-| STEEL | Steel Cloud | OpenAI (LangChain) | Callback telemetry |
-| SKYVERN | Skyvern Cloud | Skyvern's AI | Polling telemetry |
-| STAGEHAND | Browserbase | OpenAI | Subprocess telemetry |
-
-All agents share the unified `TelemetricWrapper` for consistent logging and cost tracking.
+- **`ChromiumNotFoundError` / "No local Chromium found"**: run
+  `uv run playwright install chromium`, or set `BENCHMARK_CHROMIUM_PATH`.
+- **"no model API key"**: `ANTHROPIC_API_KEY` is not set in the shell or a `.env` file.
+- **`No site mapping covers ...`** (RINDLER): the start URL's domain has no
+  `mappings/*.json`; use `--mapping` or run that scenario on BROWSERUSE.
+- **A Rindler action returns `execution_failed`**: the message names the step and every
+  selector it tried. The live site has changed; see the drift table in README.md and
+  fix the mapping as above.
+- **Judge verdict `ERROR`**: the judge call failed (network, rate limit, refusal); the
+  reason is in the log's `Judge Reason:` line. The agent's part of the run is still logged.
+- **A run seems stuck**: browser-use has its own 180 s step timeout, Rindler actions stop
+  after 120 s, and the whole run stops at `--timeout` (default 1200 s).
+- **Keychain dialogs on macOS**: both arms launch Chromium with `--use-mock-keychain
+  --password-store=basic`; check with
+  `ps -axww -o pid,command | grep '[u]se-mock-keychain'` while a run is going.

@@ -1,0 +1,61 @@
+{
+  "_notes": [
+    "Checked against the live site on 2026-10-24 by driving each action without a model.",
+    "page_extractor: the cart page no longer exposes 'Remove <item>' links in its accessibility tree, so view_cart returned no cart_items. On /cart the extractor now also reads Shopify's /cart.js and returns cart_item_count and cart_lines (name, quantity, line_price). The /checkouts/ branch is the March extractor unchanged.",
+    "context_extractors: the March server never ran them. cart_badge used 'link[name^=Cart]' (an accessibility-tree notation that matches nothing as a selector); it now reads #cart-icon-bubble. bundle_progress ('generic:has-text(Add)') could not match anything and is removed.",
+    "actions.next_page / prev_page: the March selectors are 'link[name=\"Next\"]' (accessibility-tree notation, matches nothing as a selector) and the text 'Next', but the pagination arrows carry no text, only aria-label 'Next page' / 'Previous page'. A css fallback on that aria-label is added after the March ones.",
+    "Not fixed: remove_from_cart. As of 2026-10-24 the /cart page lists no line items at all (only the subtotal); the only remove control is a hidden <cart-remove-button> inside the cart drawer, and the March selectors (a[href*=quantity=0]) match nothing. Fixing it means rewriting the action to go through the drawer, so it is left as March wrote it and fails on the live site.",
+    "Not fixable in the mapping: the SPRING promo code is rejected by the site as of 2026-10-24 ('Enter a valid discount code or gift card'), so vhlistings_bundle_promo cannot pass today on either arm."
+  ],
+  "page_extractor": "async () => { try { if (location.href.indexOf(\"/checkouts/\") !== -1) { var txt = document.body.innerText; var discountApplied = txt.indexOf(\"Order discount\") !== -1; var savingsI = txt.indexOf(\"TOTAL SAVINGS\"); var savings = savingsI >= 0 ? txt.slice(savingsI, savingsI + 35) : null; return { discount_applied: discountApplied, savings: savings }; } if (location.pathname.replace(/\\/$/, \"\") === \"/cart\") { var c = await (await fetch(\"/cart.js\", { credentials: \"same-origin\" })).json(); return { cart_item_count: c.item_count, cart_lines: (c.items || []).map(function (i) { return { name: i.product_title, quantity: i.quantity, line_price: \"$\" + (i.final_line_price / 100).toFixed(2) }; }) }; } return null; } catch (e) { return null; } }",
+  "context_extractors": {
+    "cart_badge": {
+      "steps": [
+        {
+          "action": "extract",
+          "selector": "#cart-icon-bubble",
+          "field": "item_count"
+        }
+      ]
+    },
+    "bundle_progress": null
+  },
+  "actions": {
+    "next_page": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "link[name=\"Next\"]",
+          "fallbacks": [
+            {
+              "type": "text",
+              "selector": "Next"
+            },
+            {
+              "type": "css",
+              "selector": "a[aria-label=\"Next page\"]"
+            }
+          ]
+        }
+      ]
+    },
+    "prev_page": {
+      "steps": [
+        {
+          "action": "click",
+          "selector": "link[name=\"Previous\"]",
+          "fallbacks": [
+            {
+              "type": "text",
+              "selector": "Previous"
+            },
+            {
+              "type": "css",
+              "selector": "a[aria-label=\"Previous page\"]"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -3,8 +3,13 @@
 Parses plaintext arena log files and produces a markdown comparison table
 for A/B testing RINDLER vs BROWSERUSE (or any agents).
 
+By default it reads both the archived March 2026 logs (arena_logs/) and new runs
+(arena_runs/). Rows are grouped by scenario, agent and agent model, so March runs
+(whose logs do not record the model; shown as "-") never mix with new ones.
+
 Usage:
     python analyze_runs.py
+    python analyze_runs.py --log-dir arena_runs            # new runs only
     python analyze_runs.py --agents RINDLER,BROWSERUSE
     python analyze_runs.py --scenarios shipt_add_to_cart,amazon_search
     python analyze_runs.py --since 2026-03-10
@@ -45,7 +50,10 @@ def parse_log_file(path: Path) -> dict:
         "tokens_input": 0,
         "tokens_output": 0,
         "cost_usd": 0.0,
+        "duration_s": None,
+        "model": None,
         "timestamp": parse_timestamp_from_filename(path.name),
+        "path": str(path),
     }
 
     for line in lines:
@@ -63,6 +71,13 @@ def parse_log_file(path: Path) -> dict:
             val = line.split("Status: ", 1)[1].strip()
             # Fire-and-forget submissions: outcome unknown, treat as not-success
             result["success"] = False
+        elif line.startswith("Agent Model: "):
+            result["model"] = line.split("Agent Model: ", 1)[1].strip()
+        elif line.startswith("Duration: "):
+            try:
+                result["duration_s"] = float(line.split("Duration: ", 1)[1].strip().rstrip("s"))
+            except ValueError:
+                pass
         elif line.startswith("Judge Verdict: "):
             result["judge_verdict"] = line.split("Judge Verdict: ", 1)[1].strip()
         elif line.startswith("Token Burn: "):
@@ -92,14 +107,14 @@ def parse_log_file(path: Path) -> dict:
 
 
 def aggregate_runs(runs: list[dict]) -> list[dict]:
-    """Group runs by (scenario, agent) and compute aggregates."""
+    """Group runs by (scenario, agent, model) and compute aggregates."""
     groups = defaultdict(list)
     for run in runs:
-        key = (run["scenario"], run["agent"])
+        key = (run["scenario"], run["agent"], run.get("model") or "-")
         groups[key].append(run)
 
     table = []
-    for (scenario, agent), group_runs in sorted(groups.items()):
+    for (scenario, agent, model), group_runs in sorted(groups.items()):
         n = len(group_runs)
         successes = sum(1 for r in group_runs if r["success"])
 
@@ -110,11 +125,16 @@ def aggregate_runs(runs: list[dict]) -> list[dict]:
 
         avg_steps = sum(r["steps"] for r in group_runs) / n
         avg_cost = sum(r["cost_usd"] for r in group_runs) / n
+        durations = [r["duration_s"] for r in group_runs if r.get("duration_s") is not None]
+        avg_duration = sum(durations) / len(durations) if durations else None
 
         table.append({
             "scenario": scenario,
             "agent": agent,
+            "model": model,
             "runs": n,
+            "judged": len(judge_eligible),
+            "avg_duration_s": avg_duration,
             "success_rate": successes / n,
             "judge_pass_rate": judge_pass_rate,
             "avg_steps": avg_steps,
@@ -126,39 +146,47 @@ def aggregate_runs(runs: list[dict]) -> list[dict]:
 
 def format_table(rows: list[dict]) -> str:
     """Format aggregated rows as a markdown table."""
-    header = "| Scenario | Agent | Runs | Success | Judge Pass | Avg Steps | Avg Cost |"
-    separator = "|----------|-------|------|---------|------------|-----------|----------|"
+    header = "| Scenario | Agent | Model | Runs | Success | Judge Pass | Avg Steps | Avg Duration | Avg Cost |"
+    separator = "|----------|-------|-------|------|---------|------------|-----------|--------------|----------|"
     lines = [header, separator]
 
     for row in rows:
         success_pct = f"{row['success_rate']:.0%}"
-        judge_pct = f"{row['judge_pass_rate']:.0%}"
+        judged = row.get("judged")
+        judge_pct = f"{row['judge_pass_rate']:.0%}" if judged else "n/a"
+        if judged is not None and judged != row["runs"]:
+            judge_pct += f" of {judged}"
         avg_steps = f"{row['avg_steps']:.1f}"
+        duration = row.get("avg_duration_s")
+        avg_duration = f"{duration:.1f}s" if duration is not None else "-"
         avg_cost = f"${row['avg_cost']:.4f}"
         lines.append(
-            f"| {row['scenario']:<20s} | {row['agent']:<10s} | {row['runs']:<4d} "
-            f"| {success_pct:<7s} | {judge_pct:<10s} | {avg_steps:<9s} | {avg_cost:<8s} |"
+            f"| {row['scenario']:<20s} | {row['agent']:<10s} | {row.get('model') or '-':<17s} | {row['runs']:<4d} "
+            f"| {success_pct:<7s} | {judge_pct:<10s} | {avg_steps:<9s} | {avg_duration:<12s} | {avg_cost:<8s} |"
         )
 
     return "\n".join(lines)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Analyze arena run logs")
     parser.add_argument("--agents", help="Comma-separated agent filter (e.g., RINDLER,BROWSERUSE)")
     parser.add_argument("--scenarios", help="Comma-separated scenario filter")
     parser.add_argument("--since", help="Only include runs after this date (YYYY-MM-DD)")
-    parser.add_argument("--log-dir", default=None, help="Path to arena_logs directory")
-    args = parser.parse_args()
+    parser.add_argument("--log-dir", action="append", default=None,
+                        help="Log directory; repeat for several (default: arena_logs and arena_runs)")
+    args = parser.parse_args(argv)
 
-    log_dir = Path(args.log_dir) if args.log_dir else Path(__file__).parent / "arena_logs"
-    if not log_dir.exists():
-        print(f"No logs directory found at {log_dir}")
+    here = Path(__file__).parent
+    log_dirs = [Path(d) for d in args.log_dir] if args.log_dir else [here / "arena_logs", here / "arena_runs"]
+    existing = [d for d in log_dirs if d.exists()]
+    if not existing:
+        print(f"No logs directory found at {', '.join(str(d) for d in log_dirs)}")
         return
 
-    log_files = sorted(log_dir.glob("arena_*.log"))
+    log_files = sorted(p for d in existing for p in d.glob("arena_*.log"))
     if not log_files:
-        print(f"No log files found in {log_dir}")
+        print(f"No log files found in {', '.join(str(d) for d in existing)}")
         return
 
     since = None

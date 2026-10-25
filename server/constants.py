@@ -21,11 +21,6 @@ COST_RATES = {
     "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write": 5.00},
 }
 
-# TODO: Stagehand and Skyvern do not report token usage.
-# Cost comparisons are incomplete for these agents until their SDKs
-# expose per-step token counts.
-
-
 def _rates_for(model: str | None) -> dict | None:
     if not model:
         return None

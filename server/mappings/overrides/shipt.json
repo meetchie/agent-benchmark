@@ -1,0 +1,12 @@
+{
+  "_notes": [
+    "defaults.store_slug: search_products navigates to /shop/{{store_slug}}/search. The March server filled store_slug from the selected store and fell back to 'target' in its own code; the local interpreter takes the fallback from the mapping instead.",
+    "actions.select_store.sets_context: remembers the chosen store so later searches use its slug (the March server did this in code for select_store)."
+  ],
+  "defaults": {"store_slug": "target"},
+  "actions": {
+    "select_store": {
+      "sets_context": {"store": "{{store}}", "store_slug": "{{store:slug}}"}
+    }
+  }
+}

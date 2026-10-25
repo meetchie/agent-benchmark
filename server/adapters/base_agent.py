@@ -37,7 +37,7 @@ class BaseAgent(ABC):
         Args:
             run_id: Unique identifier for this run
             goal: The task/goal for the agent to accomplish
-            lane: Lane identifier (e.g., "BROWSERUSE", "STEEL", "SKYVERN", "STAGEHAND")
+            lane: Lane identifier ("BROWSERUSE" or "RINDLER")
         """
         self.run_id = run_id
         self.lane = lane

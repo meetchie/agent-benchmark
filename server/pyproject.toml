@@ -34,14 +34,9 @@ dependencies = [
     "matplotlib>=3.10.0",
     "numpy>=2.3.0",
 
-    # Legacy arena vendor adapters (browserbase, steel, skyvern, the MCP Rindler
-    # client). Still imported by server/adapters and benchmark_runner's optional
-    # Browserbase provider; drop each one together with the code that uses it.
+    # Only benchmark_runner's optional Browserbase provider imports it (the arena
+    # runs locally). Drop it together with that provider.
     "browserbase>=1.4.0",
-    "steel-sdk>=0.16.0",
-    "langchain-openai>=1.1.0",
-    "mcp>=2.1.0",
-    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]

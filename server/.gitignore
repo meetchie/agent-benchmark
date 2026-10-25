@@ -6,3 +6,5 @@ __pycache__/
 .quota_data.json
 # Saved benchmark runs (RUNS_DIR default), one JSON file per run
 /runs/
+# New arena runs (arena_logs/ is the archived March 2026 evidence and stays tracked)
+/arena_runs/

@@ -61,7 +61,7 @@ register_scenario(Scenario(
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to San Mateo, CA
+1. The delivery address was set to 1 Main St, Springfield, IL 62701
 2. A search for "Organic Bananas" was performed
 3. An organic bananas product was added to the cart
 4. The cart was viewed and contains at least one bananas product
@@ -69,7 +69,7 @@ VERIFICATION: After completing the task, navigate to the cart/bag page and repor
 The task FAILS if:
 - The cart is empty or does not contain bananas
 - The agent never verified the cart contents""",
-    verification_hint="Look for cart contents showing an organic bananas product with quantity and price. The agent should have navigated to the cart page or called view_cart."
+    verification_hint="Look for cart contents showing an organic bananas product with quantity and price. The agent should have opened the cart page."
 ))
 
 register_scenario(Scenario(
@@ -126,13 +126,13 @@ register_scenario(Scenario(
     tags=["e-commerce", "clothing", "cart"],
     goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
 
-1. Start a session on vhlistings.com.
+1. Go to vhlistings.com.
 2. Search for "belt".
 3. From the search results, select any belt product.
 4. Add it to the cart.
 5. Navigate to the cart page and verify the item is there.
 
-VERIFICATION: After completing the task, call view_cart and report the exact cart contents including the product name and price.""",
+VERIFICATION: After completing the task, open the cart page and report the exact cart contents including the product name and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. A search for "belt" was performed on VHListings
 2. A belt product was selected and added to the cart
@@ -140,8 +140,8 @@ VERIFICATION: After completing the task, call view_cart and report the exact car
 
 The task FAILS if:
 - The cart is empty or does not contain a belt
-- The agent never verified cart contents via view_cart""",
-    verification_hint="Look for cart contents showing a belt product with a price. The agent should have called view_cart and reported the item name."
+- The agent never verified the cart contents on the cart page""",
+    verification_hint="Look for cart contents showing a belt product with a price. The agent should have opened the cart page and reported the item name."
 ))
 
 register_scenario(Scenario(
@@ -154,11 +154,11 @@ register_scenario(Scenario(
 VHListings offers a bundle discount: BUY 3 items, GET 10% OFF automatically. There is also a promo code "SPRING" for an additional 15% off.
 
 Your task:
-1. Start a session on vhlistings.com.
+1. Go to vhlistings.com.
 2. Search for "sunglasses". Add any one pair to your cart.
 3. Search for "wallet". Add any one wallet to your cart.
 4. Search for "jewelry". Add any one jewelry item to your cart.
-5. Navigate to the cart page (view_cart) and confirm you have exactly 3 items.
+5. Go to the cart page and confirm you have exactly 3 items.
 6. Proceed to checkout.
 7. Apply the promo code "SPRING" at checkout.
 8. Report the final cart total and confirm the promo code was applied.
@@ -171,15 +171,15 @@ VERIFICATION: Report the number of items in the cart, the subtotal, and whether 
 2. The cart was verified to contain 3 items before checkout
 3. The checkout page was reached
 4. The SPRING promo code was applied (accepted without error)
-5. The checkout order does NOT contain a VIP Membership subscription (it is auto-added by the site and should be silently removed before checkout)
+5. The checkout order does NOT contain a VIP Membership subscription (the site adds it to the cart on its own)
 
 The task FAILS if:
 - Fewer than 3 items were added to the cart
 - The agent did not proceed to checkout
 - The promo code was not applied or was rejected
 - The agent attempted to complete payment (out of scope)
-- A VIP Membership subscription appears in the final checkout order summary (indicates server-side cleanup failed)""",
-    verification_hint="Look for confirmation of 3 cart items across different categories, confirmation that the SPRING promo code was applied at checkout, and verify that VIP Membership is NOT listed in the checkout order summary. VIP Membership is auto-added by the site and should be removed transparently before checkout."
+- A VIP Membership subscription appears in the final checkout order summary""",
+    verification_hint="Look for confirmation of 3 cart items across different categories, confirmation that the SPRING promo code was applied at checkout, and verify that VIP Membership is NOT listed in the checkout order summary. The site adds VIP Membership to the cart on its own."
 ))
 
 register_scenario(Scenario(
@@ -195,12 +195,12 @@ Your task is to find and add a specific type of belt based on these constraints:
 - Add it to the cart
 
 Steps:
-1. Start a session on vhlistings.com.
+1. Go to vhlistings.com.
 2. Search for "chain belt".
 3. Review the search results. Look at product names and prices to identify a chain belt under $35.
 4. Select a qualifying product and view its detail page.
 5. Add it to the cart.
-6. Call view_cart and confirm the correct item is there.
+6. Open the cart page and confirm the correct item is there.
 
 Product names in search results describe the item type. Use the name to infer whether it is a chain belt. If no results are under $35, pick the cheapest chain belt available and note that the price constraint could not be met.
 
@@ -226,25 +226,25 @@ register_scenario(Scenario(
     tags=["e-commerce", "clothing", "cart"],
     goal="""You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
 
-1. Start a session on vhlistings.com.
+1. Go to vhlistings.com.
 2. Search for "belt".
 3. Select any belt product and view its detail page.
 4. Add it to the cart.
-5. Navigate to the cart page (view_cart).
-6. Remove the item from the cart using remove_from_cart.
-7. Call view_cart again and verify the cart is now empty.
+5. Go to the cart page.
+6. Remove the item from the cart.
+7. Open the cart page again and verify the cart is now empty.
 
-VERIFICATION: After removing the item, call view_cart and confirm the cart contains zero items.""",
+VERIFICATION: After removing the item, open the cart page again and confirm the cart contains zero items.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. A belt was added to the cart
-2. The belt was removed using remove_from_cart
+2. The belt was removed from the cart
 3. The cart was verified to be empty after removal
 
 The task FAILS if:
 - The item was not removed
 - The cart still contains items after the remove step
-- The agent never verified the empty cart via view_cart""",
-    verification_hint="Look for confirmation that the cart is empty after removal. The agent should have called view_cart a second time and reported no cart items."
+- The agent never verified the empty cart on the cart page""",
+    verification_hint="Look for confirmation that the cart is empty after removal. The agent should have checked the cart a second time and reported no cart items."
 ))
 
 register_scenario(Scenario(
@@ -284,7 +284,7 @@ register_scenario(Scenario(
     goal="""Go to target.com.
 
 Find the store locator (usually in the header or footer).
-Enter ZIP code: 02139 (Cambridge, MA)
+Enter ZIP code: 62701 (Springfield, IL)
 
 Find the nearest Target store and report:
 1. Store address
@@ -294,14 +294,14 @@ Find the nearest Target store and report:
 VERIFICATION: Report your findings clearly, including all requested data points.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. The store locator was accessed on target.com
-2. ZIP code 02139 was entered
+2. ZIP code 62701 was entered
 3. At least one store result was found
 4. The store address, hours, and Order Pickup availability were reported
 
 The task FAILS if:
 - No store was found or reported
 - Store address or hours are missing from the report""",
-    verification_hint="Look for a Target store address near Cambridge, MA (ZIP 02139), today's store hours, and whether Order Pickup is available."
+    verification_hint="Look for a Target store address near Springfield, IL (ZIP 62701), today's store hours, and whether Order Pickup is available."
 ))
 
 register_scenario(Scenario(
@@ -352,7 +352,7 @@ register_scenario(Scenario(
 Search for used cars with these criteria:
 1. Make: Toyota
 2. Model: Camry
-3. Location/ZIP: 02139 (Cambridge, MA)
+3. Location/ZIP: 62701 (Springfield, IL)
 4. Maximum price: $25,000
 5. Year: 2020 or newer
 
@@ -363,7 +363,7 @@ Wait for results to load and report:
 
 VERIFICATION: Report your findings clearly, including all requested data points.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. A search was performed on CarGurus for Toyota Camry near ZIP 02139
+1. A search was performed on CarGurus for Toyota Camry near ZIP 62701
 2. Filters were applied (max $25,000, 2020 or newer)
 3. The total number of results was reported
 4. At least 3 listings were reported with year, price, and mileage
@@ -406,7 +406,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to San Mateo, CA
+1. The delivery address was set to 1 Main St, Springfield, IL 62701
 2. A search for "pizza" restaurants was performed
 3. A pizza restaurant with 4+ stars was selected
 4. A pizza item was added to the cart
@@ -444,7 +444,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to San Mateo, CA
+1. The delivery address was set to 1 Main St, Springfield, IL 62701
 2. A search for "Chinese food" restaurants was performed
 3. A Chinese restaurant with good rating was selected
 4. A dish (e.g., General Tso's Chicken or similar) was added to the cart
@@ -482,7 +482,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to San Mateo, CA
+1. The delivery address was set to 1 Main St, Springfield, IL 62701
 2. A search for "burger" restaurants was performed
 3. A burger restaurant was selected
 4. A burger item was added to the cart
@@ -521,7 +521,7 @@ After clicking add to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to San Mateo, CA
+1. The delivery address was set to 1 Main St, Springfield, IL 62701
 2. A grocery store was selected
 3. Milk was searched for or found in the dairy section
 4. A gallon of whole or 2% milk was added to the cart
@@ -990,7 +990,7 @@ register_scenario(Scenario(
 1. Search for "Phillips screwdriver set" using the search bar.
 2. Click on the first relevant product from the results.
 3. On the product page, look for store pickup availability.
-4. If prompted, enter ZIP code: 94403 to check local store availability.
+4. If prompted, enter ZIP code: 62701 to check local store availability.
 5. Report whether the item is available for pickup, and at which store.
 
 IMPORTANT - How to verify success:
@@ -1003,14 +1003,14 @@ VERIFICATION: Report your findings clearly, including the product name, pickup a
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
 1. A search for "Phillips screwdriver set" was performed on Home Depot
 2. A relevant product was selected from results
-3. Store pickup availability was checked for ZIP 94403
+3. Store pickup availability was checked for ZIP 62701
 4. The agent reported whether the item is available for pickup and at which store
 
 The task FAILS if:
 - No product was found or selected
 - Store pickup availability was not checked
 - No store name or availability status was reported""",
-    verification_hint="Look for a Home Depot product page showing store pickup availability for a Phillips screwdriver set near ZIP 94403. The agent should report the store name and availability status (in stock or not)."
+    verification_hint="Look for a Home Depot product page showing store pickup availability for a Phillips screwdriver set near ZIP 62701. The agent should report the store name and availability status (in stock or not)."
 ))
 
 register_scenario(Scenario(
@@ -1020,7 +1020,7 @@ register_scenario(Scenario(
     tags=["real-estate", "search", "filters"],
     goal="""Go to zillow.com.
 
-1. Search for homes in "San Mateo, CA" using the search bar.
+1. Search for homes in "Springfield, IL" using the search bar.
 2. Apply filters:
    - For Sale
    - Price: Max $1,500,000
@@ -1035,16 +1035,16 @@ Report the first 3 listings with:
 
 VERIFICATION: Report your findings clearly, including all requested data points.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. A search for homes in "San Mateo, CA" was performed on Zillow
+1. A search for homes in "Springfield, IL" was performed on Zillow
 2. Filters were applied (For Sale, max $1,500,000, 3+ bedrooms)
 3. At least 3 home listings were reported
 4. Each listing includes address, price, and bedroom/bathroom counts
 
 The task FAILS if:
 - Fewer than 3 listings were reported
-- Listings are not in San Mateo, CA
+- Listings are not in Springfield, IL
 - Address or price is missing from most listings""",
-    verification_hint="Look for at least 3 Zillow home listings in San Mateo, CA with address, price (under $1.5M), bedrooms (3+), bathrooms, and optionally square footage. Exact listings will vary."
+    verification_hint="Look for at least 3 Zillow home listings in Springfield, IL with address, price (under $1.5M), bedrooms (3+), bathrooms, and optionally square footage. Exact listings will vary."
 ))
 
 register_scenario(Scenario(

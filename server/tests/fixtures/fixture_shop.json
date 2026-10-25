@@ -1,0 +1,108 @@
+{
+  "site_id": "fixture_shop",
+  "domain": "127.0.0.1",
+  "defaults": {"sort": "relevance"},
+  "screens": {
+    "landing": {"url_pattern": "127\\.0\\.0\\.1:\\d+/$", "available_actions": ["search_products", "search_with_form", "sort_results", "view_cart"]},
+    "search_results": {"url_pattern": "/search", "available_actions": ["search_products", "view_product", "view_product_by_text", "view_cart"]},
+    "product_detail": {"url_pattern": "/products/", "available_actions": ["add_to_cart", "view_cart", "search_products", "flaky_action"]},
+    "cart": {"url_pattern": "/cart", "available_actions": ["remove_from_cart", "checkout", "search_products"]},
+    "checkout": {"url_pattern": "/checkout", "available_actions": ["apply_promo"]}
+  },
+  "actions": {
+    "search_products": {
+      "description": "Search the fixture shop",
+      "params": {"query": {"type": "string"}},
+      "target_screen": "search_results",
+      "steps": [
+        {"action": "navigate", "url": "{{base}}/search?q={{query}}"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "h1", "timeout": 3000}
+      ]
+    },
+    "search_with_form": {
+      "params": {"query": {"type": "string"}},
+      "steps": [
+        {"action": "type", "selector": "#does-not-exist", "value": "{{query}}", "press_enter": true,
+         "fallbacks": [{"type": "placeholder", "selector": "Search the shop"}]},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#CardLink--0", "timeout": 3000}
+      ]
+    },
+    "sort_results": {
+      "params": {"order": {"type": "string", "default": "price"}},
+      "stays_on_screen": true,
+      "steps": [
+        {"action": "select", "selector": "#sort", "value": "{{order}}"},
+        {"action": "press_key", "value": "Tab"},
+        {"action": "script", "script": "window.__sorted = document.title"}
+      ]
+    },
+    "view_product": {
+      "params": {"item": {"type": "string"}},
+      "target_screen": "product_detail",
+      "steps": [
+        {"action": "click", "selector": "xpath=//a[@id=\"no-such-card\" and contains(.,\"{{item}}\")]", "timeout": 500,
+         "fallbacks": [{"type": "css", "selector": "a[id^=\"CardLink--\"]:has-text(\"{{item}}\")"}]},
+        {"action": "wait", "strategy": "selector_visible", "selector": "button.atc-button", "timeout": 3000}
+      ]
+    },
+    "view_product_by_text": {
+      "params": {"item": {"type": "string"}},
+      "steps": [
+        {"action": "click", "selector": "#missing", "timeout": 300,
+         "fallbacks": [{"type": "text", "selector": "{{item}}"}]}
+      ]
+    },
+    "add_to_cart": {
+      "params": {},
+      "stays_on_screen": true,
+      "steps": [
+        {"action": "click", "selector": "button.atc-button"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#added", "timeout": 3000},
+        {"action": "click", "selector": "button.drawer__close", "optional": true, "timeout": 300}
+      ]
+    },
+    "flaky_action": {
+      "params": {},
+      "stays_on_screen": true,
+      "steps": [
+        {"action": "wait", "strategy": "delay", "timeout": 10},
+        {"action": "click", "selector": "#nothing-here", "timeout": 300}
+      ]
+    },
+    "view_cart": {
+      "params": {},
+      "target_screen": "cart",
+      "steps": [{"action": "navigate", "url": "{{base}}/cart"}]
+    },
+    "remove_from_cart": {
+      "params": {"item": {"type": "string"}},
+      "steps": [
+        {"action": "click", "selector": "a[aria-label=\"Remove {{item}}\"]"},
+        {"action": "wait", "strategy": "delay", "timeout": 200}
+      ]
+    },
+    "checkout": {
+      "params": {},
+      "steps": [{"action": "click", "selector": "#checkout",
+                 "fallbacks": [{"type": "text_exact", "selector": "Check out"}]}]
+    },
+    "apply_promo": {
+      "params": {"code": {"type": "string"}},
+      "stays_on_screen": true,
+      "steps": [
+        {"action": "type", "selector": "input[name=\"code\"]", "value": "{{code}}"},
+        {"action": "click", "selector": "button[aria-label=\"Apply Discount Code\"]"},
+        {"action": "extract", "selector": "#msg", "field": "promo_message"}
+      ]
+    }
+  },
+  "interrupt_handlers": [
+    {"detect": "[aria-label=\"Close dialog\"]", "detect_timeout_ms": 2000,
+     "dismiss": [{"action": "click", "selector": "[aria-label=\"Close dialog\"]"}]}
+  ],
+  "context_extractors": {
+    "cart_count": {"steps": [{"action": "extract", "selector": "#cart-count"}]},
+    "never_there": {"steps": [{"action": "extract", "selector": "#no-such-element"}]}
+  },
+  "page_extractor": "() => ({ title: document.title, sorted: window.__sorted || null, path: location.pathname })"
+}
