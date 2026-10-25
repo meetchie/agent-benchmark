@@ -199,7 +199,7 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
         )
 
         success = bool(data.get("success", False))
-        summary = str(data.get("summary", ""))[:500]
+        summary = _clip_summary(str(data.get("summary", "")))
 
         raw_phases = data.get("phases", [])
         validated = validate_phases(raw_phases, steps)
@@ -233,6 +233,21 @@ def judge_run(goal: str, steps: list[dict], result_state: str = "unknown") -> di
             "summary": "Could not analyze the run. The agent may have completed the task, but results are unavailable.",
             "phases": [],
         }
+
+
+_SUMMARY_LIMIT = 800
+
+
+def _clip_summary(text: str, limit: int = _SUMMARY_LIMIT) -> str:
+    """``text`` cut to at most ``limit`` characters at a word boundary, with an ellipsis when cut."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > limit * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:") + "\u2026"
 
 
 def _fmt_cost(cost: float | None) -> str:

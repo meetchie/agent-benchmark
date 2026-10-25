@@ -204,9 +204,22 @@ class TestJudgeRun:
         assert result["success"] is True
         assert result["phases"] == []  # Fell back due to invalid phases
 
-    def test_long_summary_is_cut_to_500_characters(self, monkeypatch):
+    def test_long_summary_is_cut_at_a_word_with_an_ellipsis(self, monkeypatch):
+        long = " ".join(["verification"] * 120)  # about 1,560 characters
+        install_fake_anthropic(monkeypatch, text_response({**GOOD_VERDICT, "summary": long}))
+        summary = judge_run("Do task", STEPS_3)["summary"]
+        assert len(summary) <= 801 and summary.endswith("\u2026")
+        assert summary[:-1].split(" ")[-1] == "verification"  # no word cut in half
+
+    def test_unbroken_long_summary_is_still_capped(self, monkeypatch):
         install_fake_anthropic(monkeypatch, text_response({**GOOD_VERDICT, "summary": "x" * 900}))
-        assert len(judge_run("Do task", STEPS_3)["summary"]) == 500
+        summary = judge_run("Do task", STEPS_3)["summary"]
+        assert len(summary) == 801 and summary.endswith("\u2026")
+
+    def test_short_summary_is_kept_whole(self, monkeypatch):
+        text = "The agent added the item and checked the cart."
+        install_fake_anthropic(monkeypatch, text_response({**GOOD_VERDICT, "summary": text}))
+        assert judge_run("Do task", STEPS_3)["summary"] == text
 
     def test_blank_summary_gets_a_default(self, monkeypatch):
         install_fake_anthropic(monkeypatch, text_response({**GOOD_VERDICT, "summary": ""}))

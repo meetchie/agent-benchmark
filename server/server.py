@@ -408,6 +408,7 @@ async def _demo_run(state: RunState, url: str, goal: str):
     from datetime import datetime
     from benchmark_runner import StepRecord
 
+    state.agent_model = "none (demo)"  # no model is called in demo mode
     domain = url.split("//")[-1].split("/")[0].replace("www.", "")
     # Canned and deliberately generic, so they fit whichever task was picked.
     demo_steps = [

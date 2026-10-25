@@ -26,7 +26,7 @@ cli/bench.sh prose --task add-hair-towel              # both arms, one task
 cli/bench.sh prose --browseruse-only --task add-candle
 cli/bench.sh prose --rindler-only --task add-candle   # reuses the saved BrowserUse result, so the two compare
 cli/bench.sh prose                                    # every task in instructions/prose.yaml
-cli/viz.sh cli/results/prose-2026-10-24               # charts, from any directory
+cli/viz.sh cli/results/prose-2026-10-24               # charts (from the repo root; elsewhere pass an absolute path)
 ```
 
 Real runs cost money. The scripts work from any directory. Browsers are always headless, and every Chromium is started with `--use-mock-keychain --password-store=basic` so macOS never asks about the keychain.

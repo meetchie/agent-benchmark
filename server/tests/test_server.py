@@ -1130,7 +1130,7 @@ def test_demo_mode_runs_the_whole_loop_without_any_key(no_keys, monkeypatch, ins
     assert "cart" in descriptions
     # The phases cover every step exactly once.
     assert sorted(n for phase in body["phases"] for n in phase["steps"]) == list(range(1, 10))
-    assert body["agent_model"] == "claude-sonnet-5-5"
+    assert body["agent_model"] == "none (demo)"  # no model is called in demo mode
     assert not (tmp_path / "runs").exists()  # demo runs leave no files
 
 
@@ -1144,7 +1144,7 @@ def test_demo_run_has_tokens_but_no_dollar_cost(no_keys, monkeypatch, instant_sl
     assert body["cost_usd"] is None
     assert body["input_tokens"] > 0 and body["output_tokens"] > 0
     assert body["total_tokens"] == body["input_tokens"] + body["output_tokens"]
-    assert body["agent_model"] == "claude-sonnet-5-5"  # everything else is still reported
+    assert body["agent_model"] == "none (demo)"  # and no model is named, since none ran
 
 
 def test_demo_start_does_not_look_the_host_up(no_keys, monkeypatch, instant_sleep):
