@@ -164,7 +164,10 @@ class RunState:
 
         A run that ended as an error after some steps is still judged, so it is
         ``complete`` with ``result_state`` "error"; its payload also carries ``message``,
-        the reason it is an error (the model refused, the run crashed).
+        the reason it is an error (the model refused, the run crashed). A ``complete``
+        payload also carries the agent's closing report and the success flag it set with
+        it (``final_report`` and ``agent_reported_success``, both null when the agent did
+        not finish on its own), so the user can read what the judge read.
         """
         steps_data = []
         for i, step in enumerate(self.steps):
@@ -198,6 +201,8 @@ class RunState:
                 "cost_usd": self.cost_usd,
                 "agent_model": self.agent_model,
                 "phases": self.phases,
+                "final_report": self.final_report,
+                "agent_reported_success": self.agent_reported_success,
             }
             if self.message:
                 payload["message"] = self.message
@@ -399,13 +404,25 @@ def _step_evidence(agent) -> tuple[str, list[str]]:
         return "", []
     mo = getattr(item, "model_output", None)
     evaluation = getattr(mo, "evaluation_previous_goal", "") if mo else ""
-    results = []
-    for result in getattr(item, "result", None) or []:
+    return (_clip(evaluation, _MAX_EVALUATION_CHARS) if evaluation else ""), _result_lines(getattr(item, "result", None))
+
+
+def _result_lines(action_results) -> list[str]:
+    """What each browser action returned, for the judge: page text, a short note or an error."""
+    lines = []
+    for result in action_results or []:
         if getattr(result, "error", None):
-            results.append("error: " + _clip(result.error, _MAX_ERROR_CHARS))
+            lines.append("error: " + _clip(result.error, _MAX_ERROR_CHARS))
         elif getattr(result, "extracted_content", None) and not getattr(result, "is_done", False):
-            results.append(_clip(result.extracted_content, _MAX_RESULT_CHARS))
-    return (_clip(evaluation, _MAX_EVALUATION_CHARS) if evaluation else ""), results
+            lines.append(_clip(result.extracted_content, _MAX_RESULT_CHARS))
+    return lines
+
+
+def _history_length(agent) -> int:
+    try:
+        return len(agent.history.history)
+    except Exception:
+        return 0
 
 
 async def _take_screenshot(agent) -> Optional[str]:
@@ -494,6 +511,9 @@ def _final_report(history) -> tuple[str | None, bool | None]:
     except Exception as e:
         logging.debug(f"Final report extraction failed: {type(e).__name__}: {e}")
         return None, None
+
+
+_AGENT_SAID_NO = "Counted as a fail: the agent itself reported that it did not complete the task."
 
 
 async def _judge(state: "RunState", result_state_hint: str) -> dict:
@@ -607,6 +627,7 @@ async def _persist_result(state: "RunState") -> None:
             cache_write_tokens=state.cache_write_tokens,
             message=state.message,
             final_report=state.final_report,
+            agent_reported_success=state.agent_reported_success,
         )
         await persist_phases(state.persisted_run_id, state.phases)
     except Exception:
@@ -622,7 +643,8 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     BENCHMARK_BROWSER_PROVIDER=browserbase. It is stopped after BENCHMARK_TIMEOUT_S
     seconds (default 180); the run is then reported as "too_slow". The judge always
     runs on whatever steps exist, plus the agent's final report when it finished on its
-    own, and the result is written to the run file.
+    own, and the result is written to the run file. A run is a "pass" only when the
+    judge says so and the agent did not itself report that it failed.
     """
     # Deferred import: keeps the server startable even if browser_use is not installed,
     # and avoids import-time side effects (Playwright browser launch).
@@ -632,6 +654,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     overall_start = datetime.now()
     step_start_time: datetime = overall_start
     prev_step_end_time: datetime = overall_start
+    history_seen = 0  # browser-use history items already turned into steps
 
     async def on_step_start(agent):
         nonlocal step_start_time, prev_step_end_time
@@ -641,15 +664,24 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             prev_step_end_time = step_start_time
 
     async def on_step_end(agent):
-        nonlocal prev_step_end_time
+        nonlocal prev_step_end_time, history_seen
         now = datetime.now()
         # Step-to-step wall-clock time: includes LLM reasoning + action execution.
         # For step 1 this equals the action time; for subsequent steps it also
         # captures the inter-step thinking so that sum(elapsed_ms) ≈ total_ms.
         elapsed_ms = int((now - prev_step_end_time).total_seconds() * 1000)
         prev_step_end_time = now
-        description = _format_action(agent)
-        evaluation, results = _step_evidence(agent)
+        if _history_length(agent) > history_seen:
+            description = _format_action(agent)
+            evaluation, results = _step_evidence(agent)
+        else:
+            # browser-use stored no history item for this step (it timed out inside the
+            # agent, say). The newest item is the previous step's, so it describes nothing
+            # here; what went wrong is in the agent's last result.
+            description = "Step did not complete"
+            evaluation = ""
+            results = _result_lines(getattr(getattr(agent, "state", None), "last_result", None))
+        history_seen = _history_length(agent)
         screenshot_b64 = await _take_screenshot(agent)
 
         state.steps.append(
@@ -783,6 +815,12 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             state.status = "error"
             state.result_state = "error"
             return
+        elif judgment["success"] and state.agent_reported_success is False:
+            # The agent itself said it did not do the task (a product that does not
+            # exist, say). However its steps read, that is not "completed as written".
+            state.result_state = "fail"
+            state.success = False
+            state.summary = f"{_AGENT_SAID_NO} {judgment['summary']}"
         else:
             state.result_state = "pass" if judgment["success"] else "fail"
 

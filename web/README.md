@@ -2,7 +2,7 @@
 
 The React + Vite UI for the live benchmark. You paste a site's URL, pick one of the
 generated tasks, and watch an agent try to do it. The result is pass, fail, too slow or
-error, with time, steps, tokens and cost.
+error, with the agent's final report, time, steps, tokens and cost.
 
 It needs only the Python backend in `../server`. No hosted service, Clerk account or
 Cloudflare is involved unless you opt into Clerk.

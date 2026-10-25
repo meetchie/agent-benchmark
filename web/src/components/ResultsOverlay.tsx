@@ -140,6 +140,24 @@ export function ResultsOverlay({
               <p className="text-sm text-slate-600 leading-relaxed mb-5">{summary.summary}</p>
             )}
 
+            {/* What the agent itself reported: the judge read it, so the user can too. */}
+            {summary?.final_report && (
+              <div className="mb-5" data-testid="final-report">
+                <div className="text-xs text-slate-400 uppercase tracking-wider mb-2">
+                  Agent's final report
+                  {summary.agent_reported_success === false && (
+                    <span className="normal-case tracking-normal text-red-600"> · says it did not succeed</span>
+                  )}
+                  {summary.agent_reported_success === true && (
+                    <span className="normal-case tracking-normal"> · says it succeeded</span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-slate-50 border border-slate-200 px-3 py-2">
+                  {summary.final_report}
+                </p>
+              </div>
+            )}
+
             {(resultState !== "error" || (summary && steps.length > 0)) && (
               <PhaseList
                 phases={summary?.phases ?? []}

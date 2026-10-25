@@ -1,6 +1,7 @@
 # tests/test_run_judge.py
 """Tests for the run judge."""
 import json
+import re
 
 import anthropic
 import httpx
@@ -179,7 +180,7 @@ class TestJudgeRun:
         prompt = calls[0]["messages"][0]["content"]
         assert "(The agent gave no final report.)" in prompt
         assert "<agent_report>\n" not in prompt
-        assert "Agent reported success" not in prompt
+        assert "Agent reported success:" not in prompt  # no report, so no flag line
 
     def test_an_unstated_success_flag_is_not_read_as_a_no(self, monkeypatch):
         calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
@@ -217,6 +218,56 @@ class TestJudgeRun:
         prompt = calls[0]["messages"][0]["content"]
         assert "a step result, an evaluation or the final report must show that check" in prompt
         assert "say in the summary which check is missing" in prompt
+
+    def test_the_rules_fail_a_task_that_cannot_be_done_as_written(self, monkeypatch):
+        """Reporting honestly that a product does not exist is good behaviour, not a pass."""
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+        judge_run("Add the Quantum Banana Phone 9000 to the cart", STEPS_3, result_state="completed",
+                  final_report="No such product, nothing was added.", agent_reported_success=False)
+        prompt = calls[0]["messages"][0]["content"]
+        assert "If the task cannot be done as written" in prompt
+        assert "even when the agent found that out and reported it honestly" in prompt
+        assert 'If "Agent reported success" is "no"' in prompt
+        assert "Agent reported success: no" in prompt
+
+    def test_the_failed_flag_rule_names_only_states_the_judge_is_sent(self, monkeypatch):
+        """benchmark_runner sends "completed", "too_slow" or "unknown", never "fail": a rule
+        that waits for "fail" never fires, and a failed run shows no failed phase."""
+        calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+        judge_run("Do task", STEPS_3, result_state="completed")
+        prompt = calls[0]["messages"][0]["content"]
+        named = set(re.findall(r'result state is "(\w+)"', prompt, flags=re.IGNORECASE))
+        assert named and named <= {"completed", "too_slow", "unknown"}
+        failed_rules = prompt[prompt.index("FAILED FLAG"):]
+        assert 'if your verdict is "success": false' in failed_rules
+
+    def test_no_phase_is_failed_on_a_pass(self, monkeypatch):
+        verdict = {**GOOD_VERDICT, "phases": [
+            {"name": "Navigate", "steps": [1, 2], "failed": False, "slow": False},
+            {"name": "Add to cart", "steps": [3], "failed": True, "slow": False},
+        ]}
+        install_fake_anthropic(monkeypatch, text_response(verdict))
+        result = judge_run("Do task", STEPS_3, result_state="completed")
+        assert [p["failed"] for p in result["phases"]] == [False, False]
+
+    def test_no_phase_is_failed_on_a_timeout(self, monkeypatch):
+        verdict = {"success": False, "summary": "Ran out of time.", "phases": [
+            {"name": "Navigate", "steps": [1, 2], "failed": True, "slow": True},
+            {"name": "Add to cart", "steps": [3], "failed": False, "slow": False},
+        ]}
+        install_fake_anthropic(monkeypatch, text_response(verdict))
+        result = judge_run("Do task", STEPS_3, result_state="too_slow")
+        assert [p["failed"] for p in result["phases"]] == [False, False]
+
+    def test_a_failed_run_keeps_one_failed_phase(self, monkeypatch):
+        verdict = {"success": False, "summary": "Wrong product.", "phases": [
+            {"name": "Find it", "steps": [1], "failed": False, "slow": False},
+            {"name": "Choose", "steps": [2], "failed": True, "slow": False},
+            {"name": "Add to cart", "steps": [3], "failed": True, "slow": False},
+        ]}
+        install_fake_anthropic(monkeypatch, text_response(verdict))
+        result = judge_run("Do task", STEPS_3, result_state="completed")
+        assert [p["failed"] for p in result["phases"]] == [False, True, False]
 
     def test_default_judge_model_is_sonnet_5_5(self, monkeypatch):
         calls = install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))

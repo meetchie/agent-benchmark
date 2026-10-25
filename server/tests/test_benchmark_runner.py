@@ -428,6 +428,7 @@ class FakeAgent:
     sleep = 0.0
     raises = None
     raises_after = None  # raise ``raises`` after this many steps instead of before the first
+    unrecorded_step = None  # index of a step browser-use keeps no history item for
     instances: list = []
 
     def __init__(self, **kwargs):
@@ -459,15 +460,21 @@ class FakeAgent:
         if cls.raises and cls.raises_after is None:
             raise cls.raises
         items = self._items()
+        recorded = []
         for i in range(len(items)):
             if cls.raises and i == cls.raises_after:
                 raise cls.raises
             await on_step_start(self)
             if cls.sleep:
                 await asyncio.sleep(cls.sleep)
-            self.history = FakeHistory(items[: i + 1])
+            if i == cls.unrecorded_step:
+                # Like a step that timed out inside browser-use: no history item, an error result.
+                self.state = SimpleNamespace(last_result=[action_result(error=f"Step {i + 1} timed out after 60 seconds")])
+            else:
+                recorded.append(items[i])
+            self.history = FakeHistory(recorded)
             await on_step_end(self)
-        self.history = FakeHistory(items, cls.errors, cls.done, cls.usage, cls.final, cls.successful, cls.initial)
+        self.history = FakeHistory(recorded, cls.errors, cls.done, cls.usage, cls.final, cls.successful, cls.initial)
         return self.history
 
 
@@ -554,6 +561,52 @@ async def test_the_judge_reads_the_agents_final_report(fake_run, monkeypatch):
     # What the judge read is kept with the run, so a verdict can be checked later.
     assert state.final_report == "Basket: 1 item, A Light in the Attic, £51.77."
     assert persistence.read_run("run-1")["final_report"] == state.final_report
+    assert persistence.read_run("run-1")["agent_reported_success"] is True
+    # The results screen shows the report too, so the user can read what the judge read.
+    payload = state.to_dict()
+    assert payload["final_report"] == state.final_report
+    assert payload["agent_reported_success"] is True
+
+
+async def test_a_run_the_agent_reported_as_failed_is_never_a_pass(fake_run, monkeypatch):
+    """A product that does not exist: the agent says so and sets success=False. A judge
+    that calls that honest report a pass must not turn the run into a Pass."""
+    fake_run.agent_cls.goals = ["Search for the product", "Report that it does not exist"]
+    fake_run.agent_cls.final = "I could not add 'Quantum Banana Phone 9000' to the cart: no such product."
+    fake_run.agent_cls.successful = False
+    lenient = {
+        "success": True,
+        "summary": "It reported honestly that the product does not exist.",
+        "phases": [{"name": "Look for the product", "steps": [1, 2], "failed": False, "slow": True}],
+    }
+    calls = install_fake_anthropic(monkeypatch, text_response(lenient))
+    await persistence.persist_run_start("run-1", "local", "https://shop.example", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://shop.example", "Add the Quantum Banana Phone 9000 to the cart.")
+
+    assert "Agent reported success: no" in calls[0]["messages"][0]["content"]
+    assert state.result_state == "fail"
+    assert state.success is False
+    assert state.summary == (
+        "Counted as a fail: the agent itself reported that it did not complete the task. "
+        "It reported honestly that the product does not exist."
+    )
+    payload = state.to_dict()
+    assert (payload["result_state"], payload["success"]) == ("fail", False)
+    record = persistence.read_run("run-1")
+    assert (record["result_state"], record["success"]) == ("fail", False)
+    assert record["summary"] == state.summary
+
+
+async def test_an_agent_that_set_no_success_flag_is_judged_as_usual(fake_run, monkeypatch):
+    fake_run.agent_cls.final = "Basket: 1 item."
+    fake_run.agent_cls.successful = None
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    state = make_state()
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+    assert state.result_state == "pass"
+    assert state.summary == "Added the book to the basket."
 
 
 async def test_a_last_output_that_is_not_a_done_report_is_not_sent_as_one(fake_run, monkeypatch):
@@ -835,6 +888,25 @@ async def test_the_judge_reads_what_the_agent_saw_and_its_final_report(fake_run,
     assert persistence.read_run("run-1")["final_report"] == state.final_report
     # None of it goes to the UI's status payload.
     assert all(set(s) == {"step", "description", "elapsed_ms"} for s in state.to_dict()["steps"][:-1])
+
+
+async def test_a_step_without_a_history_item_does_not_repeat_the_one_before(fake_run, monkeypatch):
+    """browser-use keeps no history item for a step that timed out inside the agent; the
+    newest item is then the previous step's, and its goal and evidence are not this step's."""
+    fake_run.agent_cls.goals = ["Open the cart", "Read the cart row", "Finish"]
+    fake_run.agent_cls.evaluations = [None, None, "Unclear - the page did not change."]
+    fake_run.agent_cls.results = [[action_result("Clicked button 'View Cart'")], [], []]
+    fake_run.agent_cls.unrecorded_step = 1
+    calls = install_fake_anthropic(monkeypatch, text_response({**VERDICT_PASS, "phases": []}))
+    state = make_state()
+
+    await run_benchmark(state, "https://shop.example", "Goal")
+
+    assert [s.description for s in state.steps] == ["Open the cart", "Step did not complete", "Finish"]
+    assert state.steps[1].results == ["error: Step 2 timed out after 60 seconds"]
+    assert state.steps[1].evaluation == ""
+    prompt = calls[0]["messages"][0]["content"]
+    assert prompt.count("result: Clicked button 'View Cart'") == 1
 
 
 async def test_long_page_text_and_errors_reach_the_judge_cut_short(fake_run, monkeypatch):

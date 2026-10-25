@@ -117,10 +117,13 @@ class TestRunLifecycle:
     async def test_the_agents_final_report_is_kept(self):
         await persist_run_start("r7", "local", "https://x.example.com", "L", "G")
         assert read_run("r7")["final_report"] is None
+        assert read_run("r7")["agent_reported_success"] is None
         await persist_run_completion(
-            "r7", "complete", "pass", True, 1, 1, 1, 2, None, "s", final_report="Cart: 4 x Rs. 799 = Rs. 3196"
+            "r7", "complete", "pass", True, 1, 1, 1, 2, None, "s", final_report="Cart: 4 x Rs. 799 = Rs. 3196",
+            agent_reported_success=True,
         )
         assert read_run("r7")["final_report"] == "Cart: 4 x Rs. 799 = Rs. 3196"
+        assert read_run("r7")["agent_reported_success"] is True
 
     async def test_error_message_is_kept(self):
         await persist_run_start("r4", "local", "https://x.example.com", "L", "G")

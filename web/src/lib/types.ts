@@ -54,6 +54,10 @@ export interface StatusComplete {
   phases: Phase[];
   /** Why the run is an error, when result_state is "error" (the steps were still judged). */
   message?: string;
+  /** The agent's closing report, as the judge read it; null when it did not finish on its own. */
+  final_report?: string | null;
+  /** The success flag the agent set with its report; null when it set none. */
+  agent_reported_success?: boolean | null;
 }
 
 export interface StatusError {
@@ -82,6 +86,8 @@ export interface SummaryData extends RunStats {
   summary: string;
   result_state: ResultState;
   phases: Phase[];
+  final_report?: string | null;
+  agent_reported_success?: boolean | null;
 }
 
 /** Daily run allowance. remaining and limit are null when the backend enforces none. */

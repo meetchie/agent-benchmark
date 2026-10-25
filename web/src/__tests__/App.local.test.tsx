@@ -158,6 +158,15 @@ describe("App in local mode (no Clerk key)", () => {
       expect(card).toHaveTextContent("$0.03");
     });
 
+    it("shows the agent's final report", async () => {
+      await runToCompletion({
+        ...COMPLETE,
+        final_report: "Basket: 1 item, A Light in the Attic, £51.77.",
+        agent_reported_success: true,
+      });
+      expect(screen.getByTestId("final-report")).toHaveTextContent("Basket: 1 item, A Light in the Attic, £51.77.");
+    });
+
     it("shows the backend's cost_usd and agent_model", async () => {
       await runToCompletion({ ...COMPLETE, cost_usd: 0.0423, agent_model: "claude-sonnet-5-5" });
 

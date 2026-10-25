@@ -293,6 +293,8 @@ export default function App() {
               cost_usd: data.cost_usd,
               agent_model: data.agent_model,
               phases: data.phases ?? [],
+              final_report: data.final_report ?? null,
+              agent_reported_success: data.agent_reported_success ?? null,
             });
           }
 

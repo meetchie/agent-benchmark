@@ -20,7 +20,8 @@ Record layout (all keys always present once ``persist_run_start`` has run)::
      "task_label", "task_goal", "agent_type", "agent_model",
      "status", "result_state", "success", "summary", "total_ms",
      "input_tokens", "output_tokens", "total_tokens",
-     "cache_read_tokens", "cache_write_tokens", "estimated_cost_usd", "final_report",
+     "cache_read_tokens", "cache_write_tokens", "estimated_cost_usd",
+     "final_report", "agent_reported_success",
      "steps": [{"step_number", "description", "elapsed_ms"}],
      "phases": [{"name", "step_numbers", "total_ms", "failed", "slow"}]}
 
@@ -29,7 +30,8 @@ A finished run may also have ``message`` (why it is an error).
 Screenshots are not stored. ``input_tokens`` includes cache reads (browser-use's
 convention); ``cache_read_tokens`` and ``cache_write_tokens`` say how many of the
 priced tokens were cached. ``final_report`` is the agent's closing report as the judge
-read it, null when the agent did not finish on its own.
+read it and ``agent_reported_success`` the success flag the agent set with it, both null
+when the agent did not finish on its own.
 """
 
 import json
@@ -166,6 +168,7 @@ async def persist_run_start(
         "cache_write_tokens": 0,
         "estimated_cost_usd": None,
         "final_report": None,
+        "agent_reported_success": None,
         "steps": [],
         "phases": [],
     }
@@ -203,10 +206,12 @@ async def persist_run_completion(
     cache_write_tokens: int = 0,
     message: str = "",
     final_report: str | None = None,
+    agent_reported_success: bool | None = None,
 ) -> None:
     """Store the run's final result. ``estimated_cost_usd`` is None for an unpriced model.
 
-    ``final_report`` is the agent's closing report (None when it did not finish on its own).
+    ``final_report`` is the agent's closing report and ``agent_reported_success`` the
+    success flag it set (both None when it did not finish on its own).
     """
     if not run_id:
         return
@@ -223,6 +228,7 @@ async def persist_run_completion(
         "estimated_cost_usd": estimated_cost_usd,
         "summary": summary,
         "final_report": final_report,
+        "agent_reported_success": agent_reported_success,
     }
     if message:
         changes["message"] = message

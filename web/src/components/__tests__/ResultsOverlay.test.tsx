@@ -270,6 +270,56 @@ describe("ResultsOverlay", () => {
     expect(screen.queryByText("Open the site")).not.toBeInTheDocument();
   });
 
+  describe("the agent's final report", () => {
+    it("shows the report and that the agent said it did not succeed", () => {
+      const summary = makeSummary({
+        result_state: "fail",
+        success: false,
+        final_report: "I could not add 'Quantum Banana Phone 9000' to the cart: there is no such product.",
+        agent_reported_success: false,
+      });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.getByTestId("final-report")).toHaveTextContent("Agent's final report · says it did not succeed");
+      expect(
+        screen.getByText("I could not add 'Quantum Banana Phone 9000' to the cart: there is no such product.")
+      ).toBeInTheDocument();
+    });
+
+    it("says when the agent reported success", () => {
+      const summary = makeSummary({ final_report: 'The first product listed is "Blue Top" (Rs. 500).', agent_reported_success: true });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.getByTestId("final-report")).toHaveTextContent("· says it succeeded");
+      expect(screen.getByText(/Blue Top/)).toBeInTheDocument();
+    });
+
+    it("has no report section when the agent gave none", () => {
+      const summary = makeSummary({ result_state: "too_slow", success: false, final_report: null });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      expect(screen.queryByTestId("final-report")).not.toBeInTheDocument();
+    });
+
+    it("still shows the report when the judge gave no verdict", () => {
+      const summary = makeSummary({
+        result_state: "error",
+        success: false,
+        summary: "Could not analyze the run.",
+        final_report: "Cart: 4 x Rs. 799 = Rs. 3196.",
+        agent_reported_success: true,
+      });
+      render(
+        <ResultsOverlay
+          {...defaultProps}
+          summary={summary}
+          errorMsg="The judge could not analyze the run: NotFoundError from claude-sonnet-5-5x: model: claude-sonnet-5-5x"
+          steps={[makeStep(1)]}
+        />
+      );
+      expect(screen.getByText("Error")).toBeInTheDocument();
+      expect(screen.getByText(/The judge could not analyze the run: NotFoundError/)).toBeInTheDocument();
+      expect(screen.getByText("Cart: 4 x Rs. 799 = Rs. 3196.")).toBeInTheDocument();
+    });
+  });
+
   it("shows no steps message for error with no steps", () => {
     render(
       <ResultsOverlay
