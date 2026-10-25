@@ -1,7 +1,7 @@
 # Arena setup
 
 How to set up and run the head-to-head arena (`arena.py`) on one machine. The live
-benchmark API in the same folder has its own settings; see `.env.example` and the
+benchmark API in the same folder has its own settings; see `../.env.example` and the
 short section in [README.md](README.md).
 
 ## What you need

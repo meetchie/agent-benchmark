@@ -10,6 +10,8 @@ One Python project (uv, Python 3.11) with three parts:
 
 Everything runs on one machine with one key: `ANTHROPIC_API_KEY`. No Rindler servers, OpenAI, Browserbase, Clerk or Cloudflare are needed.
 
+From the repository root, `make setup` and `make dev` do the setup and start-up described below; see [../README.md](../README.md). Settings live in `.env` at the repository root (`server/.env` also works and wins over it).
+
 ## Setup
 
 ```bash
@@ -29,7 +31,7 @@ uv run uvicorn server:app --host 127.0.0.1 --port 8000     # run from server/
 DEMO_MODE=true uv run uvicorn server:app                   # canned runs, no key, no browser
 ```
 
-Routes: `POST /benchmark/start`, `GET /benchmark/status/{id}`, `POST /benchmark/cancel/{id}`, `POST /benchmark/generate-tasks`, `GET /benchmark/quota`, `GET /health`. Finished runs are saved as JSON under `server/runs/`. Settings (`AUTH_MODE`, `DAILY_RUN_QUOTA`, `BENCHMARK_TIMEOUT_S`, ...) are listed in `.env.example`. The web UI talks to it on `http://127.0.0.1:8000`.
+Routes: `POST /benchmark/start`, `GET /benchmark/status/{id}`, `POST /benchmark/cancel/{id}`, `POST /benchmark/generate-tasks`, `GET /benchmark/quota`, `GET /health`. Finished runs are saved as JSON under `server/runs/`. Settings (`AUTH_MODE`, `DAILY_RUN_QUOTA`, `BENCHMARK_TIMEOUT_S`, ...) are listed in `../.env.example` (the one template for the whole repo). The web UI talks to it on `http://127.0.0.1:8000`.
 
 ## Arena
 

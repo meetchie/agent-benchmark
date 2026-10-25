@@ -1,0 +1,37 @@
+# Repo-wide ignore rules. server/, cli/, web/ and viewer/ keep their own small
+# .gitignore files for their folders (server/tests/test_persistence.py reads
+# server/.gitignore); this file covers the same ground from the root, so nothing
+# depends on them.
+
+# --- secrets and local settings ---------------------------------------------
+# The real settings file is .env at the repo root (see .env.example). Nothing but
+# the example may be committed.
+.env
+.env.*
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Node (web/ and viewer/) ------------------------------------------------
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.vite/
+
+# --- output of runs ---------------------------------------------------------
+# Live-benchmark runs, one JSON file each (RUNS_DIR). The per-user run counter
+# (.quota_data.json) lives inside RUNS_DIR, so it is ignored wherever that points.
+server/runs/
+.quota_data.json
+# New arena runs. server/arena_logs/ is the archived March 2026 evidence and stays tracked.
+server/arena_runs/
+# Comparison CLI results, charts and screenshots.
+cli/results/
+
+# --- editors and OS ---------------------------------------------------------
+.DS_Store
