@@ -72,6 +72,10 @@ export function FrictionPanel({ log }: Props) {
             <FrictionItem key={i} event={f} />
           ))}
         </div>
+      ) : log.steps.length === 0 ? (
+        <div className="friction-empty no-steps">
+          This log has no step events, so there is nothing to check for friction.
+        </div>
       ) : (
         <div className="friction-empty">
           No friction detected in the step telemetry.

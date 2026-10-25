@@ -22,7 +22,9 @@ and shows the judge verdict, duration, cost and tokens, the goal the agent was g
 a per-step timeline, a cumulative cost chart, and simple friction flags (repeated
 observations, long steps, repeated actions, and steps whose tool call failed, which
 newer logs mark with `was_error` in the telemetry). You can pick one of the bundled runs or
-drop in any arena-format `.log` file.
+drop in any arena-format `.log` file. A file that is not an arena run log (such as the
+`context_*.log` files in `server/arena_logs/`), or whose telemetry list is cut short, is
+refused with a message saying why instead of being drawn as a run with no steps.
 
 ## Run it
 
@@ -33,7 +35,7 @@ npm ci
 npm run dev        # http://localhost:5173 (http://127.0.0.1:5173 works too)
 npm run build      # type-check (tsc) and bundle to dist/
 npm run preview    # serve the built dist/ locally
-npm test           # vitest: the log parser, the friction rules, the caveats panel
+npm test           # vitest: the log parser, the friction rules, the caveats panel, the phone layout
 ```
 
 `vite --port <n>` changes the port. The dev and preview servers listen on `127.0.0.1` and
@@ -121,3 +123,8 @@ agent run finished without raising, so ignore it. The Status card uses the judge
   `add_to_cart` calls, so they now list them.
 - The dev and preview servers answer on `127.0.0.1` and `::1`, and there is a small vitest
   suite (`npm test`).
+- An upload that is not an arena run log, or whose telemetry is damaged, shows an error.
+  The original parser fell back to "Unknown", 0 steps and "No friction detected", so a
+  random file read as a failed run and a cut-short log as a clean pass.
+- Both pages fit a phone screen (360 px and up) without scrolling sideways, and the step
+  timeline keeps its action names there (it drops the duration bar instead).

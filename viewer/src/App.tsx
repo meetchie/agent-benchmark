@@ -11,6 +11,23 @@ import { ResultsPage } from "./components/ResultsPage";
 
 type Page = "results" | "logs";
 
+/**
+ * Fetch one bundled log. A dev or preview server answers a path that does not exist
+ * with the app's own index.html and status 200, so an HTML answer counts as missing.
+ */
+async function fetchLog(filename: string): Promise<string> {
+  const resp = await fetch(`/logs/${filename}`);
+  const type = resp.headers.get("content-type") ?? "";
+  if (!resp.ok || type.includes("text/html")) {
+    throw new Error("The server has no such log.");
+  }
+  return resp.text();
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function agentTag(meta: LogFileMeta): { cls: string; label: string } {
   if (meta.agent.toUpperCase().includes("RINDLER")) {
     return { cls: "rindler", label: "RINDLER" };
@@ -54,21 +71,36 @@ function App() {
     fetch("/logs/manifest.json")
       .then((r) => r.json())
       .then(async (data: { files: string[] }) => {
+        const failed: string[] = [];
         const metas = await Promise.all(
           data.files.map(async (f) => {
             try {
-              const resp = await fetch(`/logs/${f}`);
-              const raw = await resp.text();
+              const raw = await fetchLog(f);
+              const meta = parseLogMeta(raw, f);
               rawCache.current.set(f, raw);
-              return parseLogMeta(raw, f);
+              return meta;
             } catch {
+              failed.push(f);
               return null;
             }
           })
         );
         setFileMetas(metas.filter((m): m is LogFileMeta => m !== null));
+        if (failed.length > 0) {
+          const shown = failed.slice(0, 3).join(", ");
+          const more = failed.length > 3 ? ` and ${failed.length - 3} more` : "";
+          setError(
+            `${failed.length} of the ${data.files.length} logs listed in logs/manifest.json ` +
+              `could not be opened and ${failed.length === 1 ? "is" : "are"} left out of ` +
+              `the list: ${shown}${more}.`
+          );
+        }
       })
-      .catch(() => {})
+      .catch(() =>
+        setError(
+          "Could not load the list of bundled runs (logs/manifest.json). You can still upload a .log file."
+        )
+      )
       .finally(() => setMetaLoading(false));
   }, []);
 
@@ -86,28 +118,38 @@ function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // A file that cannot be shown clears the page, so the reader never takes the run
+  // that was open before for the file they just picked.
+  const showFailure = useCallback((filename: string, err: unknown) => {
+    setLog(null);
+    setSelectedFile("");
+    setError(`${filename} was not opened. ${errorText(err)}`);
+  }, []);
+
   const loadLogFile = useCallback(async (filename: string) => {
     setLoading(true);
     setError(null);
     try {
       let raw = rawCache.current.get(filename);
       if (!raw) {
-        const resp = await fetch(`/logs/${filename}`);
-        if (!resp.ok) throw new Error(`Failed to load ${filename}`);
-        raw = await resp.text();
+        raw = await fetchLog(filename);
         rawCache.current.set(filename, raw);
       }
       const parsed = parseLog(raw, filename);
       setLog(parsed);
       setSelectedFile(filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file");
+      showFailure(filename, err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showFailure]);
 
   const handleFileUpload = useCallback(async (file: File) => {
+    if (!file.name.endsWith(".log")) {
+      showFailure(file.name, new Error("The viewer opens arena run logs, which end in .log."));
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -116,11 +158,11 @@ function App() {
       setLog(parsed);
       setSelectedFile(file.name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to parse file");
+      showFailure(file.name, err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showFailure]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -134,7 +176,7 @@ function App() {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file && file.name.endsWith(".log")) handleFileUpload(file);
+      if (file) handleFileUpload(file);
     },
     [handleFileUpload]
   );
@@ -142,6 +184,8 @@ function App() {
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
+      // Clear the input so that picking the same file again still fires a change.
+      e.target.value = "";
       if (file) handleFileUpload(file);
     },
     [handleFileUpload]
@@ -166,6 +210,10 @@ function App() {
               {selectedMeta.dateLabel} {selectedMeta.timeLabel}
             </span>
             <span className={`verdict-dot ${selectedMeta.verdict.toLowerCase()}`} />
+          </span>
+        ) : selectedFile ? (
+          <span className="log-selector-value">
+            <span className="log-selector-site">{selectedFile}</span>
           </span>
         ) : (
           <span className="log-selector-placeholder">

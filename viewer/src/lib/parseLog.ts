@@ -97,8 +97,7 @@ export interface LogFileMeta {
 }
 
 export function parseLogMeta(raw: string, filename: string): LogFileMeta {
-  const telemetryIdx = raw.indexOf("Telemetry Events:");
-  const header = telemetryIdx >= 0 ? raw.slice(0, telemetryIdx) : raw;
+  const { header } = splitLog(raw);
 
   const agent = extractField(header, "Agent") ?? "Unknown";
   const scenario = extractField(header, "Scenario") ?? "Unknown";
@@ -166,12 +165,13 @@ export function parseLogMeta(raw: string, filename: string): LogFileMeta {
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
 
+/**
+ * Parse an arena run log. Throws an Error whose message can be shown to the reader
+ * as is when the text is not an arena run log or its telemetry list is damaged, so
+ * that a wrong or cut-short file is never drawn as a run with no steps.
+ */
 export function parseLog(raw: string, filename: string = ""): ParsedLog {
-  // Split header from telemetry
-  const telemetryIdx = raw.indexOf("Telemetry Events:");
-  const header = telemetryIdx >= 0 ? raw.slice(0, telemetryIdx) : raw;
-  const telemetryRaw =
-    telemetryIdx >= 0 ? raw.slice(telemetryIdx + "Telemetry Events:".length).trim() : "[]";
+  const { header, telemetryRaw } = splitLog(raw);
 
   // Parse header fields
   const agent = extractField(header, "Agent") ?? "Unknown";
@@ -213,13 +213,7 @@ export function parseLog(raw: string, filename: string = ""): ParsedLog {
   const costStr = extractField(header, "Cost") ?? "0";
   const costUsd = parseFloat(costStr.replace("$", ""));
 
-  // Parse telemetry events
-  let events: TelemetryEvent[] = [];
-  try {
-    events = JSON.parse(telemetryRaw);
-  } catch {
-    // telemetry parsing failed, continue with empty
-  }
+  const events = parseTelemetry(telemetryRaw);
 
   // Build steps from events
   const steps = buildSteps(events);
@@ -255,6 +249,52 @@ export function parseLog(raw: string, filename: string = ""): ParsedLog {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const TELEMETRY_LINE = /^Telemetry Events:[ \t]*\r?$/m;
+
+/**
+ * Split a log into its header and the text of its telemetry list. A run log has an
+ * "Agent:" line in its header and ends with a "Telemetry Events:" line followed by a
+ * JSON list (see save_log in server/arena.py); anything else is refused.
+ */
+function splitLog(raw: string): { header: string; telemetryRaw: string } {
+  const match = TELEMETRY_LINE.exec(raw);
+  const header = match ? raw.slice(0, match.index) : raw;
+  if (extractField(header, "Agent") === null) {
+    throw new Error(
+      'This file is not an arena run log: it has no "Agent:" line. ' +
+        "The viewer opens the arena_*.log files that the arena writes."
+    );
+  }
+  if (!match) {
+    throw new Error(
+      'This log has no "Telemetry Events:" list, so its steps cannot be shown. ' +
+        "The file may have been cut short."
+    );
+  }
+  return { header, telemetryRaw: raw.slice(match.index + match[0].length).trim() };
+}
+
+function parseTelemetry(text: string): TelemetryEvent[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    const reason = err instanceof Error ? ` (${err.message})` : "";
+    throw new Error(
+      `The telemetry list in this log is damaged${reason}, so its steps cannot be shown. ` +
+        "The file may have been cut short."
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      "The telemetry in this log is not a list of events, so its steps cannot be shown."
+    );
+  }
+  return parsed.filter(
+    (e): e is TelemetryEvent => typeof e === "object" && e !== null
+  );
+}
 
 function extractField(text: string, field: string): string | null {
   // Match "Field: value" at start of line

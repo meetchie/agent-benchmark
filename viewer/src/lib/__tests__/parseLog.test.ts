@@ -1,5 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { analyzeFriction, parseLog, type Step } from "../parseLog";
+import { analyzeFriction, parseLog, parseLogMeta, type Step } from "../parseLog";
 // Real runs from the local arena (2026-10-24), copied unchanged. The Rindler one
 // has a remove_from_cart call that failed (telemetry was_error true) in a run
 // the judge still passed; the browser-use one is a run with no failed call.
@@ -99,6 +100,73 @@ describe("failed steps in the friction rules", () => {
   it("do not trust a truthy value other than true", () => {
     const raw = logWith([{}]).replace('"event_type":"step_end"', '"event_type":"step_end","was_error":"false"');
     expect(parseLog(raw, "x.log").friction).toEqual([]);
+  });
+});
+
+describe("a file that is not a readable arena log", () => {
+  it.each([
+    ["random text", "hello\nthis is a shopping list, not a run log\n"],
+    ["an empty file", ""],
+    ["a JSON file", JSON.stringify([{ event_type: "step_end", step_index: 1 }])],
+    ["binary data", "PK\u0003\u0004\u0000\u0000\u0008\u0000ÿþ\u0000garbage"],
+    ["one very long line", "x".repeat(3_000_000)],
+    // server/arena_logs/ also holds Rindler context dumps, which are not run logs.
+    ["a Rindler context log", "=====\n  RINDLER AGENT — FULL CONTEXT LOG\n=====\n  Run ID:     abc\n  Goal:       shop\n"],
+  ])("is refused with a reason instead of shown as a run: %s", (_name, raw) => {
+    expect(() => parseLog(raw, "x.log")).toThrow(/not an arena run log/);
+    expect(() => parseLogMeta(raw, "x.log")).toThrow(/not an arena run log/);
+  });
+
+  it("is refused when the log stops before its telemetry list", () => {
+    const raw = logWith([{}, {}]).split("\nTelemetry Events:")[0];
+    expect(() => parseLog(raw, "x.log")).toThrow(/no "Telemetry Events:" list/);
+  });
+
+  it("is refused when the telemetry list is cut short", () => {
+    const raw = logWith([{}, {}, {}]);
+    expect(() => parseLog(raw.slice(0, raw.length - 25), "x.log")).toThrow(/telemetry list in this log is damaged/);
+  });
+
+  it("is refused when the telemetry is not a list of events", () => {
+    const raw = logWith([]).replace("Telemetry Events:\n[]", 'Telemetry Events:\n{"steps": 3}');
+    expect(() => parseLog(raw, "x.log")).toThrow(/not a list of events/);
+  });
+
+  it("still opens a run that stopped before its first step", () => {
+    const raw = logWith([], "Errors Detected: TimeoutError: page did not load");
+    const log = parseLog(raw, "x.log");
+    expect(log.steps).toEqual([]);
+    expect(log.friction).toMatchObject([{ type: "error", description: "TimeoutError: page did not load" }]);
+  });
+});
+
+describe("every archived log", () => {
+  // The bundled viewer logs and the arena_*.log files in server/arena_logs/ must all
+  // open; the six context_*.log files there are not run logs and must be refused.
+  const dirs = [
+    new URL("../../../public/logs/", import.meta.url),
+    new URL("../../../../server/arena_logs/", import.meta.url),
+  ];
+  const files = dirs.flatMap((dir) =>
+    readdirSync(dir)
+      .filter((f) => f.endsWith(".log"))
+      .map((f) => ({ name: f, raw: readFileSync(new URL(f, dir), "utf8") }))
+  );
+
+  it("is found", () => {
+    expect(files.filter((f) => f.name.startsWith("arena_"))).toHaveLength(128 + 131);
+    expect(files.filter((f) => f.name.startsWith("context_"))).toHaveLength(6);
+  });
+
+  it("opens with at least one step, or is refused if it is a context log", () => {
+    for (const { name, raw } of files) {
+      if (name.startsWith("context_")) {
+        expect(() => parseLog(raw, name), name).toThrow(/not an arena run log/);
+      } else {
+        expect(parseLog(raw, name).steps.length, name).toBeGreaterThan(0);
+        expect(parseLogMeta(raw, name).agent, name).not.toBe("Unknown");
+      }
+    }
   });
 });
 

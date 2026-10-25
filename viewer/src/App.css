@@ -643,6 +643,10 @@
   padding: 0.5rem 0;
 }
 
+.friction-empty.no-steps {
+  color: var(--color-text-muted);
+}
+
 /* ─── Judge Block ─────────────────────────────────────────────────────────── */
 
 .judge-block {
@@ -1583,22 +1587,112 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .dashboard-grid {
+  .scenario-steps {
     grid-template-columns: 1fr;
   }
 
+  /* A plain 1fr track (and a flex item) is never narrower than its content, so a long
+     scenario name or the chart would push the page wider than the screen. */
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid-left,
+  .grid-right,
+  .panel,
+  .prompt-header-left {
+    min-width: 0;
+  }
+
+  .app-main {
+    padding: 1.25rem 1rem;
+  }
+
+  .log-section {
+    padding: 2rem 1rem;
+  }
+
+  .panel {
+    padding: 1rem;
+  }
+
+  .prompt-header,
+  .prompt-header-left h3 {
+    flex-wrap: wrap;
+  }
+
+  .goal-url {
+    overflow-wrap: anywhere;
+  }
+
+  /* No room for the duration bar on a phone: drop it so the action name keeps a column,
+     and right-align the numbers so their headers line up with them. */
   .timeline-panel .timeline-header-row,
   .timeline-row {
-    grid-template-columns: 28px 1fr 60px 80px 55px 55px;
+    grid-template-columns: 22px minmax(0, 1fr) 48px 54px 44px;
+    gap: 0.35rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
     font-size: 0.7rem;
   }
 
-  .log-selector-trigger {
-    min-width: 260px;
+  .timeline-panel .timeline-header-row {
+    font-size: 0.62rem;
+    letter-spacing: 0;
+  }
+
+  .th-bar,
+  .td-bar {
+    display: none;
+  }
+
+  .th-duration,
+  .th-cost,
+  .th-tokens,
+  .td-duration,
+  .td-cost,
+  .td-tokens {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Block, not flex, so a long action name ends in an ellipsis. */
+  .td-action {
+    display: block;
+  }
+
+  .td-action .action-icon {
+    margin-right: 0.35rem;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .detail-full {
+    grid-column: span 2;
+  }
+
+  .header-controls,
+  .log-section-controls {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .header-controls .log-selector,
+  .log-section-controls .log-selector {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .log-selector-trigger,
+  .log-section-controls .log-selector-trigger {
+    min-width: 0;
+    width: 100%;
   }
 
   .log-selector-dropdown {
-    min-width: 260px;
+    min-width: 0;
   }
 
   .app-header {
