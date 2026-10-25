@@ -85,6 +85,11 @@ starts, if the backend had not answered yet). Two fields matter to the UI:
 While a run is in progress the Cost and Tokens cells show "—". Both are the backend's
 numbers and arrive when the agent finishes; the UI makes no estimate.
 
+An `error` reply carries the same `total_ms`, token counts, `cost_usd` and `agent_model`
+when the agent ran before the run ended (a rejected API key, for example), and the UI
+shows them. The Time clock counts only while the run is running: it stops when the
+run ends however it ends, and then shows the backend's `total_ms` when there is one.
+
 The quota response is `{remaining, resets_in, limit}`. A `limit` of `0`, or a `remaining`
 that is `null`, missing or negative, means no limit: the UI shows no counter and never
 blocks a run.

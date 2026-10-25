@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import type { RunStats, StepRecord, SummaryData } from "../lib/types";
 import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
@@ -148,40 +148,28 @@ export function RunningView({
   const finalCostUsd = finalStats?.cost_usd;
   const agentModel = finalStats?.agent_model;
 
-  // Timer starts when first step arrives (server is ready), stops when server gives final time
+  // The live clock runs from the first step (the server is ready) for as long as
+  // the agent is working. It stops the moment the run is no longer running,
+  // whether the server sent the real duration (finalMs, shown instead) or the run
+  // ended as an error without one, and it never outlives the view.
   const [elapsedMs, setElapsedMs] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedAtRef = useRef<number>(0);
-  const timerStartedRef = useRef(false);
+  const ticking = isRunning && steps.length > 0 && finalMs === undefined;
 
   // Reset on each new run
   useEffect(() => {
-    if (isRunning) {
-      timerStartedRef.current = false;
-      setElapsedMs(0);
-      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    }
+    if (isRunning) setElapsedMs(0);
   }, [isRunning]);
 
-  // Start on first step
   useEffect(() => {
-    if (steps.length === 1 && !timerStartedRef.current) {
-      timerStartedRef.current = true;
-      startedAtRef.current = Date.now();
-      intervalRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - startedAtRef.current);
-      }, 500);
-    }
-  }, [steps.length]);
+    if (!ticking) return;
+    const startedAt = Date.now();
+    const interval = setInterval(() => setElapsedMs(Date.now() - startedAt), 500);
+    return () => clearInterval(interval);
+  }, [ticking]);
 
-  // Stop when server gives us the real duration
-  useEffect(() => {
-    if (finalMs && intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalMs]);
+  // A run that ended as an error without being judged has no result to call complete.
+  const bannerTitle = !summary && errorMsg ? "Run ended in an error" : "Benchmark complete";
+  const bannerDetail = `${steps.length} steps${finalMs ? ` · ${formatTimer(finalMs)}` : ""}`;
 
   const [showOverlay, setShowOverlay] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -234,8 +222,8 @@ export function RunningView({
                 style={bannerDismissed ? { pointerEvents: "none" } : undefined}
               >
                 <div className="text-left">
-                  <div className="text-[13px] font-semibold text-slate-900">Benchmark complete</div>
-                  <div className="text-[11px] text-slate-500">{steps.length} steps{summary?.total_ms ? ` · ${formatTimer(summary.total_ms)}` : ""}</div>
+                  <div className="text-[13px] font-semibold text-slate-900">{bannerTitle}</div>
+                  <div className="text-[11px] text-slate-500">{bannerDetail}</div>
                 </div>
                 <button onClick={handleViewResults} className="group bg-[#3c49ad] text-white px-5 py-2 text-[13px] font-semibold hover:bg-[#5563c9] transition-colors relative inline-flex items-center">
                   <span className="transition-transform duration-200 group-hover:-translate-x-2">View Results</span>
@@ -276,8 +264,8 @@ export function RunningView({
               style={bannerDismissed ? { pointerEvents: "none" } : undefined}
             >
               <div className="text-left">
-                <div className="text-[13px] font-semibold text-slate-900">Benchmark complete</div>
-                <div className="text-[11px] text-slate-500">{steps.length} steps{summary?.total_ms ? ` · ${formatTimer(summary.total_ms)}` : ""}</div>
+                <div className="text-[13px] font-semibold text-slate-900">{bannerTitle}</div>
+                <div className="text-[11px] text-slate-500">{bannerDetail}</div>
               </div>
               <button onClick={handleViewResults} className="group bg-[#3c49ad] text-white px-5 py-2 text-[13px] font-semibold hover:bg-[#5563c9] transition-colors relative inline-flex items-center">
                 <span className="transition-transform duration-200 group-hover:-translate-x-2">View Results</span>

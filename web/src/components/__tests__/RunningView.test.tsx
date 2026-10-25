@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { RunningView } from "../RunningView";
 import type { StepRecord, SummaryData } from "../../lib/types";
 
@@ -142,7 +142,7 @@ describe("RunningView", () => {
     expect(screen.getByTestId("results-overlay-mock")).toBeInTheDocument();
   });
 
-  it("shows 'Benchmark complete' banner when errorMsg is present and run is done", () => {
+  it("does not call a run that ended in an error complete", () => {
     render(
       <RunningView
         {...defaultProps}
@@ -152,8 +152,34 @@ describe("RunningView", () => {
         steps={[]}
       />
     );
-    const banners = screen.getAllByText("Benchmark complete");
-    expect(banners.length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Run ended in an error")).toHaveLength(2);
+    expect(screen.queryByText("Benchmark complete")).not.toBeInTheDocument();
+  });
+
+  it("shows the backend's duration of an error run in the banner", () => {
+    render(
+      <RunningView
+        {...defaultProps}
+        isRunning={false}
+        errorMsg="The agent could not complete a single step."
+        analyzingStats={{ total_ms: 7532, input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 }}
+        steps={[makeStep(1), makeStep(2), makeStep(3)]}
+      />
+    );
+    expect(screen.getAllByText("3 steps · 0:07")).toHaveLength(2);
+  });
+
+  it("keeps 'Benchmark complete' for an error run the judge read", () => {
+    render(
+      <RunningView
+        {...defaultProps}
+        isRunning={false}
+        summary={{ ...makeSummary(), success: false, result_state: "error" }}
+        errorMsg="The agent model declined to continue this task (safety refusal)."
+        steps={[makeStep(1)]}
+      />
+    );
+    expect(screen.getAllByText("Benchmark complete")).toHaveLength(2);
   });
 
   it("does not show ResultsOverlay while actively running", () => {
@@ -340,6 +366,64 @@ describe("RunningView", () => {
     it("shows no banner against a real backend", () => {
       render(<RunningView {...defaultProps} />);
       expect(screen.queryByTestId("demo-banner")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("clock", () => {
+    // The Time cell of every layout.
+    const timeCells = () => screen.getAllByText("Time").map((label) => label.nextElementSibling?.textContent);
+    const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("counts while the agent works", () => {
+      render(<RunningView {...defaultProps} steps={[makeStep(1)]} />);
+      tick(3000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:03"));
+    });
+
+    it("starts when the first poll already brings several steps", () => {
+      render(<RunningView {...defaultProps} steps={[makeStep(1), makeStep(2)]} />);
+      tick(3000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:03"));
+    });
+
+    it("stops where it was when the run ends in an error with no duration", () => {
+      const { rerender } = render(<RunningView {...defaultProps} steps={[makeStep(1)]} />);
+      tick(4000);
+      rerender(<RunningView {...defaultProps} isRunning={false} errorMsg="Lost connection to server." steps={[makeStep(1)]} />);
+      tick(10000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:04"));
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("shows the backend's duration of an error run that reports one", () => {
+      const { rerender } = render(<RunningView {...defaultProps} steps={[makeStep(1)]} />);
+      tick(5000);
+      rerender(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          errorMsg="The agent could not complete a single step."
+          analyzingStats={{ total_ms: 7532, input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 }}
+          steps={[makeStep(1), makeStep(2)]}
+        />
+      );
+      tick(10000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:07"));
+    });
+
+    it("leaves no timer behind when it unmounts mid-run", () => {
+      const { unmount } = render(<RunningView {...defaultProps} steps={[makeStep(1)]} />);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

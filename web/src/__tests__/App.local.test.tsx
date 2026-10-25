@@ -326,6 +326,128 @@ describe("App in local mode (no Clerk key)", () => {
     });
   });
 
+  // A run that ends with status "error" (a rejected API key, the judge failing, the
+  // server stopping) is over: its clock must stop, and show the run's real duration
+  // when the backend reports one. These run on fake timers, like the next block.
+  describe("the clock of a run that ends as an error", () => {
+    const reply = (body: unknown) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+    const step = (n: number) => ({ step: n, description: "Processing...", elapsed_ms: 1000 });
+    const steps = (n: number) => Array.from({ length: n }, (_, i) => step(i + 1));
+
+    // What the backend sends for a run whose six steps all failed on a rejected
+    // API key (run 8957c762): status "error", with the steps, time and usage.
+    const BAD_KEY = {
+      status: "error",
+      message: "The agent could not complete a single step: the API key was rejected (check ANTHROPIC_API_KEY).",
+      steps: steps(6),
+      total_ms: 7532,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      cost_usd: 0,
+      agent_model: "claude-sonnet-5-5",
+    };
+
+    async function startRun(statusReplies: Array<unknown | Error>) {
+      let polls = 0;
+      const fetchMock = vi.fn(async (input: string) => {
+        if (input.startsWith("/api/benchmark/health")) return reply({ ok: true, demo_mode: false, timeout_s: 180 });
+        if (input.startsWith("/api/benchmark/quota")) return reply({ remaining: 0, resets_in: 0, limit: 0 });
+        if (input.startsWith("/api/benchmark/generate-tasks")) return reply({ tasks: [TASK] });
+        if (input.startsWith("/api/benchmark/run")) return reply({ run_id: "run-1" });
+        if (input.startsWith("/api/benchmark/status")) {
+          const next = statusReplies[Math.min(polls++, statusReplies.length - 1)];
+          if (next instanceof Error) throw next;
+          return reply(next);
+        }
+        throw new Error(`unexpected request to ${input}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const { user, input } = await openSetup();
+      await user.type(input, "https://books.example{Enter}");
+      await user.click(await screen.findByText(TASK.label));
+
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByRole("button", { name: "Run Benchmark" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+    }
+
+    // A second at a time, so React renders each poll's reply before the next timer fires.
+    async function advance(seconds: number) {
+      for (let s = 0; s < seconds; s++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000);
+        });
+      }
+    }
+
+    // Every Time cell: the stats (one per layout) and, once it is open, the results card.
+    const timeCells = () => screen.getAllByText("Time").map((label) => label.nextElementSibling?.textContent);
+    const headerTime = () => screen.getByRole("banner").textContent;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("stops at the backend's total_ms and keeps it", async () => {
+      // One poll a second: five running replies with a growing step list, then the error.
+      await startRun([
+        { status: "running", steps: steps(1) },
+        { status: "running", steps: steps(2) },
+        { status: "running", steps: steps(3) },
+        { status: "running", steps: steps(4) },
+        { status: "running", steps: steps(5) },
+        BAD_KEY,
+      ]);
+      await advance(6);
+      expect(screen.getAllByText(/could not complete a single step/).length).toBeGreaterThan(0);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:07"));
+      expect(headerTime()).toContain("0:07");
+
+      await advance(10);
+      const cells = timeCells();
+      expect(cells.length).toBeGreaterThan(2);
+      expect(cells).toEqual(cells.map(() => "0:07"));
+      expect(headerTime()).toContain("0:07");
+      expect(headerTime()).not.toContain("RUNNING");
+    });
+
+    it("shows the error reply's steps and the usage it reports", async () => {
+      await startRun([{ status: "running", steps: steps(2) }, BAD_KEY]);
+      await advance(2);
+      const stepCells = screen.getAllByText("Steps").map((label) => label.nextElementSibling?.textContent);
+      expect(stepCells.length).toBeGreaterThan(0);
+      expect(stepCells).toEqual(stepCells.map(() => "6"));
+      for (const card of screen.getAllByTestId("agent-card")) {
+        expect(card).toHaveTextContent("claude-sonnet-5-5");
+      }
+    });
+
+    it("stops where it was when the server stops answering", async () => {
+      const down = new TypeError("Failed to fetch");
+      await startRun([
+        { status: "running", steps: steps(1) },
+        { status: "running", steps: steps(2) },
+        down,
+      ]);
+      // Steps at 1 s and 2 s, then three failed polls: "Lost connection" at 5 s,
+      // about four seconds after the clock started at the first step.
+      await advance(5);
+      expect(screen.getAllByText(/Lost connection/).length).toBeGreaterThan(0);
+      const shown = timeCells()[0];
+      expect(shown).toMatch(/^0:0[34]$/);
+      expect(headerTime()).toContain(shown);
+
+      await advance(10);
+      expect(headerTime()).toContain(shown);
+      expect(headerTime()).not.toContain("RUNNING");
+      const stats = timeCells();
+      expect(stats).toEqual(stats.map(() => shown));
+    });
+  });
+
   // The UI gives up on a run after the backend's agent time limit plus 3 minutes
   // for judging (at least 5, and 10 when it does not know the limit). These run
   // on fake timers, with the status endpoint answering "running" forever.

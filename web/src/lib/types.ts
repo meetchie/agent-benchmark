@@ -60,7 +60,12 @@ export interface StatusComplete {
   agent_reported_success?: boolean | null;
 }
 
-export interface StatusError {
+/**
+ * A run that ended without a verdict. When the agent ran before it ended (a
+ * rejected API key, a cancel, the judge failing) the reply also carries the
+ * run's time and usage, as "analyzing" does.
+ */
+export interface StatusError extends Partial<Omit<StatusAnalyzing, "status" | "steps">> {
   status: "error";
   message: string;
   steps?: StepRecord[];
@@ -70,7 +75,10 @@ export type StatusResponse = StatusRunning | StatusAnalyzing | StatusComplete | 
 
 export type RunStatus = "idle" | "running" | "analyzing" | "complete" | "error";
 
-/** Totals the backend reports once the agent has finished (status "analyzing" and "complete"). */
+/**
+ * Totals the backend reports once the agent has finished (status "analyzing" and
+ * "complete", and "error" when the agent ran before the run ended).
+ */
 export interface RunStats {
   total_ms: number;
   input_tokens: number;

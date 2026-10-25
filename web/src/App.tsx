@@ -253,6 +253,19 @@ export default function App() {
             stopPolling();
             setRunStatus("error");
             setErrorMsg(data.message);
+            if (data.steps) setSteps(data.steps);
+            // The agent ran (and was billed) before the run ended: show its real
+            // duration and usage, the same numbers the run file keeps.
+            if (data.total_ms !== undefined) {
+              setAnalyzingStats({
+                total_ms: data.total_ms,
+                input_tokens: data.input_tokens ?? 0,
+                output_tokens: data.output_tokens ?? 0,
+                total_tokens: data.total_tokens ?? 0,
+                cost_usd: data.cost_usd,
+                agent_model: data.agent_model,
+              });
+            }
             return;
           }
 
