@@ -1,43 +1,52 @@
 [project]
-name = "clean-room"
-version = "0.1.0"
-description = "Clean-room telemetric agent testing environment for browser automation frameworks"
+name = "agent-benchmark"
+version = "0.2.0"
+description = "Live browser-agent benchmark API, head-to-head arena and comparison CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # Core browser automation
-    "browser-use>=0.11.2",
+    # Browser agent. browser-use drives Chromium over CDP; Playwright supplies
+    # the Chromium download and the API used by the local Rindler interpreter.
+    "browser-use>=0.13.11,<0.14",
+    "playwright>=1.55.0",
+
+    # LLM provider (default). Capped below 2 because browser-use 0.13 requires
+    # anthropic<2.
+    "anthropic>=1.17.0,<2",
+
+    # Benchmark API server
+    "fastapi>=0.135.0",
+    "uvicorn[standard]>=0.40.0",
+    "pydantic>=2.13.0",
+    "python-dotenv>=1.2.0",
+    "httpx>=0.28.1",
+
+    # Task generator: page fetch and metadata extraction
+    "aiohttp>=3.14.0",
+    "certifi>=2025.1.1",
+    "beautifulsoup4>=4.13.0",
+
+    # Optional Clerk auth mode (JWKS verification)
+    "PyJWT[crypto]>=2.10.0",
+
+    # Comparison CLI: task files and charts
+    "pyyaml>=6.0.2",
+    "matplotlib>=3.10.0",
+    "numpy>=2.3.0",
+
+    # Legacy arena vendor adapters (browserbase, steel, skyvern, the MCP Rindler
+    # client). Still imported by server/adapters and benchmark_runner's optional
+    # Browserbase provider; drop each one together with the code that uses it.
     "browserbase>=1.4.0",
-    "playwright>=1.40.0",
-
-    # Steel SDK for STEEL agent
-    "steel-sdk>=0.1.0",
-
-    # LLM orchestration
-    "langchain>=0.2.0",
-    "langchain-openai>=0.1.0",
-    "openai>=1.30.0",
-
-    # HTTP clients (for SKYVERN agent)
-    "requests>=2.31.0",
-    "aiohttp>=3.9.0",
-
-    # Environment and utilities
-    "python-dotenv>=1.0.0",
-
-    # Optional: for MCP integration
-    "mcp>=1.0.0",
-
-    # LLM providers for RINDLER agent
-    "anthropic>=0.30.0",
-
-    # Clerk JWT verification (JWKS)
-    "PyJWT[crypto]>=2.8.0",
-
-    # Benchmark server
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
+    "steel-sdk>=0.16.0",
+    "langchain-openai>=1.1.0",
+    "mcp>=2.1.0",
+    "requests>=2.32.0",
 ]
+
+[project.optional-dependencies]
+# Only needed with LLM_PROVIDER=openai. llm.py imports it lazily.
+openai = ["openai>=2.26.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
@@ -48,11 +57,10 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=9.0.2",
-    "pytest-asyncio>=0.21.0",
+    "pytest-asyncio>=1.0.0",
 ]
 
 [tool.pytest.ini_options]
-addopts = "-p no:launch_ros -p no:launch_testing -p no:launch_testing_ros -p no:ament_flake8 -p no:ament_xmllint -p no:ament_copyright -p no:ament_pep257 -p no:ament_lint"
+testpaths = ["tests"]
 asyncio_mode = "auto"
