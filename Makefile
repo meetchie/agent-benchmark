@@ -58,8 +58,8 @@ test-cli: check-tools ## comparison CLI tests (pytest, run apart from the server
 test-web: check-tools ## web tests (vitest) and a production build
 	cd web && npm test && npm run build
 
-test-viewer: check-tools ## viewer production build (it has no tests)
-	cd viewer && npm run build
+test-viewer: check-tools ## viewer tests (vitest) and a production build
+	cd viewer && npm test && npm run build
 
 arena: check-tools ## one arena run, a real run that costs money: AGENT=RINDLER|BROWSERUSE SCENARIO=...
 	cd server && uv run python arena.py --agent "$(AGENT)" --scenario "$(SCENARIO)"

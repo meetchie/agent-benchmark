@@ -3,6 +3,7 @@ import type { RunStats, StepRecord, SummaryData } from "../lib/types";
 import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
 import { AgentCard } from "./AgentCard";
+import { DemoBanner } from "./DemoBanner";
 import { RunningHeader } from "./RunningHeader";
 import { StepLog } from "./StepLog";
 import { ResultsOverlay } from "./ResultsOverlay";
@@ -24,11 +25,11 @@ function LiveStats({
   // Snap to real server time when done, otherwise show shared live counter
   const displayMs = finalMs ?? elapsedMs;
 
-  // Use real token data when available, fall back to rough estimate
+  // Tokens are whatever the backend counted. Until the agent finishes there is
+  // no honest number (an estimate from the step count read about 7x low on
+  // current models), so the cell shows "—" just like Cost does.
   const hasRealTokens = finalInputTokens !== undefined && finalOutputTokens !== undefined;
-  const displayInputTokens = hasRealTokens ? finalInputTokens! : Math.round(steps.length * 3000 * 0.8);
-  const displayOutputTokens = hasRealTokens ? finalOutputTokens! : Math.round(steps.length * 3000 * 0.2);
-  const displayTotalTokens = displayInputTokens + displayOutputTokens;
+  const totalTokens = hasRealTokens ? finalInputTokens! + finalOutputTokens! : null;
 
   const domain = (() => {
     try { return new URL(url).hostname.replace("www.", ""); }
@@ -44,7 +45,7 @@ function LiveStats({
     { label: "Time", value: formatTimer(displayMs) },
     { label: "Steps", value: String(steps.length) },
     ...(costValue !== null ? [{ label: "Cost", value: steps.length > 0 ? costValue : "—" }] : []),
-    { label: "Tokens", value: steps.length > 0 ? (hasRealTokens ? displayTotalTokens.toLocaleString() : `~${displayTotalTokens.toLocaleString()}`) : "—" },
+    { label: "Tokens", value: totalTokens !== null ? totalTokens.toLocaleString() : "—" },
   ];
 
   return (
@@ -107,11 +108,13 @@ interface RunningViewProps {
   remainingRuns?: number;
   runLimit?: number;
   resetsIn?: number;
+  /** The backend plays canned runs: show the demo banner. */
+  demoMode?: boolean;
 }
 
 export function RunningView({
   url, taskLabel, isRunning, isAnalyzing, analyzingStats,
-  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns, runLimit, resetsIn,
+  steps, screenshot, summary, errorMsg, onRunAgain, onNewTest, remainingRuns, runLimit, resetsIn, demoMode = false,
 }: RunningViewProps) {
   const isDone = !!summary || (!!errorMsg && !isRunning && !isAnalyzing);
   const showOverlayTrigger = isDone || isAnalyzing;
@@ -177,6 +180,7 @@ export function RunningView({
 
   return (
     <div className="h-screen bg-[#f0f4ff] flex flex-col overflow-hidden">
+      {demoMode && <DemoBanner />}
       <RunningHeader
         isRunning={isRunning}
         elapsedMs={elapsedMs}
@@ -283,6 +287,7 @@ export function RunningView({
           url={url} taskLabel={taskLabel} summary={summary} errorMsg={errorMsg}
           steps={steps} isAnalyzing={isAnalyzing} analyzingStats={analyzingStats}
           onClose={() => { setShowOverlay(false); setBannerDismissed(false); }} onRunAgain={onRunAgain} onNewTest={onNewTest}
+          demoMode={demoMode}
         />
       )}
     </div>

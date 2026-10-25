@@ -1,0 +1,244 @@
+Agent: BROWSERUSE
+Scenario: vhlistings_add_to_cart
+Run ID: 50d31467-b2a6-4d51-978a-8e566c238adb
+Trace ID: 3cf1a9ef-dc3f-453f-afe6-3c3b674de494
+Goal: You are shopping on VHListings (vhlistings.com), a streetwear accessories store.
+
+1. Go to vhlistings.com.
+2. Search for "belt".
+3. From the search results, select any belt product.
+4. Add it to the cart.
+5. Navigate to the cart page and verify the item is there.
+
+VERIFICATION: After completing the task, open the cart page and report the exact cart contents including the product name and price.
+Start URL: https://vhlistings.com
+Agent Model: claude-sonnet-5-5
+Max Steps: 30
+Duration: 45.58s
+Agent Reported Success: True
+
+--- JUDGE EVALUATION ---
+Judge Verdict: PASS
+Judge Reason: The agent searched for 'belt', opened the Triple Star Buckle Belt (Black), added it to the cart, and viewed the cart page at vhlistings.com/cart. The cart contents showed the belt at $19.00, which satisfies all three success criteria. A VIP Membership item at $0.00 also appeared in the cart, but the agent disclosed it as an unrequested add-on and it doesn't change the fact that the belt is in the cart.
+Criteria Met: A search for 'belt' was performed on VHListings, A belt product (Triple Star Buckle Belt, Black) was selected and added to the cart, The cart page was viewed and contains the belt product with name and price ($19.00)
+Errors Observed by Judge: Cart also contained an unrequested VIP Membership item ($0.00 trial), likely an automatic add-on, Cart contents were read via page-text extraction rather than clearly seen on screen, Extraction noted a stale '22 items' count, inconsistent with the 2-item header, Quantity of the belt was not shown
+Judge Model: claude-sonnet-5-5
+Judge Cost: $0.0077
+--- END JUDGE EVALUATION ---
+Token Burn: 193,706 (191,264 in / 2,442 out)
+Cost: $0.2150
+Final Report: "I searched for \"belt\" on vhlistings.com, opened the Triple Star Buckle Belt (Black), added it to the cart, and checked the cart page at https://vhlistings.com/cart.\n\nThe cart page header reads \"Cart \u2022 2 items\". I got the line items from a page-text extraction, and I did not see them clearly on screen. The extraction listed two line items:\n1. **Triple Star Buckle Belt**, variant Black, **$19.00** (regular price $27.00). The quantity value wasn't shown in the text.\n2. **VIP Membership** ($30/month, 1-month free trial), $0.00 (regular price $30.00). I did not add this myself. It appeared in the cart after I added the belt, probably as an automatic add-on.\n\nThe subtotal is **$19.00 USD**.\n\nThe header cart icon showed \"2\" on screen. The extraction noted it had also read \"22 items\", which looks like a stale count.\n\nThe belt is in the cart at $19.00."
+
+Telemetry Events:
+[
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:03.816750",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 1,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:09.789976",
+    "duration_ms": 5973.226000000001,
+    "tokens_input": 22116,
+    "tokens_output": 232,
+    "cost_usd": 0.055871,
+    "action_type": "navigate",
+    "observation_hash": "01ec76c18b31fecc00242d47445b0be1e32e02db532b7653c07bec6e0bfb235e",
+    "tokens_cache_read": 0,
+    "tokens_cache_write": 18638
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:09.790035",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 2,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:13.762065",
+    "duration_ms": 3972.03,
+    "tokens_input": 23169,
+    "tokens_output": 198,
+    "cost_usd": 0.0147696,
+    "action_type": "click",
+    "observation_hash": "f8813de65e20599e6ffb9294f57117b8cab03a18cf6e1e4d54ce32da15c94f88",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:13.762123",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "click",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 3,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:17.730318",
+    "duration_ms": 3968.195,
+    "tokens_input": 24458,
+    "tokens_output": 202,
+    "cost_usd": 0.0173876,
+    "action_type": "click",
+    "observation_hash": "6a1fc00d1c46a419b501c25f89d1be209608c954d052cfebdd9dbbb563c85dc5",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:17.730357",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "navigate",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 4,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:23.611760",
+    "duration_ms": 5881.402999999999,
+    "tokens_input": 24479,
+    "tokens_output": 275,
+    "cost_usd": 0.018159599999999998,
+    "action_type": "navigate",
+    "observation_hash": "65056141c1d0421ba67ff441973bb091e9129bde0aacd1521f87f2d120a9f772",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:23.611824",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "scroll",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 5,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:29.441686",
+    "duration_ms": 5829.862,
+    "tokens_input": 23688,
+    "tokens_output": 260,
+    "cost_usd": 0.016427599999999997,
+    "action_type": "scroll",
+    "observation_hash": "b03d9f5c17f76b564f8a460f00d9c1173f738744d9f9a4ecceaa5ffaae775c56",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:29.441729",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "extract",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 6,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:37.000360",
+    "duration_ms": 7558.631,
+    "tokens_input": 49308,
+    "tokens_output": 717,
+    "cost_usd": 0.0722376,
+    "action_type": "extract",
+    "observation_hash": "eb1af44930394a62fc784eb309fddc668a3ec72ef878cbe2b850cc0f0e748702",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_start",
+    "timestamp": "2026-10-24T22:19:37.000476",
+    "duration_ms": null,
+    "tokens_input": 0,
+    "tokens_output": 0,
+    "cost_usd": 0.0,
+    "action_type": "done",
+    "observation_hash": null
+  },
+  {
+    "trace_id": "3cf1a9ef-dc3f-453f-afe6-3c3b674de494",
+    "run_id": "50d31467-b2a6-4d51-978a-8e566c238adb",
+    "lane": "BROWSERUSE",
+    "step_index": 7,
+    "event_type": "step_end",
+    "timestamp": "2026-10-24T22:19:43.950087",
+    "duration_ms": 6949.611,
+    "tokens_input": 24046,
+    "tokens_output": 558,
+    "cost_usd": 0.0201236,
+    "action_type": "done",
+    "observation_hash": "a8d7271ce564970d0706984cdead8682c053e0103fec385652a4f749f08384d7",
+    "tokens_cache_read": 18638,
+    "tokens_cache_write": 0
+  }
+]

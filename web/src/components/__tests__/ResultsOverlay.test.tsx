@@ -40,6 +40,16 @@ describe("ResultsOverlay", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
+  it("says it is a demo result when the backend plays canned runs", () => {
+    render(<ResultsOverlay {...defaultProps} demoMode />);
+    expect(screen.getByTestId("demo-banner")).toHaveTextContent("Demo mode: canned runs, no real agent or API calls");
+  });
+
+  it("has no demo banner against a real backend", () => {
+    render(<ResultsOverlay {...defaultProps} />);
+    expect(screen.queryByTestId("demo-banner")).not.toBeInTheDocument();
+  });
+
   it("shows Benchmark Result header", () => {
     render(<ResultsOverlay {...defaultProps} />);
     expect(screen.getByText("Benchmark Result")).toBeInTheDocument();

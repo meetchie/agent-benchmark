@@ -13,12 +13,16 @@ Cloudflare is involved unless you opt into Clerk.
 cd web
 nvm use            # Node 22 (.nvmrc); anything >= 20 works
 npm ci
-npm run dev        # http://localhost:5180
+npm run dev        # http://localhost:5180 (http://127.0.0.1:5180 works too)
 ```
 
 `npm run dev` proxies `/api/benchmark/*` to the backend. Start the backend first
 (`../server`, default `http://127.0.0.1:8000`), otherwise the setup screen says it can't
 reach the benchmark server.
+
+The dev and preview servers listen on `127.0.0.1` and `::1` (loopback only, never the
+network), so `localhost` and `127.0.0.1` both work whichever address `localhost` resolves
+to on your machine; see `config/loopback.ts`.
 
 Other scripts: `npm test` (vitest), `npm run build` (type-check, then `vite build` into
 `dist/`), `npm run preview` (serves `dist/` with the same proxy).
@@ -54,6 +58,7 @@ a dev-server restart or a rebuild.
 |---|---|
 | `POST /api/benchmark/generate-tasks` `{url}` | `POST /benchmark/generate-tasks` |
 | `GET /api/benchmark/quota` | `GET /benchmark/quota` |
+| `GET /api/benchmark/health` | `GET /health` |
 | `POST /api/benchmark/run` `{url, goal, label, viewport_width, viewport_height}` | `POST /benchmark/start` |
 | `GET /api/benchmark/status/<run_id>` | `GET /benchmark/status/<run_id>` |
 | `POST /api/benchmark/cancel/<run_id>` | `POST /benchmark/cancel/<run_id>` |
@@ -68,6 +73,18 @@ token counts plus two fields the UI shows as given:
   When it is `null` or missing the UI shows tokens only. The UI never prices tokens itself.
 - `agent_model`: the model id, for example `claude-sonnet-5-5`.
 
+`GET /health` is read once, when the visitor leaves the landing page (and again when a run
+starts, if the backend had not answered yet). Two fields matter to the UI:
+
+- `demo_mode` (bool): when `true` every screen shows a "Demo mode: canned runs, no real
+  agent or API calls" banner, so a canned run is never mistaken for a real one.
+- `timeout_s` (int): the backend's agent time limit (`BENCHMARK_TIMEOUT_S`). The UI polls a
+  run for `timeout_s + 180` seconds (the 180 are for judging), at least 5 minutes, and for
+  10 minutes when `timeout_s` is missing, before it reports "Lost connection".
+
+While a run is in progress the Cost and Tokens cells show "—". Both are the backend's
+numbers and arrive when the agent finishes; the UI makes no estimate.
+
 The quota response is `{remaining, resets_in, limit}`. A `limit` of `0`, or a `remaining`
 that is `null`, missing or negative, means no limit: the UI shows no counter and never
 blocks a run.
@@ -75,9 +92,9 @@ blocks a run.
 ## Layout
 
 ```
-config/            vite.config helpers (auth alias, port, API proxy) and their tests
+config/            vite.config helpers (auth alias, port, API proxy, loopback listeners) and their tests
 src/App.tsx        view state machine: home -> setup -> running
-src/lib/api.ts     fetch wrappers for the routes above
+src/lib/api.ts     fetch wrappers for the routes above, health and the poll limit
 src/lib/auth-*.ts  local auth shim and the mode switch
 src/components/    views and overlays; components/__tests__ holds their tests
 ```

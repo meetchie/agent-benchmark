@@ -74,17 +74,22 @@ describe("apiProxy", () => {
     return fn(path);
   };
 
-  it("proxies exactly the five API routes the Cloudflare functions covered", () => {
+  it("proxies exactly the five API routes the Cloudflare functions covered, plus health", () => {
     expect(Object.keys(proxy).sort()).toEqual(
       [
         "/api/benchmark/cancel",
         "/api/benchmark/generate-tasks",
+        "/api/benchmark/health",
         "/api/benchmark/quota",
         "/api/benchmark/run",
         "/api/benchmark/status",
       ].sort()
     );
-    expect(API_ROUTES).toHaveLength(5);
+    expect(API_ROUTES).toHaveLength(6);
+  });
+
+  it("maps /api/benchmark/health to the backend's /health", () => {
+    expect(rewrite("/api/benchmark/health", "/api/benchmark/health")).toBe("/health");
   });
 
   it("sends every route to the configured backend", () => {

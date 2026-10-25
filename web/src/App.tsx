@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
-import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota, normalizeQuota, UNKNOWN_QUOTA } from "./lib/api";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota, fetchHealth, normalizeQuota, pollLimitSeconds, UNKNOWN_QUOTA } from "./lib/api";
 import { isClerkMode } from "./lib/auth-mode";
-import type { Task, StepRecord, RunStatus, RunStats, SummaryData, Quota } from "./lib/types";
+import type { Task, StepRecord, RunStatus, RunStats, SummaryData, Quota, Health } from "./lib/types";
 
 import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
@@ -16,7 +16,8 @@ type View = "home" | "setup" | "running";
 const LOCAL_AUTH_REJECTED =
   "The backend rejected the request as unauthenticated. Run it with AUTH_MODE=none, or set VITE_CLERK_PUBLISHABLE_KEY to sign in with Clerk.";
 
-const MAX_POLLS = 300; // 5 min — backend handles 3-min agent timeout + judge
+// How long a run is polled before the UI gives up is derived from the
+// backend's own agent time limit (GET /health timeout_s); see pollLimitSeconds.
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
@@ -60,6 +61,26 @@ export default function App() {
       setQuota(await fetchQuota(token));
     })();
   }, [isSignedIn, getToken, atHome]);
+
+  // What the backend says about itself (GET /health): whether it plays canned
+  // runs (demo banner) and its agent time limit (how long to keep polling).
+  // Asked once, together with the quota, when the visitor leaves the landing
+  // page, so the landing page makes no request to a backend that may not be
+  // up yet. null until the backend has answered; a run start asks again if so.
+  const [health, setHealth] = useState<Health | null>(null);
+  const healthRef = useRef<Health | null>(null);
+  const healthAskedRef = useRef(false);
+  const rememberHealth = useCallback((h: Health | null) => {
+    if (!h) return;
+    healthRef.current = h;
+    setHealth(h);
+  }, []);
+  useEffect(() => {
+    if (atHome || healthAskedRef.current) return;
+    healthAskedRef.current = true;
+    fetchHealth().then(rememberHealth);
+  }, [atHome, rememberHealth]);
+  const demoMode = health?.demo_mode === true;
 
   const [showExhausted, setShowExhausted] = useState(false);
 
@@ -213,11 +234,12 @@ export default function App() {
     (runId: string) => {
       pollCountRef.current = 0;
       retriesRef.current = 0;
+      const maxPolls = Math.ceil((pollLimitSeconds(healthRef.current?.timeout_s) * 1000) / POLL_INTERVAL_MS);
 
       pollRef.current = setInterval(async () => {
         pollCountRef.current++;
 
-        if (pollCountRef.current > MAX_POLLS) {
+        if (pollCountRef.current > maxPolls) {
           stopPolling();
           setRunStatus("error");
           setErrorMsg("Lost connection — the run may still be processing on the server.");
@@ -309,6 +331,10 @@ export default function App() {
       }
     }
 
+    // The backend was not up when health was first asked: ask again, so the
+    // demo label and the poll limit are right for this run.
+    if (!healthRef.current) rememberHealth(await fetchHealth());
+
     setRunStatus("running");
     setSteps([]);
     setScreenshot(null);
@@ -342,7 +368,7 @@ export default function App() {
         setErrorMsg(e instanceof Error ? e.message : "Failed to start benchmark.");
       }
     }
-  }, [selectedTask, isSignedIn, getToken, url, startPolling, quota.remaining]);
+  }, [selectedTask, isSignedIn, getToken, url, startPolling, quota.remaining, rememberHealth]);
 
   const handleRun = useCallback(async () => {
     if (!canRun || !selectedTask) return;
@@ -418,6 +444,7 @@ export default function App() {
           remainingRuns={quota.remaining ?? undefined}
           runLimit={quota.limit ?? undefined}
           resetsIn={quota.resets_in}
+          demoMode={demoMode}
         />
         {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} onClose={() => setShowExhausted(false)} />}
       </>
@@ -456,6 +483,7 @@ export default function App() {
         remainingRuns={isSignedIn ? quota.remaining ?? undefined : undefined}
         runLimit={isSignedIn ? quota.limit ?? undefined : undefined}
         resetsIn={isSignedIn ? quota.resets_in : undefined}
+        demoMode={demoMode}
       />
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
       {showExhausted && <ExhaustedOverlay resetsIn={quota.resets_in} onClose={() => setShowExhausted(false)} />}

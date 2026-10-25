@@ -77,6 +77,12 @@ describe("vite dev proxy to the backend", () => {
     expect(got.url).toBe("/benchmark/quota");
   });
 
+  it("GET /api/benchmark/health reaches /health", async () => {
+    const got = await call("/api/benchmark/health");
+    expect(got.method).toBe("GET");
+    expect(got.url).toBe("/health");
+  });
+
   it("GET /api/benchmark/status/<id> keeps the id", async () => {
     const got = await call("/api/benchmark/status/abc-123");
     expect(got.method).toBe("GET");

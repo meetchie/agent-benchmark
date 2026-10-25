@@ -63,6 +63,7 @@ export const API_ROUTES: ReadonlyArray<{ from: string; to: string; kind: "fixed"
   { from: "/api/benchmark/run", to: "/benchmark/start", kind: "fixed" },
   { from: "/api/benchmark/generate-tasks", to: "/benchmark/generate-tasks", kind: "fixed" },
   { from: "/api/benchmark/quota", to: "/benchmark/quota", kind: "fixed" },
+  { from: "/api/benchmark/health", to: "/health", kind: "fixed" },
   { from: "/api/benchmark/status", to: "/benchmark/status", kind: "prefix" },
   { from: "/api/benchmark/cancel", to: "/benchmark/cancel", kind: "prefix" },
 ];

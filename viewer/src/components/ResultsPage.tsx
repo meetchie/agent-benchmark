@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CaveatsPanel } from "./CaveatsPanel";
 
 // ─── Benchmark Data ────────────────────────────────────────────────────────────
 
@@ -114,6 +115,8 @@ function HeroSection() {
             <div className="hero-stat-sub">{BROWSERUSE.pass} of {BROWSERUSE.runs} runs</div>
           </div>
         </div>
+
+        <CaveatsPanel />
       </div>
     </div>
   );
@@ -260,6 +263,11 @@ function FunnelSection() {
             );
           })}
         </div>
+
+        <p className="funnel-note">
+          Stage counts and &ldquo;dark pattern&rdquo; labels were written by hand. The judge
+          criteria in the logs give 23, not 25, for &ldquo;Added 3 items to cart&rdquo;.
+        </p>
       </div>
     </div>
   );

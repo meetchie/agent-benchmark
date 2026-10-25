@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import type { Task, RunStatus } from "../lib/types";
 import { BenchmarkHeader } from "./BenchmarkHeader";
+import { DemoBanner } from "./DemoBanner";
 import { BackgroundGrid } from "./BackgroundGrid";
 import { URLInput } from "./URLInput";
 import { TaskCard } from "./TaskCard";
@@ -25,6 +26,8 @@ interface SetupViewProps {
   remainingRuns?: number;
   runLimit?: number;
   resetsIn?: number;
+  /** The backend plays canned runs: show the demo banner. */
+  demoMode?: boolean;
 }
 
 export function SetupView({
@@ -45,6 +48,7 @@ export function SetupView({
   remainingRuns,
   runLimit,
   resetsIn,
+  demoMode = false,
 }: SetupViewProps) {
   const hasShifted = useRef(false);
   if (tasks.length > 0 || tasksLoading) {
@@ -64,6 +68,7 @@ export function SetupView({
 
   return (
     <div className="min-h-screen bg-[#f0f4ff] flex flex-col overflow-x-hidden">
+      {demoMode && <DemoBanner />}
       <BenchmarkHeader onSignInClick={onSignInClick} />
 
       <div

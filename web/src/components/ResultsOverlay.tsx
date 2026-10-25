@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { RunStats, StepRecord, SummaryData, ResultState } from "../lib/types";
 import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
+import { DemoBanner } from "./DemoBanner";
 import { PhaseList } from "./PhaseList";
 
 interface ResultsOverlayProps {
@@ -15,6 +16,8 @@ interface ResultsOverlayProps {
   onClose: () => void;
   onRunAgain: () => void;
   onNewTest: () => void;
+  /** The backend plays canned runs: the result card says so. */
+  demoMode?: boolean;
 }
 
 const RESULT_CONFIG: Record<ResultState, { label: string; color: string }> = {
@@ -35,6 +38,7 @@ export function ResultsOverlay({
   onClose,
   onRunAgain,
   onNewTest,
+  demoMode = false,
 }: ResultsOverlayProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -60,6 +64,7 @@ export function ResultsOverlay({
       <div className="absolute inset-0 modal-backdrop" onClick={onClose} />
 
       <div className="relative w-full max-w-[520px] max-h-[90vh] border-2 border-slate-200 bg-white m-4 shadow-2xl flex flex-col">
+        {demoMode && <DemoBanner />}
         {/* Close button row */}
         <div className="shrink-0 flex justify-end p-4 pb-0 bg-white">
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">

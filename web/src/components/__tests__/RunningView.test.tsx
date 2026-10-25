@@ -183,6 +183,30 @@ describe("RunningView", () => {
       }
     });
 
+    it("shows a placeholder for tokens too while the run is in progress, never a step-count guess", () => {
+      // The old estimate was steps x 3000 shown as "~N" (here "~6,000"); it read about 7x low.
+      render(<RunningView {...defaultProps} steps={[makeStep(1), makeStep(2)]} />);
+      const tokenCells = screen.getAllByText("Tokens").map((label) => label.parentElement);
+      expect(tokenCells.length).toBeGreaterThan(0);
+      for (const cell of tokenCells) expect(cell).toHaveTextContent(/^Tokens\s*—$/);
+      expect(document.body.textContent).not.toMatch(/~/);
+      expect(document.body.textContent).not.toMatch(/6,000/);
+    });
+
+    it("shows the backend's real token total once the judge phase reports it", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          isAnalyzing
+          analyzingStats={{ total_ms: 4000, input_tokens: 41000, output_tokens: 2500, total_tokens: 43500, cost_usd: null }}
+          steps={[makeStep(1), makeStep(2)]}
+        />
+      );
+      expect(screen.getAllByText("43,500").length).toBeGreaterThan(0);
+      expect(document.body.textContent).not.toMatch(/~/);
+    });
+
     it("shows cost and model as soon as the judge phase reports them", () => {
       render(
         <RunningView
@@ -204,6 +228,25 @@ describe("RunningView", () => {
       for (const card of screen.getAllByTestId("agent-card")) {
         expect(card).toHaveTextContent("claude-haiku-5-5");
       }
+    });
+  });
+
+  describe("demo mode", () => {
+    it("shows a persistent banner when the backend plays canned runs", () => {
+      render(<RunningView {...defaultProps} demoMode />);
+      expect(screen.getByTestId("demo-banner")).toHaveTextContent(
+        "Demo mode: canned runs, no real agent or API calls"
+      );
+    });
+
+    it("keeps the banner after the run finishes", () => {
+      render(<RunningView {...defaultProps} demoMode isRunning={false} summary={makeSummary()} steps={[makeStep(1)]} />);
+      expect(screen.getByTestId("demo-banner")).toBeInTheDocument();
+    });
+
+    it("shows no banner against a real backend", () => {
+      render(<RunningView {...defaultProps} />);
+      expect(screen.queryByTestId("demo-banner")).not.toBeInTheDocument();
     });
   });
 

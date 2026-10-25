@@ -1008,6 +1008,40 @@
   letter-spacing: 0.06em;
 }
 
+/* Caveats under the headline: what the 98.3% vs 1.7% does not say. */
+
+.caveats {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem 1.1rem;
+  text-align: left;
+  background: var(--color-amber-bg);
+  border: 1px solid #f6d58a;
+  border-radius: 6px;
+}
+
+.caveats-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #92400e;
+  margin-bottom: 0.6rem;
+}
+
+.caveats-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1.75rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.caveats-list strong {
+  font-weight: 700;
+}
+
 /* ─── Scenario Section ────────────────────────────────────────────────────── */
 
 .scenario-section {
@@ -1353,6 +1387,14 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Hand-curated funnel: say so right under it. */
+.funnel-note {
+  margin-top: 1.25rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* Subtle hint text in subtitle */
 .funnel-hint {
   font-style: italic;
@@ -1527,6 +1569,10 @@
   .hero-vs {
     border: none;
     padding: 0.5rem 0;
+  }
+
+  .caveats-list {
+    grid-template-columns: 1fr;
   }
 
   .metrics-grid {

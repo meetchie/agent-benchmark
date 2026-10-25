@@ -215,7 +215,7 @@ make test        # all of it, offline, no key needed
 | server | `make test-server` | The API, the LLM layer, the browser-use adapter, the local Rindler interpreter (some tests drive a real headless Chromium against a local fixture shop and are skipped without one), the arena, the scenarios and the mappings. |
 | cli | `make test-cli` | The CLI's arms, judge and results, the prose mapping against a local copy of the site. It must run apart from the server suite because the two have different pytest settings. |
 | web | `make test-web` | The UI's tests (vitest) and a production build. |
-| viewer | `make test-viewer` | A production build. The viewer has no tests. |
+| viewer | `make test-viewer` | The log parser's and the caveats panel's tests (vitest) and a production build. |
 
 No test calls a model API: the SDK base URLs point at a closed local port, so a stray call fails at once instead of costing money. The browser tests run against local fixture sites.
 

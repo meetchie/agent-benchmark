@@ -9,6 +9,7 @@ const ICON_MAP: Record<string, string> = {
   long_step: "⏱",
   error: "✕",
   repeated_action: "⟳",
+  failed_step: "✕",
 };
 
 function FrictionItem({ event }: { event: FrictionEvent }) {
@@ -19,7 +20,7 @@ function FrictionItem({ event }: { event: FrictionEvent }) {
         <span className={`friction-badge ${event.severity}`}>
           {event.severity}
         </span>
-        <span className="friction-type">{event.type.replace("_", " ")}</span>
+        <span className="friction-type">{event.type.replace(/_/g, " ")}</span>
         <p className="friction-desc">{event.description}</p>
       </div>
     </div>
@@ -73,7 +74,7 @@ export function FrictionPanel({ log }: Props) {
         </div>
       ) : (
         <div className="friction-empty">
-          No friction detected — clean run.
+          No friction detected in the step telemetry.
         </div>
       )}
     </div>

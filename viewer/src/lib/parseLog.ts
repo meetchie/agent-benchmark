@@ -13,6 +13,9 @@ export interface TelemetryEvent {
   cost_usd: number | null;
   action_type?: string;
   observation_hash?: string | null;
+  /** Newer logs: true when the step's tool call failed. Absent in the oldest logs. */
+  was_error?: boolean;
+  action_category?: string;
   artifact_type?: string;
   artifact_url?: string;
 }
@@ -27,6 +30,8 @@ export interface Step {
   tokensOutput: number;
   costUsd: number;
   observationHash: string | null;
+  /** The step's tool call failed (telemetry `was_error`). False when the log does not say. */
+  wasError: boolean;
 }
 
 export interface JudgeEvaluation {
@@ -39,7 +44,7 @@ export interface JudgeEvaluation {
 }
 
 export interface FrictionEvent {
-  type: "loop" | "long_step" | "error" | "repeated_action";
+  type: "loop" | "long_step" | "error" | "repeated_action" | "failed_step";
   severity: "warning" | "critical";
   stepIndices: number[];
   description: string;
@@ -327,6 +332,7 @@ function buildSteps(events: TelemetryEvent[]): Step[] {
       tokensOutput: end?.tokens_output ?? 0,
       costUsd: end?.cost_usd ?? 0,
       observationHash: end?.observation_hash ?? null,
+      wasError: end?.was_error === true,
     });
   }
 
@@ -334,7 +340,7 @@ function buildSteps(events: TelemetryEvent[]): Step[] {
   return steps;
 }
 
-function analyzeFriction(
+export function analyzeFriction(
   steps: Step[],
   errorsDetected: string | null
 ): FrictionEvent[] {
@@ -411,7 +417,20 @@ function analyzeFriction(
     runStart = i;
   }
 
-  // 4. Header-level errors
+  // 4. Failed tool calls (telemetry was_error on the step's end event). The run
+  // may still pass; these are friction the agent hit along the way.
+  for (const step of steps) {
+    if (step.wasError) {
+      friction.push({
+        type: "failed_step",
+        severity: "warning",
+        stepIndices: [step.index],
+        description: `Step ${step.index} (${step.actionType}) failed: the tool call returned an error`,
+      });
+    }
+  }
+
+  // 5. Header-level errors
   if (errorsDetected) {
     friction.push({
       type: "error",

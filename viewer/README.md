@@ -10,12 +10,18 @@ call any API or need any key.
 `vhlistings_bundle_promo` on vhlistings.com (add three items to the cart, apply the
 promo code `SPRING`, reach checkout, stop before payment), 60 runs per arm.
 The numbers on this page, and the failure funnel, are hard-coded in
-`src/components/ResultsPage.tsx`. They are not computed from the logs at runtime.
+`src/components/ResultsPage.tsx`. They are not computed from the logs at runtime. A
+caveats panel (`src/components/CaveatsPanel.tsx`) sits directly under the headline, so a
+screenshot of it carries them: hand-mapped against unmapped, Rindler wording in both
+prompts, different browsers and step caps, the gpt-4o-mini judge, one site and one
+night, and the hand-written funnel. The same list, with detail, is under "Read the
+comparison with these caveats" below.
 
 **Log Viewer** (`#logs`, also embedded at the bottom of Results) parses any run log
 and shows the judge verdict, duration, cost and tokens, the goal the agent was given,
 a per-step timeline, a cumulative cost chart, and simple friction flags (repeated
-observations, long steps, repeated actions). You can pick one of the bundled runs or
+observations, long steps, repeated actions, and steps whose tool call failed, which
+newer logs mark with `was_error` in the telemetry). You can pick one of the bundled runs or
 drop in any arena-format `.log` file.
 
 ## Run it
@@ -24,12 +30,14 @@ Needs Node 18 or newer.
 
 ```bash
 npm ci
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173 (http://127.0.0.1:5173 works too)
 npm run build      # type-check (tsc) and bundle to dist/
 npm run preview    # serve the built dist/ locally
+npm test           # vitest: the log parser, the friction rules, the caveats panel
 ```
 
-`vite --port <n>` changes the port. The app fetches `/logs/...` from the site root,
+`vite --port <n>` changes the port. The dev and preview servers listen on `127.0.0.1` and
+`::1` (this machine only), so `localhost` and `127.0.0.1` both work (`vite-loopback.ts`). The app fetches `/logs/...` from the site root,
 so serve `dist/` from the root of a host, not from a sub-path.
 
 ## The logs
@@ -104,3 +112,11 @@ agent run finished without raising, so ignore it. The Status card uses the judge
   The task description said agents complete a real purchase, but the prompt tells them to
   stop after applying the promo code.
 - The session replay panel shows the session id as text instead of a link.
+- The Results page now carries a caveats panel under the headline and a note under the funnel
+  (the archived numbers are unchanged).
+- The friction panel counts a step whose telemetry says `was_error: true` as friction. It used
+  to ignore the field and say "No friction detected" for a run whose `remove_from_cart` failed.
+  66 of the 128 archived logs (all of them Rindler runs) have such steps, mostly failed
+  `add_to_cart` calls, so they now list them.
+- The dev and preview servers answer on `127.0.0.1` and `::1`, and there is a small vitest
+  suite (`npm test`).

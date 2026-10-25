@@ -89,6 +89,18 @@ export interface Quota {
   limit: number | null;
 }
 
+/**
+ * What GET /health tells the UI about the backend it is talking to. Both
+ * fields are read defensively: an older backend without timeout_s, or no
+ * backend at all, gives the defaults in api.ts (UNKNOWN_HEALTH).
+ */
+export interface Health {
+  /** The backend plays canned runs: no real agent and no API calls. */
+  demo_mode: boolean;
+  /** The agent's hard time limit in seconds (BENCHMARK_TIMEOUT_S); null when unknown. */
+  timeout_s: number | null;
+}
+
 // Positional degradation benchmark (#87)
 // Measures whether agent success rate degrades based on where in a result list
 // the target item appears (lost-in-the-middle effect).

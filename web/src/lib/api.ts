@@ -1,4 +1,4 @@
-import type { Quota, StatusResponse, Task } from "./types";
+import type { Health, Quota, StatusResponse, Task } from "./types";
 
 type GeneratedTask = Omit<Task, "id"> & { id: string | number };
 
@@ -20,6 +20,51 @@ const UNREACHABLE_MESSAGE =
 
 /** Quota used when the backend does not answer: no limit is shown or enforced client-side. */
 export const UNKNOWN_QUOTA: Quota = { remaining: null, resets_in: 0, limit: null };
+
+/**
+ * Normalise a /health body. demo_mode counts only when it is exactly true;
+ * timeout_s only when it is a positive finite number (an older backend that
+ * does not send it leaves it null). null when the body is not an object.
+ */
+export function normalizeHealth(raw: unknown): Health | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const t = r.timeout_s;
+  return {
+    demo_mode: r.demo_mode === true,
+    timeout_s: typeof t === "number" && Number.isFinite(t) && t > 0 ? t : null,
+  };
+}
+
+/** GET /health through the dev proxy. Never throws; null when the backend does not answer. */
+export async function fetchHealth(): Promise<Health | null> {
+  try {
+    const res = await fetch("/api/benchmark/health");
+    if (!res.ok) return null;
+    return normalizeHealth(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/** Seconds the UI waits for a run, once started, before it reports a lost connection. */
+export const MIN_POLL_SECONDS = 300;
+/** The judge runs after the agent's time limit; give it this long on top. */
+export const JUDGE_ALLOWANCE_SECONDS = 180;
+/** Used when the backend's time limit is unknown. */
+export const UNKNOWN_TIMEOUT_POLL_SECONDS = 600;
+
+/**
+ * How long to keep polling a run: the backend's agent time limit plus the
+ * judging allowance, at least 5 minutes, and 10 minutes when the limit is not
+ * known. Raising BENCHMARK_TIMEOUT_S on the server therefore raises this too.
+ */
+export function pollLimitSeconds(timeoutS: number | null | undefined): number {
+  if (typeof timeoutS !== "number" || !Number.isFinite(timeoutS) || timeoutS <= 0) {
+    return UNKNOWN_TIMEOUT_POLL_SECONDS;
+  }
+  return Math.max(MIN_POLL_SECONDS, Math.ceil(timeoutS) + JUDGE_ALLOWANCE_SECONDS);
+}
 
 // Benchmark
 export async function startBenchmark(

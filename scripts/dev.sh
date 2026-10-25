@@ -72,7 +72,15 @@ esac
 
 # --- process helpers --------------------------------------------------------
 
-port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+# Is something listening on host $1, port $2?
+listening_on() { (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null; }
+
+# The backend (uvicorn) binds 127.0.0.1 only.
+api_port_busy() { listening_on 127.0.0.1 "$1"; }
+
+# The web UI (Vite) binds 127.0.0.1 and ::1, so it needs both free: another server
+# on either one would answer some of http://localhost:<port> and 127.0.0.1:<port>.
+web_port_busy() { listening_on 127.0.0.1 "$1" || listening_on ::1 "$1"; }
 
 descendants() {
   local child
@@ -124,9 +132,9 @@ wait_for() {
 
 [ -x "$ROOT/web/node_modules/.bin/vite" ] || die "the web packages are not installed. Run 'make setup' first."
 command -v uv >/dev/null 2>&1 || die "uv is not installed (https://docs.astral.sh/uv/)."
-port_busy "$WEB_PORT" && die "port $WEB_PORT is already in use. Set BENCHMARK_WEB_PORT to a free port, or stop what is using it."
+web_port_busy "$WEB_PORT" && die "port $WEB_PORT is already in use (on 127.0.0.1 or ::1). Set BENCHMARK_WEB_PORT to a free port, or stop what is using it."
 if [ "$START_BACKEND" = 1 ]; then
-  port_busy "$API_PORT" && die "port $API_PORT is already in use. Set BENCHMARK_API_URL (for example http://127.0.0.1:8001) to use another, or stop what is using it."
+  api_port_busy "$API_PORT" && die "port $API_PORT is already in use. Set BENCHMARK_API_URL (for example http://127.0.0.1:8001) to use another, or stop what is using it."
 fi
 
 # --- backend ----------------------------------------------------------------
@@ -152,11 +160,11 @@ fi
 say "Starting the web UI on port $WEB_PORT ..."
 ( cd "$ROOT/web" && exec ./node_modules/.bin/vite ) &
 WEB_PID=$!
-wait_for "http://localhost:$WEB_PORT/" "$WEB_PID" 60
+wait_for "http://127.0.0.1:$WEB_PORT/" "$WEB_PID" 60
 case $? in
   0) ;;
   2) die "the web UI exited before it was ready (the reason is printed above)." ;;
-  *) die "the web UI did not answer on http://localhost:$WEB_PORT/ within 60 s." ;;
+  *) die "the web UI did not answer on http://127.0.0.1:$WEB_PORT/ within 60 s." ;;
 esac
 
 # --- ready ------------------------------------------------------------------
@@ -168,7 +176,7 @@ case "$HEALTH" in
 esac
 
 say
-say "  Web UI    http://localhost:$WEB_PORT      <- open this"
+say "  Web UI    http://localhost:$WEB_PORT      <- open this (127.0.0.1 works too)"
 [ "$START_BACKEND" = 1 ] && say "  Backend   http://127.0.0.1:$API_PORT      (health: /health)"
 say "  Mode      $MODE"
 say

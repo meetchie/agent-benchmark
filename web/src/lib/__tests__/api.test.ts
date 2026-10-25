@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   UNKNOWN_QUOTA,
   cancelBenchmark,
+  fetchHealth,
   fetchQuota,
   generateTasks,
+  normalizeHealth,
   normalizeQuota,
+  pollLimitSeconds,
   startBenchmark,
 } from "../api";
 
@@ -175,5 +178,77 @@ describe("normalizeQuota", () => {
   it("copes with a non-object body", () => {
     expect(normalizeQuota(null)).toEqual(UNKNOWN_QUOTA);
     expect(normalizeQuota(undefined)).toEqual(UNKNOWN_QUOTA);
+  });
+});
+
+describe("normalizeHealth", () => {
+  it("reads demo_mode and timeout_s from /health", () => {
+    expect(normalizeHealth({ ok: true, demo_mode: true, timeout_s: 180, provider: "anthropic" })).toEqual({
+      demo_mode: true,
+      timeout_s: 180,
+    });
+  });
+
+  it("counts demo_mode only when it is exactly true", () => {
+    expect(normalizeHealth({ demo_mode: false })?.demo_mode).toBe(false);
+    expect(normalizeHealth({ demo_mode: "true" })?.demo_mode).toBe(false);
+    expect(normalizeHealth({})?.demo_mode).toBe(false);
+  });
+
+  it("leaves timeout_s null when an older backend does not send it or sends nonsense", () => {
+    for (const bad of [undefined, null, 0, -5, "180", Number.NaN]) {
+      expect(normalizeHealth({ demo_mode: false, timeout_s: bad })?.timeout_s).toBeNull();
+    }
+  });
+
+  it("is null for a body that is not an object", () => {
+    expect(normalizeHealth(null)).toBeNull();
+    expect(normalizeHealth("ok")).toBeNull();
+  });
+});
+
+describe("fetchHealth", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("asks /api/benchmark/health without credentials", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true, demo_mode: true, timeout_s: 600 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await fetchHealth()).toEqual({ demo_mode: true, timeout_s: 600 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]).toEqual(["/api/benchmark/health"]);
+  });
+
+  it("is null when the backend is down (proxy 500), errors, or returns junk", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+    expect(await fetchHealth()).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    expect(await fetchHealth()).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json", { status: 200 })));
+    expect(await fetchHealth()).toBeNull();
+  });
+});
+
+describe("pollLimitSeconds", () => {
+  it("is the agent time limit plus 180 s for judging", () => {
+    expect(pollLimitSeconds(600)).toBe(780);
+    expect(pollLimitSeconds(1800)).toBe(1980);
+  });
+
+  it("is never below 5 minutes", () => {
+    expect(pollLimitSeconds(30)).toBe(300);
+    expect(pollLimitSeconds(120)).toBe(300);
+    // The default limit (180 s) gives 360 s.
+    expect(pollLimitSeconds(180)).toBe(360);
+  });
+
+  it("is 10 minutes when the backend's limit is unknown", () => {
+    for (const unknown of [null, undefined, 0, -1, Number.NaN]) {
+      expect(pollLimitSeconds(unknown)).toBe(600);
+    }
   });
 });
