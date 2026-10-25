@@ -75,8 +75,16 @@ def parse_args(argv=None):
         parser.error("--max-steps must be at least 1")
     if args.timeout < 0:
         parser.error("--timeout must not be negative")
-    if args.task:
-        args.task = [t.strip() for item in args.task for t in item.split(",") if t.strip()]
+    if args.task is not None:
+        # Only a missing --task means every task. A value with no id in it ("," or "")
+        # is a mistake, and reading it as "every task" would start every paid run.
+        ids = []
+        for item in args.task:
+            found = [t.strip() for t in item.split(",") if t.strip()]
+            if not found:
+                parser.error(f"--task needs at least one task id, got {item!r} (--list-tasks shows them)")
+            ids += found
+        args.task = ids
     return args
 
 

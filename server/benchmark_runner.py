@@ -125,6 +125,8 @@ class RunState:
     cost_usd: float | None = None  # Agent tokens at agent_model's rates; None when unknown
     cache_read_tokens: int = 0  # Part of input_tokens that came from the prompt cache
     cache_write_tokens: int = 0  # Tokens written to the prompt cache (billed on top of input_tokens)
+    final_report: str | None = None  # The agent's closing report, None unless it finished on its own
+    agent_reported_success: bool | None = None  # The success flag the agent set when it finished
 
     def record_usage(self, summary) -> None:
         """Take the agent's token usage from a browser-use UsageSummary.
@@ -413,6 +415,24 @@ def _agent_failure(history) -> tuple[str, bool] | None:
     return None
 
 
+def _final_report(history) -> tuple[str | None, bool | None]:
+    """The agent's closing report and the success flag it set, if it finished on its own.
+
+    browser-use's ``final_result()`` is the output of the last action, which is the
+    agent's report only when that action was ``done``. A run that stopped any other
+    way (out of steps, say) may end on page text it extracted, which is no report.
+    """
+    try:
+        if history is None or not history.is_done():
+            return None, None
+        report = history.final_result()
+        report = str(report).strip() if report else ""
+        return report or None, history.is_successful()
+    except Exception as e:
+        logging.debug(f"Final report extraction failed: {type(e).__name__}: {e}")
+        return None, None
+
+
 async def _judge(state: "RunState", result_state_hint: str) -> dict:
     """Run the judge on the steps taken so far, off the event loop and with a time limit."""
     from run_judge import judge_run
@@ -423,7 +443,11 @@ async def _judge(state: "RunState", result_state_hint: str) -> dict:
     ]
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(judge_run, state.goal, steps_for_judge, result_state_hint),
+            asyncio.to_thread(
+                judge_run, state.goal, steps_for_judge, result_state_hint,
+                final_report=state.final_report,
+                agent_reported_success=state.agent_reported_success,
+            ),
             timeout=_JUDGE_TIMEOUT_S,
         )
     except asyncio.TimeoutError:
@@ -512,6 +536,7 @@ async def _persist_result(state: "RunState") -> None:
             cache_read_tokens=state.cache_read_tokens,
             cache_write_tokens=state.cache_write_tokens,
             message=state.message,
+            final_report=state.final_report,
         )
         await persist_phases(state.persisted_run_id, state.phases)
     except Exception:
@@ -526,7 +551,8 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     default) in a throwaway local headless Chromium, or in a Browserbase session when
     BENCHMARK_BROWSER_PROVIDER=browserbase. It is stopped after BENCHMARK_TIMEOUT_S
     seconds (default 180); the run is then reported as "too_slow". The judge always
-    runs on whatever steps exist, and the result is written to the run file.
+    runs on whatever steps exist, plus the agent's final report when it finished on its
+    own, and the result is written to the run file.
     """
     # Deferred import: keeps the server startable even if browser_use is not installed,
     # and avoids import-time side effects (Playwright browser launch).
@@ -646,6 +672,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 state.record_usage(history.usage)
             except Exception as e:
                 logging.debug(f"Token usage extraction failed: {e}")
+            state.final_report, state.agent_reported_success = _final_report(history)
 
         except asyncio.TimeoutError:
             timed_out = True

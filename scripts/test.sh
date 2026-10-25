@@ -1,6 +1,6 @@
 #!/bin/sh
 # Tests for scripts/setup-done.sh (the closing message of `make setup`) and for the
-# Makefile's check of SUITES (`make test-scripts`). They need only make and sh.
+# Makefile's checks of SUITES and TASK (`make test-scripts`). They need only make and sh.
 # The "key" written into the throwaway .env files is a made-up word.
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -76,6 +76,28 @@ contains "and is the one that runs" "test-hooks"
 clean make -C "$ROOT" -n test
 status "the default runs" $? 0
 for suite in server cli web viewer hooks scripts; do contains "the default includes $suite" "$suite"; done
+
+# --- make compare TASK=... ---------------------------------------------------
+# A TASK with no task id in it must stop before the CLI, which would otherwise run every
+# task for real. SITE names no site, so a TASK that got through would still run nothing.
+for task in "," " , " ",," ; do
+  clean make -C "$ROOT" compare SITE=no-such-site TASK="$task"
+  status "make compare TASK='$task' fails" $? 2
+  contains "TASK='$task' prints the usage" "usage: make compare TASK=<task id>"
+  lacks "TASK='$task' never reaches the CLI" "no-such-site"
+done
+
+clean make -C "$ROOT" compare SITE=no-such-site
+status "make compare with no TASK fails" $? 2
+contains "and prints the usage" "usage: make compare TASK=<task id>"
+
+clean make -C "$ROOT" -n compare TASK=add-candle
+status "a task id is accepted" $? 0
+contains "and handed to the CLI" '--task "add-candle"'
+
+clean make -C "$ROOT" -n compare TASK="add-candle,add-hair-towel"
+status "a comma-separated list is accepted" $? 0
+contains "and handed over whole" '--task "add-candle,add-hair-towel"'
 
 echo "scripts tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

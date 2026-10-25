@@ -34,6 +34,24 @@ def test_task_flag_repeats_and_splits_on_commas():
     assert args.task == ["add-candle", "add-hair-towel", "browse-accessories"]
 
 
+@pytest.mark.parametrize("value", [",", " , ", ",,", ""])
+def test_a_task_flag_with_no_ids_is_refused_not_read_as_every_task(value, capsys):
+    # Only a missing --task means every task; a stray comma must not start ten paid runs.
+    with pytest.raises(SystemExit) as exc:
+        run.parse_args(["prose", "--task", value])
+    assert exc.value.code == 2 and "--task needs at least one task id" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        run.parse_args(["prose", "--task", "add-candle", "--task", value])
+
+
+async def test_an_empty_task_list_runs_nothing(arms, monkeypatch, capsys):
+    judged = judge_replies(monkeypatch, "pass")
+    with pytest.raises(SystemExit):
+        await run.main(["prose", "--task", ","])
+    assert arms.calls == [] and judged == []
+    assert "RINDLER COMPARISON" not in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("argv", [
     ["prose", "--browseruse-only", "--rindler-only"],
     ["prose", "--max-steps", "0"],

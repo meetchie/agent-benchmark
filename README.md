@@ -20,7 +20,7 @@ Each folder has its own README with the details: [web](web/README.md), [server](
 
 ## Quickstart
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (it fetches Python 3.11 itself), Node.js 20 or newer with npm (`web/.nvmrc` says 22), and `make`. It was built and checked on macOS (Apple silicon); Linux should work, Windows was not tried.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (it uses a Python 3.11 you already have, or fetches one itself), Node.js 20 or newer with npm (`web/.nvmrc` says 22), and `make`. It was built and checked on macOS (Apple silicon); Linux should work, Windows was not tried.
 
 ```bash
 cp .env.example .env     # then put your key after ANTHROPIC_API_KEY=
@@ -42,7 +42,7 @@ Open the URL `make dev` prints (`http://localhost:5180` and `http://127.0.0.1:51
 | `make compare TASK=add-hair-towel` | The prose CLI on one task, both arms. A real run that costs money. `make compare-tasks` and `make compare-tools` need no key. |
 | `make viewer` | Browse the archived March 2026 logs. |
 
-`make dev` starts two servers and, on Ctrl-C or any exit, stops exactly those two by PID (and what they spawned). `scripts/dev.sh` is the whole of it. It starts the backend on the port in `BENCHMARK_API_URL` (default 8000) and the web UI on `BENCHMARK_WEB_PORT` (default 5180), so a busy port is a setting, not a code change.
+`make dev` starts two servers and, on Ctrl-C or any exit, stops exactly those two by PID (and what they spawned). `scripts/dev.sh` is the whole of it. It starts the backend on the port in `BENCHMARK_API_URL` (default 8000) and the web UI on `BENCHMARK_WEB_PORT` (default 5180), so a busy port is a setting, not a code change. To stop it from a script, send SIGTERM to `make`, or SIGINT to its whole process group as Ctrl-C does: make does not pass a SIGINT sent to it alone on to the servers.
 
 ## Configuration
 
@@ -80,13 +80,13 @@ Browsers always run headless unless you say otherwise, and every Chromium launch
 
 You give the web app a site URL. The server fetches the page and a model proposes three tasks for it (commerce sites only, anything else answers 422). You pick one and the server starts a browser-use agent in a throwaway headless Chromium, using `BENCHMARK_AGENT_MODEL`. The UI polls the run and shows each step as it happens. A URL that does not resolve, or that points at this machine or an internal address, is refused with a 422 that says which ("Could not resolve this host: ..." or "Invalid or disallowed URL: ...").
 
-**How a run is scored.** When the agent stops, a judge model (`BENCHMARK_JUDGE_MODEL`) reads the task and the list of steps with their timings and decides. It never sees the page or a screenshot, only the step text. The run ends in one of four states:
+**How a run is scored.** When the agent stops, a judge model (`BENCHMARK_JUDGE_MODEL`) reads the task, the list of steps with their timings and, if the agent finished on its own, the agent's final report, and decides. It never sees the page or a screenshot. The report is marked as the agent's own claim: a check the task asks for (a quantity, a total) has to show up in the steps or the report with what the agent found, and a report that only says it worked does not count. The run file keeps the report the judge read as `final_report`. The run ends in one of four states:
 
 | state | meaning |
 |---|---|
-| `pass` | The judge says the agent fully completed the task as written, including verification. |
+| `pass` | The judge says the agent fully completed the task as written, including any verification, which it must be able to see in the steps or the report. |
 | `fail` | The agent ran to the end and the judge says it did not. |
-| `too_slow` | The agent was still going after `BENCHMARK_TIMEOUT_S` (default 180 s) and was stopped. The judge still reads the steps it took and marks no phase as failed. |
+| `too_slow` | The agent was still going after `BENCHMARK_TIMEOUT_S` (default 180 s) and was stopped. The judge still reads the steps it took (there is no final report) and marks no phase as failed. |
 | `error` | The run could not be judged as a pass or fail: the model refused part-way, every step failed (a bad API key, say), Chromium is missing, a setting is invalid, or you cancelled it. The message says which. |
 
 The judge also groups the steps into 3 to 6 **phases** named for what the user was trying to do ("Find the right yoga mat", "Verify cart contents"). The judge is told to flag a phase as *slow* when it took more than 45 seconds or showed pointless retries (and to flag the slowest one even if nothing was slow, so every run shows something), and to flag at most one phase as *failed*, the one where the agent actually went wrong, never on a `too_slow` run. The results screen shows the verdict, summary, phases, time, steps, tokens and the cost in dollars for the agent's tokens at the agent model's prices. A model without a price table shows tokens only.
@@ -102,7 +102,7 @@ Finished runs are saved as JSON in `server/runs/` (gitignored). The API is `POST
 
 ### Live benchmark runs
 
-Runs of the web app on 2026-10-24 (claude-sonnet-5-5 for agent, judge and task generator). Each row is a task the model generated that day, so the same site can give a different task on another try. The cost is the agent's, as the results screen shows it; the judge adds under a cent and generating tasks two to four cents.
+Runs of the web app on 2026-10-24 (claude-sonnet-5-5 for agent, judge and task generator). The judge then read the step text only, not yet the agent's final report. Each row is a task the model generated that day, so the same site can give a different task on another try. The cost is the agent's, as the results screen shows it; the judge adds under a cent and generating tasks two to four cents.
 
 | site | task | verdict | steps | time | agent cost |
 |---|---|---|---|---|---|
@@ -110,7 +110,7 @@ Runs of the web app on 2026-10-24 (claude-sonnet-5-5 for agent, judge and task g
 | sauce-demo.myshopify.com | generated: add 3 grey jackets in a chosen size to the cart | fail | 11 | 50 s | $0.19 |
 | automationexercise.com | add 4 of a specific top to the cart via search, and verify the cart | **PASS** | 11 | 48 s | $0.16 |
 
-Why the fails fail. books.toscrape.com has no Add to basket button on a book's own page, so a generated task for it can fail whatever the agent does; the agent says so and the judge fails the run. The sauce-demo task assumed a "Medium" size and a quantity field that old Shopify theme does not have, and the judge, which reads step descriptions only, could not confirm the size or the total. The pass is the agent searching for "top", closing an ad, opening the product, setting the quantity to 4 and checking the cart. Each row is one run, except books.toscrape.com, which is two runs (hence the ranges). That shows the live benchmark works end to end and says nothing about how often it passes.
+Why the fails fail. books.toscrape.com has no Add to basket button on a book's own page, so a generated task for it can fail whatever the agent does; the agent says so and the judge fails the run. The sauce-demo task assumed a "Medium" size and a quantity field that old Shopify theme does not have, and the judge, which read step descriptions only, could not confirm the size or the total. The pass is the agent searching for "top", closing an ad, opening the product, setting the quantity to 4 and checking the cart. Each row is one run, except books.toscrape.com, which is two runs (hence the ranges). That shows the live benchmark works end to end and says nothing about how often it passes.
 
 ## The head-to-head arena
 

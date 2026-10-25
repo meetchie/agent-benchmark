@@ -19,6 +19,7 @@ SCENARIO ?=
 # compare shortcut: make compare TASK=add-hair-towel [SITE=prose]
 SITE ?= prose
 TASK ?=
+comma := ,
 
 # The suites `make test` runs, in this order (each is also a target: make test-<suite>).
 # make test SUITES="server hooks" runs only some of them; a name that is not in this
@@ -28,7 +29,7 @@ SUITES ?= $(KNOWN_SUITES)
 export UNKNOWN_SUITES := $(filter-out $(KNOWN_SUITES),$(SUITES))
 
 .PHONY: help setup install-hooks check-tools check-suites dev demo test $(addprefix test-,$(KNOWN_SUITES)) \
-        arena arena-list analyze analyze-march compare compare-tasks compare-tools viewer
+        arena arena-list analyze analyze-march check-task compare compare-tasks compare-tools viewer
 
 help: ## list the targets
 	@echo "agent-benchmark"
@@ -89,7 +90,7 @@ test-viewer: check-tools ## viewer tests (vitest) and a production build
 test-hooks: ## tests of the pre-commit check and its installer (needs git, no uv or node)
 	sh scripts/hooks/test.sh
 
-test-scripts: ## tests of the setup message and the SUITES check (needs make and sh, no uv or node)
+test-scripts: ## tests of the setup message and the SUITES and TASK checks (needs make and sh, no uv or node)
 	sh scripts/test.sh
 
 arena: check-tools ## one arena run, a real run that costs money: AGENT=RINDLER|BROWSERUSE SCENARIO=... (both required)
@@ -105,8 +106,11 @@ analyze: check-tools ## table over the archived March logs and any new arena run
 analyze-march: check-tools ## the March 2026 headline: the 60 + 60 logs behind Rindler 59/60 vs BrowserUse 1/60
 	cd server && uv run python analyze_runs.py --march-headline
 
-compare: check-tools ## prose.com CLI, both arms, real runs that cost money: TASK=add-hair-towel
-	@test -n "$(TASK)" || { echo "usage: make compare TASK=<task id> [SITE=prose]   ('make compare-tasks' lists the ids; both arms run for real and cost money)" >&2; exit 2; }
+# TASK must hold at least one id: "," or " , " would reach the CLI as no ids at all.
+check-task:
+	@test -n "$(strip $(subst $(comma), ,$(TASK)))" || { echo "usage: make compare TASK=<task id> [SITE=prose]   ('make compare-tasks' lists the ids; both arms run for real and cost money)" >&2; exit 2; }
+
+compare: check-task check-tools ## prose.com CLI, both arms, real runs that cost money: TASK=add-hair-towel
 	cli/bench.sh "$(SITE)" --task "$(TASK)"
 
 compare-tasks: check-tools ## list the CLI's tasks (no key needed)

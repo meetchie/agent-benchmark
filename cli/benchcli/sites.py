@@ -122,9 +122,15 @@ def load_site(name: str, cli_dir: Path = CLI_DIR) -> Site:
 
 
 def select_tasks(tasks: list[dict[str, Any]], wanted: list[str] | None) -> list[dict[str, Any]]:
-    """All tasks, or only the ids in ``wanted`` (kept in file order). Unknown ids are an error."""
-    if not wanted:
+    """All tasks when ``wanted`` is None, else only those ids (kept in file order).
+
+    Unknown ids are an error, and so is an empty list: it means the ids were lost on the
+    way here, not that every task should run.
+    """
+    if wanted is None:
         return list(tasks)
+    if not wanted:
+        raise SiteError(f"no task ids given. Known: {', '.join(t['id'] for t in tasks)}")
     known = {t["id"] for t in tasks}
     unknown = [w for w in wanted if w not in known]
     if unknown:
@@ -148,7 +154,7 @@ def tool_name_leaks(text: str, mapping: Mapping) -> list[str]:
     names |= {a for a in mapping.actions}
     hits = []
     for word in sorted(n for n in names if "_" in n or "-" in n):
-        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(word)}(?![A-Za-z0-9_])", text):
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(word)}(?![A-Za-z0-9_])", text, re.I):
             hits.append(word)
     for word in LEAK_WORDS:
         if re.search(rf"\b{re.escape(word)}\b", text, re.I):

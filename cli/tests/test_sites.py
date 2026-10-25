@@ -62,12 +62,24 @@ def test_leak_check_finds_snake_case_tool_names_and_the_brand(prose):
     assert sites.tool_name_leaks("my_view_cart_notes", prose.mapping) == []
 
 
+@pytest.mark.parametrize("text", ["Call Add_To_Cart for it.", "Then use ADD_TO_CART.", "add_to_cart"])
+def test_leak_check_ignores_the_case_of_a_tool_name(prose, text):
+    assert sites.tool_name_leaks(text, prose.mapping) == ["add_to_cart"]
+    # the hyphenated English phrase is not the tool name
+    assert sites.tool_name_leaks("Check the add-to-cart button.", prose.mapping) == []
+
+
 def test_select_tasks_keeps_file_order_and_rejects_unknown_ids(prose):
     chosen = sites.select_tasks(prose.tasks, ["add-candle", "browse-accessories"])
     assert [t["id"] for t in chosen] == ["browse-accessories", "add-candle"]
     assert len(sites.select_tasks(prose.tasks, None)) == 10
     with pytest.raises(sites.SiteError, match="unknown task id"):
         sites.select_tasks(prose.tasks, ["nope"])
+
+
+def test_select_tasks_refuses_an_empty_list_instead_of_choosing_every_task(prose):
+    with pytest.raises(sites.SiteError, match="no task ids"):
+        sites.select_tasks(prose.tasks, [])
 
 
 def test_one_step_budget_for_both_arms(prose):

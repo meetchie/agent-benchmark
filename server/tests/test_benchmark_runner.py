@@ -362,10 +362,12 @@ VERDICT_PASS = {
 
 
 class FakeHistory:
-    def __init__(self, goals, errors=None, done=True, usage=None):
+    def __init__(self, goals, errors=None, done=True, usage=None, final=None, successful=None):
         self.history = [SimpleNamespace(model_output=SimpleNamespace(next_goal=g)) for g in goals]
         self._errors = errors if errors is not None else [None] * len(goals)
         self._done = done
+        self._final = final
+        self._successful = successful
         self.usage = usage
 
     def errors(self):
@@ -373,6 +375,13 @@ class FakeHistory:
 
     def is_done(self):
         return self._done
+
+    def final_result(self):
+        # Like browser-use: the last action's output, whether or not it was "done".
+        return self._final
+
+    def is_successful(self):
+        return self._successful if self._done else None
 
 
 class FakeAgent:
@@ -382,6 +391,8 @@ class FakeAgent:
     errors = None
     done = True
     usage = None
+    final = None
+    successful = None
     sleep = 0.0
     raises = None
     instances: list = []
@@ -410,7 +421,8 @@ class FakeAgent:
                 await asyncio.sleep(type(self).sleep)
             self.history = FakeHistory(goals[: i + 1])
             await on_step_end(self)
-        self.history = FakeHistory(goals, type(self).errors, type(self).done, type(self).usage)
+        cls = type(self)
+        self.history = FakeHistory(goals, cls.errors, cls.done, cls.usage, cls.final, cls.successful)
         return self.history
 
 
@@ -479,6 +491,42 @@ async def test_successful_run_end_to_end(fake_run, monkeypatch):
     # A run that finished on its own is not described to the judge as "unknown".
     assert "unknown" not in prompt.lower()
     assert "RESULT STATE: completed" in prompt
+
+
+async def test_the_judge_reads_the_agents_final_report(fake_run, monkeypatch):
+    """The verification a task asks for is often only in the agent's closing report."""
+    fake_run.agent_cls.final = "Basket: 1 item, A Light in the Attic, £51.77."
+    fake_run.agent_cls.successful = True
+    calls = install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "Agent reported success: yes" in prompt
+    assert "<agent_report>\nBasket: 1 item, A Light in the Attic, £51.77.\n</agent_report>" in prompt
+    # What the judge read is kept with the run, so a verdict can be checked later.
+    assert state.final_report == "Basket: 1 item, A Light in the Attic, £51.77."
+    assert persistence.read_run("run-1")["final_report"] == state.final_report
+
+
+async def test_a_last_output_that_is_not_a_done_report_is_not_sent_as_one(fake_run, monkeypatch):
+    """browser-use's final_result() is the last action's output even when the agent never
+    called done (for example page text it extracted), which is no report at all."""
+    fake_run.agent_cls.done = False
+    fake_run.agent_cls.final = "Page text: Add to basket ... In stock ..."
+    calls = install_fake_anthropic(monkeypatch, text_response({**VERDICT_PASS, "success": False}))
+    await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    prompt = calls[0]["messages"][0]["content"]
+    assert "(The agent gave no final report.)" in prompt
+    assert "Page text" not in prompt
+    assert state.final_report is None
+    assert persistence.read_run("run-1")["final_report"] is None
 
 
 async def test_agent_is_built_from_the_llm_layer_and_the_shared_browser_profile(fake_run, monkeypatch):
@@ -554,6 +602,7 @@ async def test_timeout_reports_too_slow_with_the_tokens_so_far(fake_run, monkeyp
     assert state.input_tokens == 2000 and state.output_tokens == 100
     assert state.cost_usd == pytest.approx((2000 * 2.0 + 100 * 10.0) / 1_000_000)
     assert "RESULT STATE: too_slow" in calls[0]["messages"][0]["content"]
+    assert "(The agent gave no final report.)" in calls[0]["messages"][0]["content"]
 
 
 async def test_judge_failure_still_ends_the_run(fake_run, monkeypatch):
@@ -757,7 +806,7 @@ async def test_the_judge_does_not_block_the_event_loop(fake_run, monkeypatch):
     """A slow judge call must leave the loop free (status polls, other runs)."""
     import time
 
-    def slow_judge(goal, steps, result_state="unknown"):
+    def slow_judge(goal, steps, result_state="unknown", **report):
         time.sleep(0.4)
         return {"success": True, "summary": "ok", "phases": []}
 

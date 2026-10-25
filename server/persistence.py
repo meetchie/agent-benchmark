@@ -20,13 +20,14 @@ Record layout (all keys always present once ``persist_run_start`` has run)::
      "task_label", "task_goal", "agent_type", "agent_model",
      "status", "result_state", "success", "summary", "total_ms",
      "input_tokens", "output_tokens", "total_tokens",
-     "cache_read_tokens", "cache_write_tokens", "estimated_cost_usd",
+     "cache_read_tokens", "cache_write_tokens", "estimated_cost_usd", "final_report",
      "steps": [{"step_number", "description", "elapsed_ms"}],
      "phases": [{"name", "step_numbers", "total_ms", "failed", "slow"}]}
 
 Screenshots are not stored. ``input_tokens`` includes cache reads (browser-use's
 convention); ``cache_read_tokens`` and ``cache_write_tokens`` say how many of the
-priced tokens were cached.
+priced tokens were cached. ``final_report`` is the agent's closing report as the judge
+read it, null when the agent did not finish on its own.
 """
 
 import json
@@ -162,6 +163,7 @@ async def persist_run_start(
         "cache_read_tokens": 0,
         "cache_write_tokens": 0,
         "estimated_cost_usd": None,
+        "final_report": None,
         "steps": [],
         "phases": [],
     }
@@ -198,8 +200,12 @@ async def persist_run_completion(
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
     message: str = "",
+    final_report: str | None = None,
 ) -> None:
-    """Store the run's final result. ``estimated_cost_usd`` is None for an unpriced model."""
+    """Store the run's final result. ``estimated_cost_usd`` is None for an unpriced model.
+
+    ``final_report`` is the agent's closing report (None when it did not finish on its own).
+    """
     if not run_id:
         return
     changes: dict[str, Any] = {
@@ -214,6 +220,7 @@ async def persist_run_completion(
         "cache_write_tokens": cache_write_tokens,
         "estimated_cost_usd": estimated_cost_usd,
         "summary": summary,
+        "final_report": final_report,
     }
     if message:
         changes["message"] = message
