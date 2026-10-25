@@ -226,7 +226,9 @@ def judge_run(
     Returns:
         Dict with keys: success, summary, phases.
         On any model failure (API error, refusal, truncated or unparseable reply)
-        returns a safe fallback with success False and empty phases.
+        returns a safe fallback with success False and empty phases, plus
+        ``judge_error``: why there is no verdict, in words for the user. A run with a
+        judge_error was not judged, so it is neither a pass nor a fail.
     """
     if not steps:
         return {
@@ -275,7 +277,7 @@ def judge_run(
             )
         else:
             summary = "Could not analyze the run. The agent may have completed the task, but results are unavailable."
-        return {"success": False, "summary": summary, "phases": []}
+        return {"success": False, "summary": summary, "phases": [], "judge_error": judge_error_message(e)}
 
     except Exception as e:
         logger.exception("judge failed: %s: %s", type(e).__name__, e)
@@ -283,7 +285,22 @@ def judge_run(
             "success": False,
             "summary": "Could not analyze the run. The agent may have completed the task, but results are unavailable.",
             "phases": [],
+            "judge_error": judge_error_message(None),
         }
+
+
+def judge_error_message(error: "llm.LLMError | None") -> str:
+    """Why the judge gave no verdict, for the results screen. ``None``: an unexpected error."""
+    if error is None:
+        return "Could not judge the run: the judge failed unexpectedly (see the server log)."
+    if error.kind == "refusal":
+        return "Could not judge the run: the judge model declined to review it."
+    if error.kind == "api":
+        if llm.key_rejected(error):
+            return f"Could not judge the run: the API key was rejected (check {llm.api_key_name()})."
+        status = f" (HTTP {error.status_code})" if error.status_code else ""
+        return f"Could not judge the run: the request to the judge model failed{status}. See the server log."
+    return "Could not judge the run: the judge model's reply could not be read."
 
 
 _SUMMARY_LIMIT = 800

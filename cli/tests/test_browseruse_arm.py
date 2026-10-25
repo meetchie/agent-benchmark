@@ -112,6 +112,8 @@ async def test_agent_is_built_like_the_arena_arm_and_gets_the_goal_verbatim(tmp_
     assert kwargs["llm"] == "chat:claude-sonnet-5-5"
     assert kwargs["initial_actions"] == [{"navigate": {"url": TASK["start_url"], "new_tab": False}}]
     assert kwargs["use_judge"] is False and kwargs["calculate_cost"] is False
+    # browser-use's own Ctrl-C handler would os._exit() on a second SIGINT, leaving Chromium up.
+    assert kwargs["enable_signal_handler"] is False
     assert kwargs["file_system_path"] == "/nonexistent/agent-files"
     assert FakeAgent.instances[0].max_steps == 12 == record["meta"]["max_steps"]
     assert len(fake_browser) == 1  # the throwaway profile was cleaned up
@@ -198,3 +200,30 @@ async def test_a_model_configuration_error_is_a_failed_run_not_a_crash(tmp_path,
     record = await run(tmp_path)
     assert record["error"].startswith("LLMError: LLM_PROVIDER='bogus'")
     assert record["stats"]["total_steps"] == 0 and len(fake_browser) == 1
+
+
+async def test_ctrl_c_during_a_run_still_cleans_up(tmp_path, fake_browser):
+    """Ctrl-C cancels the run (entrypoint.run_cli); the browser and dirs still go."""
+    FakeAgent.hang = True
+    task = asyncio.create_task(run(tmp_path))
+    while not FakeAgent.instances or not FakeAgent.instances[0].history.actions:
+        await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(fake_browser) == 1
+
+
+async def test_the_failure_screenshot_is_saved_before_the_agent_dir_is_removed(tmp_path, monkeypatch):
+    """browser-use keeps its screenshots as files in the agent's dir, which cleanup removes."""
+    FakeAgent.steps, FakeAgent.done = 2, False
+    at_cleanup = []
+    monkeypatch.setattr(browser_env, "cleanup_profile",
+                        lambda profile: at_cleanup.append(sorted(p.name for p in tmp_path.rglob("*.png"))))
+    record = await run(tmp_path)
+    assert at_cleanup == [[record["failure_screenshots"][0].split("/")[-1]]]
+
+
+async def test_a_successful_run_saves_no_screenshot(tmp_path):
+    record = await run(tmp_path)
+    assert record["failure_screenshots"] == [] and not list(tmp_path.rglob("*.png"))

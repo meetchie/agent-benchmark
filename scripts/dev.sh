@@ -4,7 +4,7 @@
 #   make dev            needs ANTHROPIC_API_KEY (shell or .env)
 #   make demo           DEMO_MODE=true: canned runs, no key, no browser
 #
-# Ctrl-C (or SIGTERM to this script) stops both servers.
+# Ctrl-C (or SIGTERM or SIGHUP to this script) stops both servers.
 #
 # Settings. The backend loads .env itself (server/runtime_env.py) and so does Vite,
 # so this script does not source it. It reads only the two values that decide which
@@ -12,10 +12,16 @@
 # proxies to; the backend is started on that port) and BENCHMARK_WEB_PORT (default
 # 5180). A value in your shell beats the one in .env.
 #
-# Processes. The script starts exactly two children, remembers their PIDs, and on
-# exit stops those PIDs and their descendants by PID (found with `pgrep -P`),
-# TERM first and KILL only for what is still alive after 10 s. It never matches
-# processes by name.
+# Processes. The script starts exactly two children and remembers their PIDs. It
+# never matches processes by name.
+# - The web UI (Vite): on exit, that PID and its descendants (found with `pgrep -P`)
+#   get TERM, and KILL only if still alive after 10 s.
+# - The backend runs in a process group of its own, led by its PID, so a Ctrl-C in
+#   the terminal does not reach it directly. On exit it gets one TERM and up to 15 s
+#   to shut down: uvicorn then cancels the runs in progress, which close their
+#   browsers and save their run files. Whatever is still alive in that group after
+#   that, such as a browser whose parent already died, gets TERM and then KILL by
+#   group id. The same happens when the backend exits on its own.
 
 set -u -o pipefail
 
@@ -63,6 +69,8 @@ esac
 
 case "$WEB_PORT" in ''|*[!0-9]*) die "BENCHMARK_WEB_PORT=$WEB_PORT is not a port number." ;; esac
 case "$API_PORT" in ''|*[!0-9]*) die "BENCHMARK_API_URL=$API_URL has no usable port." ;; esac
+[ "$WEB_PORT" -ge 1 ] && [ "$WEB_PORT" -le 65535 ] || die "BENCHMARK_WEB_PORT=$WEB_PORT is not a port number (1 to 65535)."
+[ "$API_PORT" -ge 1 ] && [ "$API_PORT" -le 65535 ] || die "BENCHMARK_API_URL=$API_URL has no usable port (1 to 65535)."
 
 START_BACKEND=1
 case "$API_HOST" in
@@ -106,16 +114,43 @@ stop_tree() {
   return 0
 }
 
+# Seconds the backend gets to shut down (it cancels its runs and saves them) before
+# what is left of its process group is stopped. The server waits at most 8 s for
+# its runs, and uvicorn 3 s for requests still open.
+BACKEND_GRACE_S=15
+
+group_alive() { kill -0 -- "-$1" 2>/dev/null; }
+
+# Stop the backend, whose process group is led by PID $1 (see "backend" below).
+stop_backend() {
+  local pid=$1 i
+  [ -n "$pid" ] || return 0
+  # uv forwards the TERM to the server; the server gets it directly too.
+  kill -TERM "$pid" $(pgrep -P "$pid" 2>/dev/null) 2>/dev/null
+  for ((i = 0; i < BACKEND_GRACE_S * 5; i++)); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2
+  done
+  group_alive "$pid" || return 0
+  kill -TERM -- "-$pid" 2>/dev/null
+  for ((i = 0; i < 15; i++)); do
+    group_alive "$pid" || return 0
+    sleep 0.2
+  done
+  kill -KILL -- "-$pid" 2>/dev/null
+  return 0
+}
+
 cleanup() {
-  trap '' INT TERM
-  local pid
-  for pid in "$WEB_PID" "$API_PID"; do stop_tree "$pid"; done
+  trap '' INT TERM HUP
+  stop_tree "$WEB_PID"
+  stop_backend "$API_PID"
   WEB_PID=""
   API_PID=""
 }
 
 trap cleanup EXIT
-trap 'say; say "Stopping."; exit 0' INT TERM
+trap 'say; say "Stopping."; exit 0' INT TERM HUP
 
 # Wait until URL answers. Returns 0 when it does, 2 when PID died first, 1 on timeout.
 wait_for() {
@@ -141,12 +176,19 @@ fi
 
 if [ "$START_BACKEND" = 1 ]; then
   say "Starting the backend on 127.0.0.1:$API_PORT ..."
-  ( cd "$ROOT/server" && exec uv run uvicorn server:app --host 127.0.0.1 --port "$API_PORT" ) &
+  # set -m: the backend gets a process group of its own (led by $API_PID), so a
+  # terminal Ctrl-C reaches only this script, which then stops the backend in order
+  # (stop_backend). Delivered straight to uvicorn, one Ctrl-C would arrive twice (the
+  # terminal's and the copy `uv run` forwards), and uvicorn takes a second SIGINT as
+  # "force quit" and skips the shutdown that stops the runs' browsers.
+  set -m
+  ( cd "$ROOT/server" && exec uv run uvicorn server:app --host 127.0.0.1 --port "$API_PORT" --timeout-graceful-shutdown 3 ) &
   API_PID=$!
+  set +m
   wait_for "http://127.0.0.1:$API_PORT/health" "$API_PID" 90
   case $? in
     0) ;;
-    2) die "the backend exited before it was ready (the reason is printed above). Without a key, use 'make demo'." ;;
+    2) die "the backend exited before it was ready (the reason is printed above)." ;;
     *) die "the backend did not answer on http://127.0.0.1:$API_PORT/health within 90 s." ;;
   esac
   HEALTH="$(curl -fsS --max-time 2 "http://127.0.0.1:$API_PORT/health" 2>/dev/null || true)"

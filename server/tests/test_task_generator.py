@@ -161,6 +161,17 @@ def _addrinfo(address):
     "http://[::1]",
     "http://[fe80::1]",
     "http://[fc00::1]",
+    "http://[::]",                       # unspecified: connects to this machine
+    "http://[::ffff:127.0.0.1]:8000/health",  # IPv4-mapped loopback
+    "http://[::ffff:7f00:1]/",           # the same, written in hex
+    "http://[::ffff:10.0.0.1]",
+    "http://[::ffff:169.254.169.254]",
+    "http://[::127.0.0.1]",              # IPv4-compatible (deprecated form)
+    "http://[2002:7f00:1::]",            # 6to4 of 127.0.0.1
+    "http://[2002:a00:1::]",             # 6to4 of 10.0.0.1
+    "http://224.0.0.1",                  # multicast
+    "http://[ff02::1]",
+    "http://240.0.0.1",                  # reserved
     "http://localhost",
     "http://localhost:8080",
     "http://metadata.google.internal",
@@ -179,7 +190,10 @@ async def test_check_url_keeps_blocking_what_the_ssrf_guard_blocked(url):
     assert validate_url(url) is False  # the blocking twin agrees
 
 
-@pytest.mark.parametrize("address", ["127.0.0.1", "10.1.2.3", "192.168.0.7", "169.254.169.254", "100.64.0.9", "::1", "fd00::1"])
+@pytest.mark.parametrize("address", [
+    "127.0.0.1", "10.1.2.3", "192.168.0.7", "169.254.169.254", "100.64.0.9", "::1", "fd00::1",
+    "::ffff:127.0.0.1", "::ffff:192.168.0.7", "::", "fe80::1%en0",
+])
 async def test_check_url_blocks_a_host_that_resolves_to_an_internal_address(address):
     with patch("task_generator.socket.getaddrinfo", return_value=_addrinfo(address)):
         with pytest.raises(ValueError, match="Invalid or disallowed URL: https://evil.example.com"):
@@ -196,6 +210,12 @@ async def test_check_url_blocks_a_host_when_any_one_address_is_internal():
 async def test_check_url_allows_a_public_host():
     with patch("task_generator.socket.getaddrinfo", return_value=PUBLIC_ADDRINFO):
         assert await check_url("https://www.example.com/shop?q=1") is None
+
+
+@pytest.mark.parametrize("address", ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946", "::ffff:93.184.216.34"])
+async def test_check_url_allows_public_addresses_in_every_form(address):
+    with patch("task_generator.socket.getaddrinfo", return_value=_addrinfo(address)):
+        assert await check_url("https://www.example.com/") is None
 
 
 async def test_check_url_says_when_a_host_does_not_resolve():
@@ -437,6 +457,80 @@ async def test_fetch_and_generate_full_flow(monkeypatch):
     assert tasks[0]["id"] == 1
     # The page's own title and text reached the prompt.
     assert "Title: Acme Store" in calls[0]["messages"][0]["content"]
+
+
+def _public_dns(host, *args, **kwargs):
+    """Host names resolve to a public address; an address literal stays itself."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return PUBLIC_ADDRINFO
+    return _addrinfo(host)
+
+
+def _response(status, headers, body=""):
+    response = AsyncMock()
+    response.status = status
+    response.headers = headers
+    response.text = AsyncMock(return_value=body)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    return response
+
+
+def _session(*responses):
+    session = AsyncMock()
+    session.get = MagicMock(side_effect=list(responses))
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    return session
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_refuses_a_redirect_to_this_machine():
+    """A public page that redirects to 127.0.0.1 must not make the server fetch it."""
+    session = _session(_response(302, {"Location": "http://127.0.0.1:8000/health"}))
+    with (
+        patch("task_generator.socket.getaddrinfo", side_effect=_public_dns),
+        patch("task_generator.aiohttp.ClientSession", return_value=session),
+    ):
+        with pytest.raises(ValueError, match=r"Invalid or disallowed URL: http://127\.0\.0\.1:8000/health"):
+            await fetch_and_generate("https://shop.example.com/")
+    assert session.get.call_count == 1  # the internal address was never requested
+    assert session.get.call_args.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_follows_a_public_redirect(monkeypatch):
+    install_fake_anthropic(monkeypatch, text_response(_tasks_payload([
+        {"label": "A", "goal": "Do A."}, {"label": "B", "goal": "Do B."}, {"label": "C", "goal": "Do C."},
+    ])))
+    session = _session(
+        _response(301, {"Location": "/store"}),
+        _response(200, {"Content-Type": "text/html"}, SAMPLE_HTML),
+    )
+    with (
+        patch("task_generator.socket.getaddrinfo", side_effect=_public_dns),
+        patch("task_generator.aiohttp.ClientSession", return_value=session),
+    ):
+        tasks = await fetch_and_generate("https://shop.example.com/")
+    assert len(tasks) == 3
+    assert [c.args[0] for c in session.get.call_args_list] == [
+        "https://shop.example.com/", "https://shop.example.com/store",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_generate_stops_an_endless_redirect():
+    session = _session(*[_response(302, {"Location": "/again"}) for _ in range(10)])
+    with (
+        patch("task_generator.socket.getaddrinfo", side_effect=_public_dns),
+        patch("task_generator.aiohttp.ClientSession", return_value=session),
+    ):
+        with pytest.raises(ConnectionError, match="redirected more than 5 times"):
+            await fetch_and_generate("https://shop.example.com/")
 
 
 @pytest.mark.asyncio

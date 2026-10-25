@@ -37,6 +37,7 @@ import os
 import time as _time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -283,6 +284,41 @@ def configure_logging() -> None:
 # Why the server could not start, kept for _StartupErrorMiddleware (None when it started).
 _startup_error: ConfigError | None = None
 
+# How long shutdown waits for the runs it cancels to stop their browsers and save their
+# files. scripts/dev.sh gives the whole backend 15 s before it kills what is left.
+_SHUTDOWN_GRACE_S = 8.0
+SERVER_STOPPED_MESSAGE = "The server stopped before the run finished."
+
+
+async def stop_runs(message: str = SERVER_STOPPED_MESSAGE, grace_s: float | None = None) -> None:
+    """End every run that is still going: cancel it, give it ``grace_s`` seconds, then stop
+    whatever browser is left.
+
+    A cancelled run closes its browser and writes its run file as an ``error`` with
+    ``message`` and the usage it had billed. This must happen while the server's event
+    loop is still running: uvicorn re-raises the SIGTERM it caught once the app has shut
+    down, which ends the process on the spot, so nothing after this runs.
+    """
+    pending = []
+    for run_id, task in list(_run_tasks.items()):
+        if task.done():
+            continue
+        state = _runs.get(run_id)
+        if state is not None and state.status in ("running", "analyzing"):
+            state.message = message  # kept by run_benchmark when the cancel lands
+            state.stopped_at = datetime.now()
+        if not task.cancelling():  # a second cancel would cut short the browser's shutdown
+            task.cancel()
+        pending.append(task)
+    if pending:
+        logger.info("Stopping %d run(s) still in progress.", len(pending))
+        _, late = await asyncio.wait(pending, timeout=_SHUTDOWN_GRACE_S if grace_s is None else grace_s)
+        if late:
+            logger.warning("%d run(s) did not stop within the grace period.", len(late))
+    import browser_env
+
+    await asyncio.to_thread(browser_env.cleanup_all_profiles)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -295,7 +331,12 @@ async def lifespan(app: FastAPI):
     except ConfigError as e:
         _startup_error = e
         raise
+    if not _check_demo_mode():
+        stale = persistence.mark_unfinished_runs(SERVER_STOPPED_MESSAGE)
+        if stale:
+            logger.info("Marked %d run file(s) left 'running' by an earlier server as errors.", stale)
     yield
+    await stop_runs()
 
 
 class _StartupErrorMiddleware:
@@ -573,12 +614,21 @@ async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     return state.to_dict()
 
 
+# How long a cancel waits for the run to stop its agent and record the usage it billed.
+_CANCEL_WAIT_S = 10.0
+
+
 @app.post("/benchmark/cancel/{run_id}")
 async def cancel_benchmark(run_id: str, _: None = Depends(verify_internal_key)):
     task = _run_tasks.get(run_id)
-    if task and not task.done():
-        task.cancel()
     state = _runs.get(run_id)
+    if task and not task.done():
+        if not task.cancelling():  # a second click must not cut short the browser's shutdown
+            if state is not None and state.status in ("running", "analyzing"):
+                state.stopped_at = datetime.now()  # the run's time ends here, not after the browser closes
+            task.cancel()
+        # The reply, and every status read after it, then carries the time, tokens and cost.
+        await asyncio.wait({task}, timeout=_CANCEL_WAIT_S)
     if state and state.status in ("running", "analyzing"):
         state.status = "error"
         state.message = "Run cancelled by user."

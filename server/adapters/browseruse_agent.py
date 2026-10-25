@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import llm
-from browser_env import agent_files_dir, browser_profile, cleanup_profile
+from browser_env import agent_files_dir, browser_profile, cleanup_profile, track_agent_dir
 
 from .base_agent import BaseAgent
 
@@ -65,6 +65,12 @@ class BrowserUseTelemetricAgent(BaseAgent):
             initial_actions=initial_actions,
             use_judge=False,  # the arena has its own judge
             calculate_cost=False,  # cost comes from constants.COST_RATES, no pricing download
+            # browser-use's own Ctrl-C handler pauses on the first SIGINT and calls
+            # os._exit() on the second, which skips every cleanup and leaves Chromium
+            # running. One Ctrl-C under `uv run` is two SIGINTs (the terminal's and the
+            # copy uv forwards), so the command line entry point handles it instead
+            # (entrypoint.run_cli): the run is cancelled and the browser closed.
+            enable_signal_handler=False,
         )
         if self._agent_factory is not None:
             return self._agent_factory(**kwargs)
@@ -92,6 +98,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         counted = llm.Usage()
         try:
             agent = self._make_agent(start_url, profile)
+            track_agent_dir(profile, agent)  # its step screenshots go with the profile
 
             async def on_step_start(agent):
                 action_data = None
@@ -150,6 +157,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
             result["errors_detected"].append(str(e))
             raise
         finally:
+            # Also on Ctrl-C (a cancelled run): stops the browser if it is still up.
             cleanup_profile(profile)
             elapsed = (datetime.now() - start_time).total_seconds()
             result["steps"] = self._current_step_index

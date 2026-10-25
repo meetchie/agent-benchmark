@@ -247,6 +247,33 @@ async def persist_phases(run_id: str, phases: list[dict]) -> None:
     })
 
 
+_UNFINISHED = ("running", "analyzing")
+
+
+def mark_unfinished_runs(message: str) -> int:
+    """Mark every run file still ``running`` or ``analyzing`` as an ``error`` with ``message``.
+
+    A server marks the files an earlier server left behind when it starts: a run whose
+    server was killed outright never wrote its end. Its usage stays as recorded (the
+    file has none if the run was cut off before the agent stopped). Returns how many
+    files were changed.
+    """
+    try:
+        paths = sorted(runs_dir().glob("*.json"))
+    except OSError:
+        return 0
+    changed = 0
+    for path in paths:
+        if path.name.startswith("."):  # the quota file, or a write in progress
+            continue
+        record = read_run(path.stem)
+        if not record or record.get("status") not in _UNFINISHED:
+            continue
+        if _update(path.stem, {"status": "error", "result_state": "error", "success": False, "message": message}):
+            changed += 1
+    return changed
+
+
 async def persist_tasks(
     clerk_user_id: str, url: str, tasks: list[dict]
 ) -> None:

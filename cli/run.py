@@ -247,4 +247,6 @@ async def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    import entrypoint
+
+    sys.exit(entrypoint.run_cli(main()))

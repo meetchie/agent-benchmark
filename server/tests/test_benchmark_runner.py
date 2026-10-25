@@ -64,8 +64,10 @@ def test_complete_response_with_failure():
 import asyncio
 from types import SimpleNamespace
 
+import anthropic
 import browser_env
 import browser_use
+import httpx
 import llm
 import persistence
 from benchmark_runner import _format_action, get_agent_timeout, run_benchmark
@@ -376,9 +378,22 @@ def action_result(text=None, error=None, is_done=False):
 
 
 class FakeHistory:
-    def __init__(self, items, errors=None, done=True, usage=None, final=None, successful=None):
+    """A browser-use history.
+
+    ``initial`` puts the item browser-use adds before the first model step in front: the
+    navigation to the URL it found in the task, recorded as step 0 with no error.
+    """
+
+    def __init__(self, items, errors=None, done=True, usage=None, final=None, successful=None, initial=False):
         self.history = list(items)
         self._errors = errors if errors is not None else [None] * len(items)
+        if initial:
+            self.history.insert(0, SimpleNamespace(
+                model_output=SimpleNamespace(next_goal="Initial navigation"),
+                metadata=SimpleNamespace(step_number=0),
+                result=[],
+            ))
+            self._errors = [None] + list(self._errors)
         self._done = done
         self._final = final
         self._successful = successful
@@ -406,6 +421,7 @@ class FakeAgent:
     results = None  # per step: the ActionResults its actions returned
     errors = None
     done = True
+    initial = False
     usage = None
     final = None  # what final_result() returns: the last action's output, "done" or not
     successful = None
@@ -432,7 +448,11 @@ class FakeAgent:
         cls = type(self)
         evaluations = cls.evaluations or [None] * len(cls.goals)
         results = cls.results or [()] * len(cls.goals)
-        return [history_item(g, e, r) for g, e, r in zip(cls.goals, evaluations, results)]
+        # A goal of None is a step whose model call failed: browser-use keeps no model output.
+        return [
+            history_item(g, e, r) if g is not None else SimpleNamespace(model_output=None, result=[])
+            for g, e, r in zip(cls.goals, evaluations, results)
+        ]
 
     async def run(self, on_step_start=None, on_step_end=None):
         cls = type(self)
@@ -447,7 +467,7 @@ class FakeAgent:
                 await asyncio.sleep(cls.sleep)
             self.history = FakeHistory(items[: i + 1])
             await on_step_end(self)
-        self.history = FakeHistory(items, cls.errors, cls.done, cls.usage, cls.final, cls.successful)
+        self.history = FakeHistory(items, cls.errors, cls.done, cls.usage, cls.final, cls.successful, cls.initial)
         return self.history
 
 
@@ -579,6 +599,23 @@ async def test_the_run_cleans_up_its_temp_dirs(fake_run, monkeypatch):
     assert not os.path.exists(agent.kwargs["file_system_path"])
 
 
+async def test_the_run_removes_the_dir_where_browser_use_kept_its_screenshots(fake_run, monkeypatch):
+    import shutil
+    import tempfile
+    import uuid
+
+    agent_dir = os.path.join(tempfile.gettempdir(), f"browser_use_agent_{uuid.uuid4().hex}_0")
+    os.makedirs(os.path.join(agent_dir, "screenshots"))
+    try:
+        open(os.path.join(agent_dir, "screenshots", "step_1.png"), "wb").close()
+        fake_run.agent_cls.agent_directory = agent_dir
+        install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+        await run_benchmark(make_state(), "https://books.toscrape.com", "Goal")
+        assert not os.path.exists(agent_dir)
+    finally:
+        shutil.rmtree(agent_dir, ignore_errors=True)
+
+
 async def test_the_run_is_saved_to_its_run_file(fake_run, monkeypatch):
     fake_run.agent_cls.usage = usage_summary()
     install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
@@ -630,13 +667,73 @@ async def test_timeout_reports_too_slow_with_the_tokens_so_far(fake_run, monkeyp
     assert "(The agent gave no final report.)" in calls[0]["messages"][0]["content"]
 
 
-async def test_judge_failure_still_ends_the_run(fake_run, monkeypatch):
+async def test_a_judge_failure_is_an_error_not_a_fail(fake_run, monkeypatch):
+    """Without a verdict the agent may have done the task: that is not a fail."""
+    fake_run.agent_cls.usage = usage_summary()
+    install_fake_anthropic(monkeypatch, Exception("API down"))
+    await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert state.status == "error"
+    assert state.result_state == "error"
+    assert state.success is False
+    assert state.message.startswith("Could not judge the run:")
+    assert state.phases == []
+    # The agent's calls were billed, so the error still reports them.
+    payload = state.to_dict()
+    assert payload["status"] == "error" and payload["message"] == state.message
+    assert payload["total_tokens"] == 73216
+    assert len(payload["steps"]) == 3
+    record = persistence.read_run("run-1")
+    assert (record["status"], record["result_state"]) == ("error", "error")
+    assert record["message"] == state.message
+
+
+async def test_a_judge_that_rejects_the_api_key_says_so(fake_run, monkeypatch):
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    rejected = anthropic.AuthenticationError(
+        "invalid x-api-key", response=httpx.Response(401, request=request), body=None
+    )
+    install_fake_anthropic(monkeypatch, rejected)
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert (state.status, state.result_state) == ("error", "error")
+    assert "API key was rejected" in state.message
+    assert "ANTHROPIC_API_KEY" in state.message
+
+
+async def test_a_judge_that_times_out_is_an_error(fake_run, monkeypatch):
+    import benchmark_runner
+    import time
+
+    def stuck_judge(goal, steps, result_state="unknown", **report):
+        time.sleep(0.5)
+        return {"success": True, "summary": "late", "phases": []}
+
+    monkeypatch.setattr("run_judge.judge_run", stuck_judge)
+    monkeypatch.setattr(benchmark_runner, "_JUDGE_TIMEOUT_S", 0.1)
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert (state.status, state.result_state) == ("error", "error")
+    assert "took too long" in state.message
+
+
+async def test_a_judge_failure_on_a_timed_out_run_keeps_too_slow(fake_run, monkeypatch):
+    """too_slow comes from the clock, not from the judge."""
+    monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "0.3")
+    fake_run.agent_cls.sleep = 0.2
     install_fake_anthropic(monkeypatch, Exception("API down"))
     state = make_state()
+
     await run_benchmark(state, "https://books.toscrape.com", "Goal")
-    assert state.status == "complete"
-    assert state.result_state == "fail"
-    assert state.phases == []
+
+    assert (state.status, state.result_state) == ("complete", "too_slow")
     assert "Could not analyze" in state.summary
 
 
@@ -787,6 +884,39 @@ async def test_every_step_failing_is_an_error_with_the_reason(fake_run, monkeypa
     assert calls == []  # nothing worth judging
 
 
+async def test_a_bad_key_after_the_automatic_first_navigation_is_an_error(fake_run, monkeypatch):
+    """browser-use opens the URL in the task before the model's first step, and that step
+    succeeds without the model. Every step the model drove failed, so it is an error."""
+    fake_run.agent_cls.goals = [None, None, None]  # the model never answered
+    fake_run.agent_cls.initial = True
+    fake_run.agent_cls.errors = [
+        "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}}"
+    ] * 3
+    fake_run.agent_cls.done = False
+    calls = install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G")
+    state = make_state()
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert (state.status, state.result_state) == ("error", "error")
+    assert "could not complete a single step" in state.message
+    assert "API key was rejected" in state.message
+    assert "ANTHROPIC_API_KEY" in state.message
+    assert calls == []  # nothing worth judging
+    assert persistence.read_run("run-1")["result_state"] == "error"
+
+
+async def test_a_good_first_navigation_and_one_good_model_step_is_a_normal_run(fake_run, monkeypatch):
+    fake_run.agent_cls.initial = True
+    fake_run.agent_cls.errors = ["Error code: 500 - overloaded", None, "Element not found"]
+    fake_run.agent_cls.done = False
+    install_fake_anthropic(monkeypatch, text_response({**VERDICT_PASS, "success": False}))
+    state = make_state()
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+    assert (state.status, state.result_state) == ("complete", "fail")
+
+
 async def test_some_failed_steps_among_good_ones_are_just_a_normal_run(fake_run, monkeypatch):
     fake_run.agent_cls.errors = [None, "Element not found", None]
     fake_run.agent_cls.done = False  # ran out of steps, say
@@ -896,6 +1026,29 @@ async def test_a_cancelled_run_keeps_the_usage_and_time_of_the_calls_already_mad
     assert payload["total_tokens"] == 73216
     assert payload["cost_usd"] == pytest.approx(cost)
     assert payload["total_ms"] >= 250
+
+
+async def test_a_cancelled_runs_time_ends_at_the_cancel_not_after_the_browser_closed(fake_run, monkeypatch):
+    from datetime import datetime
+
+    fake_run.agent_cls.sleep = 5.0
+    original_run = fake_run.agent_cls.run
+
+    async def slow_teardown(self, **kwargs):
+        try:
+            return await original_run(self, **kwargs)
+        finally:
+            await asyncio.sleep(0.6)  # browser-use closing Chromium
+
+    monkeypatch.setattr(fake_run.agent_cls, "run", slow_teardown)
+    state = make_state()
+    task = asyncio.create_task(run_benchmark(state, "https://books.toscrape.com", "Goal"))
+    await asyncio.sleep(0.2)
+    state.stopped_at = datetime.now()  # what a cancel stamps (server.stop_runs, the cancel endpoint)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert 150 <= state.total_ms < 500
 
 
 async def test_the_usage_read_after_a_cancel_is_shielded_from_a_second_cancel(fake_run, monkeypatch):

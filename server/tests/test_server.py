@@ -1043,6 +1043,100 @@ def test_cancel_ends_a_run_in_either_phase(live, stuck_status):
     assert server_module._active_runs.get("local", 0) == 0
 
 
+# ---------------------------------------------------------------------------
+# Server shutdown and restart
+# ---------------------------------------------------------------------------
+
+
+def test_stopping_the_server_ends_the_runs_in_progress_and_saves_them(configured, monkeypatch):
+    """uvicorn ends the process right after the app's shutdown (it re-raises the SIGTERM
+    it caught), so a run must be stopped and saved during that shutdown."""
+    seen = {}
+
+    async def runs_until_cancelled(state, url, goal, viewport=None):
+        state.status = "running"
+        state.persisted_run_id = state.run_id
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # What run_benchmark does: keep a message set before the cancel.
+            state.status = "error"
+            state.result_state = "error"
+            state.message = state.message or "Run cancelled by user."
+            await persistence.persist_run_completion(
+                state.run_id, state.status, state.result_state, False, 1, 0, 0, 0, None, "",
+                message=state.message,
+            )
+            seen["cancelled"] = True
+            raise
+
+    cleaned = []
+    monkeypatch.setattr(browser_env, "cleanup_all_profiles", lambda: cleaned.append(True))
+    with patch("server.run_benchmark", side_effect=runs_until_cancelled):
+        with TestClient(app) as c:
+            run_id = c.post("/benchmark/start", json=START).json()["run_id"]
+            wait_for_status(c, run_id, wanted=("running",))
+        # The lifespan has shut down here.
+    assert seen == {"cancelled": True}
+    record = persistence.read_run(run_id)
+    assert (record["status"], record["result_state"]) == ("error", "error")
+    assert record["message"] == server_module.SERVER_STOPPED_MESSAGE
+    assert cleaned == [True]  # and any browser left over is stopped by PID
+
+
+async def test_stop_runs_gives_up_on_a_run_that_will_not_stop(monkeypatch):
+    monkeypatch.setattr(browser_env, "cleanup_all_profiles", lambda: None)
+    release = asyncio.Event()
+
+    async def stubborn():
+        while not release.is_set():
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                pass  # ignores the cancel
+
+    task = asyncio.create_task(stubborn())
+    server_module._run_tasks["stubborn"] = task
+    await asyncio.sleep(0)
+    started = time.monotonic()
+    await server_module.stop_runs(grace_s=0.2)
+    assert time.monotonic() - started < 2
+    release.set()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+def test_a_new_server_marks_runs_an_earlier_one_left_running(configured):
+    asyncio.run(persistence.persist_run_start("old-run", "local", "https://books.toscrape.com", "L", "G"))
+    with TestClient(app):
+        pass
+    record = persistence.read_run("old-run")
+    assert (record["status"], record["result_state"]) == ("error", "error")
+    assert record["message"] == server_module.SERVER_STOPPED_MESSAGE
+
+
+def test_the_cancel_reply_waits_until_the_run_has_recorded_what_it_used(live):
+    """The status read right after a cancel carries the time, tokens and cost."""
+    async def bills_then_hangs(state, url, goal, viewport=None):
+        state.status = "running"
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.3)  # closing the agent's browser
+            state.status, state.result_state = "error", "error"
+            state.message = state.message or "Run cancelled by user."
+            state.total_ms, state.total_tokens, state.cost_usd = 1234, 5000, 0.02
+            raise
+
+    with patch("server.run_benchmark", side_effect=bills_then_hangs):
+        run_id = live.post("/benchmark/start", json=START).json()["run_id"]
+        wait_for_status(live, run_id, wanted=("running",))
+        assert live.post(f"/benchmark/cancel/{run_id}").json() == {"ok": True}
+        body = live.get(f"/benchmark/status/{run_id}").json()
+    assert body["status"] == "error" and body["message"] == "Run cancelled by user."
+    assert (body["total_ms"], body["total_tokens"], body["cost_usd"]) == (1234, 5000, 0.02)
+
+
 def test_cancel_leaves_a_finished_run_alone(live):
     async def finished(state, url, goal, viewport=None):
         state.status = "complete"

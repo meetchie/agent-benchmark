@@ -131,6 +131,7 @@ class RunState:
     cache_write_tokens: int = 0  # Tokens written to the prompt cache (billed on top of input_tokens)
     final_report: str | None = None  # The agent's closing report, None unless it finished on its own
     agent_reported_success: bool | None = None  # The success flag the agent set when it finished
+    stopped_at: datetime | None = None  # When a cancel was asked for (the run's time ends there)
 
     def record_usage(self, summary) -> None:
         """Take the agent's token usage from a browser-use UsageSummary.
@@ -427,6 +428,17 @@ def _one_line(text: object, limit: int = 300) -> str:
     return " ".join(str(text).split())[:limit]
 
 
+def _is_initial_actions(history_item) -> bool:
+    """Whether a history item is browser-use's step 0: the actions it runs before the model.
+
+    browser-use opens the URL it finds in the task itself (``directly_open_url``) and
+    records that as step number 0. It succeeds without any model call, so it says
+    nothing about whether the model works.
+    """
+    metadata = getattr(history_item, "metadata", None)
+    return getattr(metadata, "step_number", None) == 0
+
+
 def _agent_failure(history) -> tuple[str, bool] | None:
     """Why a finished agent run counts as an error rather than a pass/fail, if it does.
 
@@ -438,21 +450,31 @@ def _agent_failure(history) -> tuple[str, bool] | None:
 
     * the model declined to continue (``stop_reason=refusal``) and the task is not
       done: the steps before the refusal are real, so they are judged;
-    * every step failed (for example an invalid API key): there is nothing to judge,
-      and the first error is shown.
+    * every step the model drove failed (for example an invalid API key): there is
+      nothing to judge, and the first error is shown. browser-use's own opening
+      navigation (step 0) is not one of the model's steps.
     """
     try:
         errors = list(history.errors())
+        items = list(history.history)
         done = history.is_done()
     except Exception:
         return None
+    if len(items) == len(errors):
+        errors = [e for item, e in zip(items, errors) if not _is_initial_actions(item)]
     failed = [e for e in errors if e]
     if not failed or done:
         return None
     if any("stop_reason=refusal" in e for e in failed):
         return "The agent model declined to continue this task (safety refusal).", True
     if len(failed) == len(errors):
-        return "The agent could not complete a single step: " + _one_line(failed[0]), False
+        first = _one_line(failed[0])
+        if llm.key_rejected(first):
+            return (
+                f"The agent could not complete a single step: the API key was rejected "
+                f"(check {llm.api_key_name()}). {first}"
+            ), False
+        return "The agent could not complete a single step: " + first, False
     return None
 
 
@@ -503,6 +525,7 @@ async def _judge(state: "RunState", result_state_hint: str) -> dict:
             "success": False,
             "summary": "Could not analyze the run: the judge took too long. The agent may have completed the task, but results are unavailable.",
             "phases": [],
+            "judge_error": "Could not judge the run: the judge took too long.",
         }
 
 
@@ -604,7 +627,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     # Deferred import: keeps the server startable even if browser_use is not installed,
     # and avoids import-time side effects (Playwright browser launch).
     from browser_use import Agent
-    from browser_env import agent_files_dir, browser_profile, cleanup_profile
+    from browser_env import agent_files_dir, browser_profile, cleanup_profile, track_agent_dir
 
     overall_start = datetime.now()
     step_start_time: datetime = overall_start
@@ -706,6 +729,8 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             use_judge=False,
             enable_signal_handler=False,
         )
+        if profile is not None and provider != "browserbase":
+            track_agent_dir(profile, agent)  # its step screenshots go with the profile
 
         history = None
         try:
@@ -748,8 +773,16 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.phases = judgment["phases"]
 
         if timed_out:
+            # The clock decided this one; the judge only adds the summary and phases.
             state.result_state = "too_slow"
             state.summary = judgment["summary"] or "The agent ran out of time before completing the task."
+        elif judgment.get("judge_error"):
+            # No verdict: the agent may well have done the task, so this is no fail.
+            state.success = False
+            state.message = judgment["judge_error"]
+            state.status = "error"
+            state.result_state = "error"
+            return
         else:
             state.result_state = "pass" if judgment["success"] else "fail"
 
@@ -762,8 +795,9 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.result_state = "error"
         # The agent's calls so far were billed, so the run keeps its time and usage. The
         # agent has stopped by now; reading its counters must not be cut short by the
-        # cancellation that brought us here.
-        state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
+        # cancellation that brought us here. The time is up to the cancel, not up to now:
+        # closing the browser in between is not part of the run.
+        state.total_ms = int(((state.stopped_at or datetime.now()) - overall_start).total_seconds() * 1000)
         if agent is not None:
             await _record_agent_usage(state, agent, shielded=True)
         raise
@@ -785,13 +819,15 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 )
             except Exception as e:
                 logging.debug("Browserbase session release failed: %s", e)
-        # Remove the temp profile and agent-files dirs this run created
-        if profile is not None:
-            cleanup_profile(profile)
-
         logging.info(
             "Run %s finished: status=%s result=%s steps=%d tokens=%d cost=%s",
             state.run_id, state.status, state.result_state, len(state.steps),
             state.total_tokens, "n/a" if state.cost_usd is None else f"${state.cost_usd:.4f}",
         )
+        # Saved first: it has no await inside, so nothing can cut it short.
         await _persist_result(state)
+        # Stop the run's Chromium if it is somehow still running (by PID, off the event
+        # loop: it may wait a few seconds for the browser to exit), then remove the
+        # profile, agent-files and screenshot dirs this run created.
+        if profile is not None:
+            await asyncio.to_thread(cleanup_profile, profile)

@@ -255,6 +255,29 @@ def provider_key_present() -> bool:
     return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
 
 
+def api_key_name() -> str:
+    """The setting that holds the active provider's key, for messages (never its value)."""
+    try:
+        return "OPENAI_API_KEY" if provider() == OPENAI else "ANTHROPIC_API_KEY"
+    except LLMError:
+        return "ANTHROPIC_API_KEY"
+
+
+_KEY_REJECTED = re.compile(
+    r"authentication_error|invalid x-api-key|invalid api key|incorrect api key|invalid_api_key"
+    r"|error code: 401|401 unauthorized"
+)
+
+
+def key_rejected(error: object) -> bool:
+    """Whether an error (an exception, or the text browser-use keeps of one) says the API key was refused."""
+    if isinstance(error, LLMError) and error.kind == "api" and error.status_code in (401, 403):
+        return True
+    if getattr(error, "status_code", None) == 401:
+        return True
+    return bool(_KEY_REJECTED.search(str(error).lower()))
+
+
 def describe() -> dict[str, Any]:
     """Provider and per-role models, for /health and logs. Never includes secrets."""
     prov = provider()

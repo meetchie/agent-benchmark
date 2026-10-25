@@ -252,6 +252,30 @@ class TestJudgeRun:
         assert result["phases"] == []
         assert "Could not analyze" in result["summary"]
 
+    def test_a_verdict_carries_no_judge_error(self, monkeypatch):
+        install_fake_anthropic(monkeypatch, text_response(GOOD_VERDICT))
+        assert "judge_error" not in judge_run("Do task", STEPS_3)
+
+    def test_every_failure_says_why_there_is_no_verdict(self, monkeypatch):
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        rejected = anthropic.AuthenticationError(
+            "invalid x-api-key", response=httpx.Response(401, request=request), body=None
+        )
+        limited = anthropic.RateLimitError("rate limited", response=httpx.Response(429, request=request), body=None)
+        cases = [
+            (rejected, "the API key was rejected (check ANTHROPIC_API_KEY)"),
+            (limited, "the request to the judge model failed (HTTP 429)"),
+            (Exception("API down"), "the judge failed unexpectedly"),
+            (refusal_response(), "declined to review it"),
+            (text_response('{"success": tr', stop_reason="max_tokens"), "reply could not be read"),
+        ]
+        for result, words in cases:
+            install_fake_anthropic(monkeypatch, result)
+            judgment = judge_run("Do task", STEPS_3)
+            assert judgment["success"] is False
+            assert judgment["judge_error"].startswith("Could not judge the run:")
+            assert words in judgment["judge_error"], (result, judgment["judge_error"])
+
     def test_refusal_returns_fallback_that_says_so(self, monkeypatch):
         """A refusal is not an agent failure: the verdict stays unknown, and says why."""
         install_fake_anthropic(monkeypatch, refusal_response())

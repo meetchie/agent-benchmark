@@ -14,7 +14,7 @@ import re
 import ipaddress
 import logging
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import ssl
 import certifi
@@ -212,15 +212,33 @@ def _url_host(url: str) -> str | None:
     return hostname
 
 
+def _is_internal(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Whether ``ip`` is anything but a public unicast address.
+
+    An IPv6 address that carries an IPv4 one (``::ffff:127.0.0.1``, 6to4, Teredo) is
+    judged by that IPv4 address too, because that is where a connection to it ends up.
+    """
+    if isinstance(ip, ipaddress.IPv6Address):
+        embedded = [ip.ipv4_mapped, ip.sixtofour, ip.teredo[1] if ip.teredo else None]
+        if any(inner is not None and _is_internal(inner) for inner in embedded):
+            return True
+    if any(ip in network for network in _PRIVATE_NETWORKS):
+        return True
+    return (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified
+        or ip.is_reserved or ip.is_multicast or not ip.is_global
+    )
+
+
 def _resolves_to_public_addresses(addrinfo) -> bool:
     """False if any resolved address is private, loopback, link-local or otherwise internal."""
     for info in addrinfo:
         addr = info[4][0]
         try:
-            ip = ipaddress.ip_address(addr)
+            ip = ipaddress.ip_address(addr.split("%", 1)[0])  # an IPv6 zone ("fe80::1%en0") is not part of it
         except ValueError:
             continue
-        if any(ip in network for network in _PRIVATE_NETWORKS):
+        if _is_internal(ip):
             return False
     return True
 
@@ -467,25 +485,50 @@ async def fetch_and_generate(url: str) -> list[dict]:
     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
     try:
         async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
-            async with session.get(url, allow_redirects=True) as response:
-                if response.status == 403:
-                    raise ConnectionError(
-                        "This site is blocking automated access. Try a different website."
-                    )
-                if response.status >= 400:
-                    raise ConnectionError(
-                        f"Could not reach this site (HTTP {response.status}). Try a different URL."
-                    )
-
-                content_type = response.headers.get("Content-Type", "")
-                if "text/html" not in content_type:
-                    raise ValueError(
-                        f"URL did not return HTML content. Content-Type: {content_type}"
-                    )
-
-                html = await response.text()
+            html = await _get_html(session, url)
     except (aiohttp.ClientError, TimeoutError) as exc:
         raise ConnectionError("This site took too long to respond or is unreachable. Try a different URL.") from exc
 
     metadata = extract_metadata(html, url)
     return await asyncio.to_thread(generate_tasks, metadata)
+
+
+_MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+
+async def _get_html(session: aiohttp.ClientSession, url: str) -> str:
+    """GET ``url`` and return its HTML, following redirects one at a time.
+
+    Every redirect target goes through ``check_url`` like the URL itself, so a public
+    page cannot send the fetch on to this machine or an internal address.
+    """
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        async with session.get(current, allow_redirects=False) as response:
+            if response.status in _REDIRECT_STATUSES:
+                location = response.headers.get("Location", "")
+                if not location:
+                    raise ConnectionError(
+                        f"Could not reach this site (HTTP {response.status} without a Location). Try a different URL."
+                    )
+                current = urljoin(current, location)
+                await check_url(current)
+                continue
+            if response.status == 403:
+                raise ConnectionError(
+                    "This site is blocking automated access. Try a different website."
+                )
+            if response.status >= 400:
+                raise ConnectionError(
+                    f"Could not reach this site (HTTP {response.status}). Try a different URL."
+                )
+
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" not in content_type:
+                raise ValueError(
+                    f"URL did not return HTML content. Content-Type: {content_type}"
+                )
+
+            return await response.text()
+    raise ConnectionError(f"This site redirected more than {_MAX_REDIRECTS} times. Try a different URL.")

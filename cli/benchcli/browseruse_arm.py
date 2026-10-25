@@ -91,6 +91,16 @@ def _save_last_screenshot(history: Any, results_dir: Path, task_id: str) -> str 
     return relative
 
 
+def _succeeded(history: Any, stopped: bool) -> bool:
+    """browser-use's own verdict: done and successful, and not cut short."""
+    if stopped:
+        return False
+    try:
+        return bool(history.is_done()) and bool(history.is_successful())
+    except Exception:
+        return False
+
+
 async def run_browseruse_task(
     task: dict[str, Any],
     *,
@@ -142,33 +152,46 @@ async def run_browseruse_task(
         print(f"    Step {state['index']}: {action or 'N/A'} ({elapsed_ms:.0f}ms, ${steps[-1]['cost_usd']:.4f})")
 
     try:
-        profile = browser_env.browser_profile()
-        kwargs = dict(
-            task=task["goal"],  # verbatim: the same text the Rindler arm is given
-            llm=llm.agent_llm(model),
-            browser_profile=profile,
-            file_system_path=browser_env.agent_files_dir(profile),
-            initial_actions=[{"navigate": {"url": task["start_url"], "new_tab": False}}],
-            use_judge=False,  # the CLI has its own judge
-            calculate_cost=False,  # prices come from constants.COST_RATES, no download
-        )
-        if agent_factory is not None:
-            agent = agent_factory(**kwargs)
-        else:
-            from browser_use import Agent
-
-            agent = Agent(**kwargs)
-        run = agent.run(max_steps=max_steps, on_step_start=on_step_start, on_step_end=on_step_end)
         try:
-            await (asyncio.wait_for(run, timeout=timeout_s) if timeout_s else run)
-        except asyncio.TimeoutError:
-            error = f"stopped after the {timeout_s:.0f}s time limit"
-    except Exception as exc:  # a model or browser failure ends this run, not the whole benchmark
-        error = f"{type(exc).__name__}: {exc}"
-    history = getattr(agent, "history", None)
-    usage_total = await usage_now() if agent is not None else llm.Usage()
-    if profile is not None:
-        browser_env.cleanup_profile(profile)
+            profile = browser_env.browser_profile()
+            kwargs = dict(
+                task=task["goal"],  # verbatim: the same text the Rindler arm is given
+                llm=llm.agent_llm(model),
+                browser_profile=profile,
+                file_system_path=browser_env.agent_files_dir(profile),
+                initial_actions=[{"navigate": {"url": task["start_url"], "new_tab": False}}],
+                use_judge=False,  # the CLI has its own judge
+                calculate_cost=False,  # prices come from constants.COST_RATES, no download
+                # Not browser-use's Ctrl-C handler: on a second SIGINT it calls os._exit()
+                # and leaves Chromium running, and one Ctrl-C under `uv run` is two
+                # SIGINTs. entrypoint.run_cli cancels the run instead.
+                enable_signal_handler=False,
+            )
+            if agent_factory is not None:
+                agent = agent_factory(**kwargs)
+            else:
+                from browser_use import Agent
+
+                agent = Agent(**kwargs)
+            browser_env.track_agent_dir(profile, agent)  # its step screenshots go with the profile
+            run = agent.run(max_steps=max_steps, on_step_start=on_step_start, on_step_end=on_step_end)
+            try:
+                await (asyncio.wait_for(run, timeout=timeout_s) if timeout_s else run)
+            except asyncio.TimeoutError:
+                error = f"stopped after the {timeout_s:.0f}s time limit"
+        except Exception as exc:  # a model or browser failure ends this run, not the whole benchmark
+            error = f"{type(exc).__name__}: {exc}"
+        history = getattr(agent, "history", None)
+        usage_total = await usage_now() if agent is not None else llm.Usage()
+        # The screenshots browser-use keeps are files in the agent's dir, which
+        # cleanup_profile removes: a run that did not succeed saves its last one first.
+        last_shot = None
+        if history is not None and not _succeeded(history, stopped=error is not None):
+            last_shot = _save_last_screenshot(history, results_dir, task_id)
+    finally:
+        # Also on Ctrl-C (a cancelled run): stops the browser if it is still up.
+        if profile is not None:
+            browser_env.cleanup_profile(profile)
 
     # Tokens spent after the last step ended (or with no step at all) go on the last step.
     leftover = usage_delta(usage_total, state["counted"])
@@ -200,9 +223,7 @@ async def run_browseruse_task(
     elif error is None:
         error = "browser-use returned no history"
 
-    shot = None
-    if not success and history is not None:
-        shot = _save_last_screenshot(history, results_dir, task_id)
+    shot = last_shot
     finished_at = datetime.now(timezone.utc)
     record = new_result(
         task, agent="browseruse", model=model, site=site, max_steps=max_steps,

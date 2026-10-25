@@ -3,6 +3,7 @@ and the BrowserUse arm's bookkeeping with a fake browser-use Agent. No network."
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -360,6 +361,8 @@ async def test_browseruse_arm_logs_real_per_step_tokens(no_browser):
     fake = FakeAgent.instances[0]
     assert fake.kwargs["initial_actions"] == [{"navigate": {"url": "https://vhlistings.com", "new_tab": False}}]
     assert fake.kwargs["use_judge"] is False and fake.kwargs["llm"] == "chat:claude-sonnet-5-5"
+    # browser-use's own Ctrl-C handler would os._exit() on a second SIGINT, leaving Chromium up.
+    assert fake.kwargs["enable_signal_handler"] is False
     assert fake.kwargs["task"] == "Find a chain belt" and fake.max_steps == 30
     assert result["success"] is True and result["final_extraction"] == "Iron Chain Belt, $29.00"
     assert result["steps"] == 3 and result["errors_detected"] == []
@@ -373,6 +376,29 @@ async def test_browseruse_arm_logs_real_per_step_tokens(no_browser):
     assert all(e["tokens_cache_read"] == 400 for e in ends)
     per_step = llm.Usage(input_tokens=600, output_tokens=100, cache_read_input_tokens=400).cost_usd("claude-sonnet-5-5")
     assert sum(e["cost_usd"] for e in ends) == pytest.approx(3 * per_step)
+
+
+async def test_browseruse_arm_cleans_up_when_the_run_is_cancelled(no_browser, monkeypatch):
+    """Ctrl-C cancels the run (entrypoint.run_cli); the profile, and any browser on it, still go."""
+    import adapters.browseruse_agent as bua
+
+    cleaned = []
+    monkeypatch.setattr(bua, "cleanup_profile", lambda profile: cleaned.append(profile))
+
+    class Hangs(FakeAgent):
+        async def run(self, max_steps, on_step_start, on_step_end):
+            await on_step_start(self)
+            await asyncio.sleep(30)
+
+    agent = BrowserUseTelemetricAgent(run_id="r", goal="g", agent_factory=lambda **kw: Hangs(**kw))
+    task = asyncio.create_task(agent.run(start_url=None))
+    while not Hangs.instances:
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(cleaned) == 1
 
 
 async def test_browseruse_arm_reports_running_out_of_steps(no_browser):

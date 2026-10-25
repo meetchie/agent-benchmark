@@ -23,9 +23,17 @@ What every profile gets:
   (Left to itself, browser-use 0.13 makes a ``browser-use-user-data-dir-*`` and a
   ``browser-use-downloads-*`` dir per profile and never deletes either; the profile one
   is about 9 MB per run.) Pass ``file_system_path=agent_files_dir(profile)`` to Agent so
-  its scratch files go away too. Nothing persists between runs. (One leak remains that
-  this module cannot stop: importing browser_use builds a module-level default profile,
-  which makes one empty ``browser-use-downloads-*`` dir per process.)
+  its scratch files go away too, and call ``track_agent_dir(profile, agent)`` once the
+  Agent exists: browser-use writes every step's screenshot to the Agent's own
+  ``$TMPDIR/browser_use_agent_<id>_<ts>`` dir whatever ``file_system_path`` says, and
+  that dir is then removed with the profile. Nothing persists between runs. (One leak
+  remains that this module cannot stop: importing browser_use builds a module-level
+  default profile, which makes one empty ``browser-use-downloads-*`` dir per process.)
+* No browser outlives its run. ``cleanup_profile`` first stops, by PID, any Chromium
+  this process started on that profile and that is still running (browser-use normally
+  kills it itself, but not when the run is interrupted at the wrong moment), and the
+  exit hook does the same for every profile still in use. ``cleanup_all_profiles()``
+  is that hook; a server calls it on shutdown too.
 * browser-use's default extensions off (no uBlock / cookie-consent auto-clicker),
   so sites show their real popups and nothing is downloaded on first launch.
 
@@ -85,6 +93,10 @@ START_CHECK_TIMEOUT_S = 15.0
 PROFILE_DIR_PREFIX = "browseruse-tmp-agent-benchmark-browser-use-user-data-dir-"
 
 AGENT_FILES_PREFIX = "agent-benchmark-agent-files-"
+# browser-use's own name for an Agent's dir under the temp dir (see track_agent_dir)
+BROWSER_USE_AGENT_DIR_PREFIX = "browser_use_agent_"
+# How long a browser gets to exit after SIGTERM before it is killed
+BROWSER_STOP_TIMEOUT_S = 3.0
 
 # profile dir -> extra dirs to delete with it (agent_files_dir)
 _created_profile_dirs: dict[str, list[str]] = {}
@@ -109,15 +121,111 @@ def agent_files_dir(profile: Any) -> str:
     return path
 
 
-def cleanup_profile(profile: Any) -> None:
-    """Delete the temp dirs browser_profile()/agent_files_dir() made for ``profile``.
+def track_agent_dir(profile: Any, agent: Any) -> None:
+    """Remove the browser-use Agent's own temp dir together with ``profile``.
 
-    Never touches a user_data_dir the caller supplied. Safe to call twice.
+    browser-use 0.13 gives every Agent a ``$TMPDIR/browser_use_agent_<id>_<ts>`` dir and
+    its screenshot service writes each step's screenshot there, even when
+    ``file_system_path`` points elsewhere, so screenshots of every site visited would
+    pile up. Only a dir with browser-use's name, directly in the temp dir, is taken.
+    """
+    path = getattr(agent, "agent_directory", None)
+    if not path:
+        return
+    path = Path(path)
+    if not path.name.startswith(BROWSER_USE_AGENT_DIR_PREFIX):
+        return
+    if path.parent.resolve() != Path(tempfile.gettempdir()).resolve():
+        return
+    _created_profile_dirs.setdefault(str(getattr(profile, "user_data_dir", "") or ""), []).append(str(path))
+
+
+def _launched_with(proc: Any, user_data_dir: str) -> bool:
+    """Whether ``proc`` is a browser started with ``--user-data-dir=<user_data_dir>``."""
+    try:
+        args = proc.cmdline()
+    except Exception:  # gone, or not ours to read
+        return False
+    for arg in args:
+        if arg.startswith("--user-data-dir="):
+            return os.path.realpath(arg.split("=", 1)[1]) == os.path.realpath(user_data_dir)
+    return False
+
+
+def browser_processes(user_data_dir: str) -> list:
+    """The processes this process started on ``user_data_dir``: the browser and its helpers.
+
+    Only descendants of this process are looked at, and only one whose command line
+    names this exact profile dir counts, so another program's browser is never picked.
+    Returns psutil.Process objects (an empty list without psutil).
+    """
+    if not user_data_dir:
+        return []
+    try:
+        import psutil
+    except ImportError:  # browser-use depends on psutil; without it there is nothing to stop
+        return []
+    try:
+        descendants = psutil.Process().children(recursive=True)
+    except psutil.Error:
+        return []
+    found: dict[int, Any] = {}
+    for proc in descendants:
+        if proc.pid in found or not _launched_with(proc, user_data_dir):
+            continue
+        found[proc.pid] = proc
+        try:
+            for helper in proc.children(recursive=True):
+                found.setdefault(helper.pid, helper)
+        except psutil.Error:
+            pass
+    return list(found.values())
+
+
+def stop_browser(user_data_dir: str, timeout: float = BROWSER_STOP_TIMEOUT_S) -> list[int]:
+    """Stop any browser this process still runs on ``user_data_dir``; returns the PIDs stopped.
+
+    SIGTERM first, SIGKILL for what is still alive after ``timeout`` seconds. Blocks for
+    at most about ``timeout`` + 1 s, and returns at once when nothing is running.
+    """
+    procs = browser_processes(user_data_dir)
+    if not procs:
+        return []
+    import psutil
+
+    pids = sorted(p.pid for p in procs)
+    log.warning("Stopping the browser still running on %s (pids %s)", user_data_dir, pids)
+    for proc in procs:
+        try:
+            proc.terminate()
+        except psutil.Error:
+            pass
+    _, alive = psutil.wait_procs(procs, timeout=timeout)
+    for proc in alive:
+        try:
+            proc.kill()
+        except psutil.Error:
+            pass
+    psutil.wait_procs(alive, timeout=1.0)
+    return pids
+
+
+def cleanup_profile(profile: Any) -> None:
+    """Stop the profile's browser if it still runs, then delete the temp dirs made for it.
+
+    The dirs are the ones browser_profile(), agent_files_dir() and track_agent_dir()
+    made or took for ``profile``. Never touches a user_data_dir the caller supplied.
+    Safe to call twice.
     """
     path = str(getattr(profile, "user_data_dir", "") or "")
     extras = _created_profile_dirs.pop(path, None)
     if extras is None:
         return
+    _remove(path, extras)
+
+
+def _remove(path: str, extras: list[str]) -> None:
+    stop_browser(path)  # before its profile dir goes: a running browser keeps writing to it
     for extra in extras:
         shutil.rmtree(extra, ignore_errors=True)
     if Path(path).name.startswith(PROFILE_DIR_PREFIX):  # only dirs new_profile_dir() made
@@ -126,13 +234,13 @@ def cleanup_profile(profile: Any) -> None:
 
 @atexit.register
 def cleanup_all_profiles() -> None:
-    """Delete every temp dir this process created that still exists."""
-    for path, extras in list(_created_profile_dirs.items()):
-        for extra in extras:
-            shutil.rmtree(extra, ignore_errors=True)
-        if Path(path).name.startswith(PROFILE_DIR_PREFIX):
-            shutil.rmtree(path, ignore_errors=True)
-        _created_profile_dirs.pop(path, None)
+    """Stop every browser this process started that is still running, and delete every
+    temp dir it created that still exists. Runs at exit; a server also calls it when it
+    shuts down, in case the process does not get as far as the exit hooks."""
+    for path in list(_created_profile_dirs):
+        extras = _created_profile_dirs.pop(path, None)
+        if extras is not None:
+            _remove(path, extras)
 
 _FALSE_WORDS = {"0", "false", "no", "off"}
 

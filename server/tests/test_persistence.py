@@ -192,6 +192,31 @@ class TestTasks:
         assert not (tmp_path / "runs").exists()
 
 
+class TestUnfinishedRuns:
+    async def test_runs_left_running_are_marked_as_errors(self, tmp_path):
+        for run_id in ("run-a", "run-b", "run-c"):
+            await persist_run_start(run_id, "local", "https://shop.example.com", "L", "G")
+        await persist_run_completion(
+            "run-b", "complete", "pass", True, 1000, 10, 5, 15, 0.01, "Done",
+        )
+        persistence._update("run-c", {"status": "analyzing", "total_tokens": 900})
+
+        assert persistence.mark_unfinished_runs("The server stopped.") == 2
+
+        a, b, c = (persistence.read_run(r) for r in ("run-a", "run-b", "run-c"))
+        assert (a["status"], a["result_state"], a["message"]) == ("error", "error", "The server stopped.")
+        assert (b["status"], b["result_state"]) == ("complete", "pass")  # finished runs are left alone
+        assert "message" not in b
+        assert (c["status"], c["total_tokens"]) == ("error", 900)  # what it had recorded stays
+
+    def test_nothing_to_mark(self, tmp_path):
+        assert persistence.mark_unfinished_runs("x") == 0  # no runs dir yet
+        (tmp_path / "runs").mkdir()
+        (tmp_path / "runs" / ".quota_data.json").write_text("{}")
+        (tmp_path / "runs" / "broken.json").write_text("{not json")
+        assert persistence.mark_unfinished_runs("x") == 0
+
+
 def test_the_go_server_is_gone():
     source = Path(persistence.__file__).read_text()
     assert "GO_SERVER_URL" not in source

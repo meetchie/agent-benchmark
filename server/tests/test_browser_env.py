@@ -1,9 +1,12 @@
-"""Tests for browser_env (profile construction and the start check; no browser is launched).
-
-The start check runs small shell scripts in place of Chromium."""
+"""Tests for browser_env. No browser is launched: small shell scripts stand in for Chromium in
+the start check, and stand-in processes play a browser that is still running."""
 
 import os
+import signal
 import stat
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -293,3 +296,146 @@ def test_the_check_command_prints_the_version_or_the_problem(fake_chrome, monkey
     monkeypatch.setenv("BENCHMARK_CHROMIUM_PATH", str(failing_exe(tmp_path / "broken" / "chrome")))
     assert browser_env.main() == 1
     assert "install-deps" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# The Agent's own dir (where browser-use writes its step screenshots)
+# ---------------------------------------------------------------------------
+
+
+def test_the_agents_own_dir_is_removed_with_its_profile(fake_chrome, private_tempdir):
+    profile = browser_env.browser_profile()
+    agent_dir = private_tempdir / "browser_use_agent_0123_1700000000"
+    (agent_dir / "screenshots").mkdir(parents=True)
+    (agent_dir / "screenshots" / "step_1.png").write_bytes(b"png")
+    browser_env.track_agent_dir(profile, SimpleNamespace(agent_directory=agent_dir))
+    browser_env.cleanup_profile(profile)
+    assert list(private_tempdir.iterdir()) == []
+
+
+def test_the_agents_own_dir_goes_at_exit_too(fake_chrome, private_tempdir):
+    profile = browser_env.browser_profile()
+    agent_dir = private_tempdir / "browser_use_agent_4567_1700000000"
+    agent_dir.mkdir()
+    browser_env.track_agent_dir(profile, SimpleNamespace(agent_directory=str(agent_dir)))
+    browser_env.cleanup_all_profiles()
+    assert list(private_tempdir.iterdir()) == []
+
+
+@pytest.mark.parametrize("where", ["elsewhere", "wrong-name"])
+def test_track_agent_dir_only_takes_browser_uses_own_temp_dirs(fake_chrome, where, tmp_path, private_tempdir):
+    profile = browser_env.browser_profile()
+    if where == "elsewhere":
+        target = tmp_path / "browser_use_agent_0_0"  # right name, not in the temp dir
+    else:
+        target = private_tempdir / "my-project"
+    target.mkdir()
+    browser_env.track_agent_dir(profile, SimpleNamespace(agent_directory=target))
+    browser_env.track_agent_dir(profile, SimpleNamespace())  # no agent_directory at all
+    browser_env.cleanup_profile(profile)
+    assert target.exists()
+
+
+# ---------------------------------------------------------------------------
+# No browser outlives its run (stand-in processes, no real browser)
+# ---------------------------------------------------------------------------
+
+# A stand-in "browser": started with --user-data-dir like Chromium, it starts a helper
+# child (like Chromium's renderer) and can be told to ignore SIGTERM.
+FAKE_BROWSER = r"""
+import signal, subprocess, sys, time
+if "--ignore-term" in sys.argv:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "--type=renderer"])
+print(helper.pid, flush=True)
+time.sleep(60)
+"""
+
+
+def start_fake_browser(user_data_dir, *extra):
+    proc = subprocess.Popen(
+        [sys.executable, "-c", FAKE_BROWSER, f"--user-data-dir={user_data_dir}", *extra],
+        stdout=subprocess.PIPE, text=True,
+    )
+    helper_pid = int(proc.stdout.readline())
+    return proc, helper_pid
+
+
+def gone(pid, timeout=5.0):
+    import psutil
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                return True
+        except psutil.NoSuchProcess:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@pytest.fixture
+def fake_browsers():
+    """Started stand-ins; any still alive at the end are killed by PID."""
+    started = []
+    yield started
+    for proc, helper_pid in started:
+        for pid in (proc.pid, helper_pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        proc.wait(timeout=5)
+
+
+def test_cleanup_profile_stops_a_browser_still_running_on_it(fake_chrome, fake_browsers):
+    profile = browser_env.browser_profile()
+    other = browser_env.browser_profile()
+    fake_browsers.append(start_fake_browser(profile.user_data_dir))
+    fake_browsers.append(start_fake_browser(other.user_data_dir))
+    (browser, helper), (bystander, bystander_helper) = fake_browsers
+
+    found = sorted(p.pid for p in browser_env.browser_processes(str(profile.user_data_dir)))
+    assert found == sorted([browser.pid, helper])
+
+    browser_env.cleanup_profile(profile)
+
+    assert gone(browser.pid) and gone(helper)
+    assert not os.path.exists(profile.user_data_dir)
+    # A browser on another profile is not touched.
+    assert bystander.poll() is None and not gone(bystander_helper, timeout=0.2)
+    browser_env.cleanup_profile(other)
+    assert gone(bystander.pid) and gone(bystander_helper)
+
+
+def test_a_browser_that_ignores_sigterm_is_killed(fake_chrome, monkeypatch, fake_browsers):
+    monkeypatch.setattr(browser_env, "BROWSER_STOP_TIMEOUT_S", 0.5)
+    profile = browser_env.browser_profile()
+    fake_browsers.append(start_fake_browser(profile.user_data_dir, "--ignore-term"))
+    (browser, helper), = fake_browsers
+    time.sleep(0.3)  # let it install the handler
+
+    started = time.monotonic()
+    stopped = browser_env.stop_browser(str(profile.user_data_dir), timeout=0.5)
+
+    assert sorted(stopped) == sorted([browser.pid, helper])
+    assert gone(browser.pid) and gone(helper)
+    assert time.monotonic() - started < 3
+
+
+def test_the_exit_hook_stops_every_browser_still_running(fake_chrome, fake_browsers):
+    a, b = browser_env.browser_profile(), browser_env.browser_profile()
+    fake_browsers.append(start_fake_browser(a.user_data_dir))
+    fake_browsers.append(start_fake_browser(b.user_data_dir))
+    browser_env.cleanup_all_profiles()
+    for proc, helper in fake_browsers:
+        assert gone(proc.pid) and gone(helper)
+    assert not os.path.exists(a.user_data_dir) and not os.path.exists(b.user_data_dir)
+
+
+def test_stop_browser_with_nothing_running_returns_at_once(tmp_path):
+    started = time.monotonic()
+    assert browser_env.stop_browser(str(tmp_path)) == []
+    assert browser_env.stop_browser("") == []
+    assert time.monotonic() - started < 1
