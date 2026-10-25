@@ -104,46 +104,80 @@ def chart_failure_categories(summary: dict, charts_dir: Path, agent: str):
     plt.close()
 
 
-def chart_radar(summary: dict, charts_dir: Path):
-    """Radar chart comparing normalized metrics."""
-    bu = summary["browseruse"]
-    ri = summary["rindler"]
+def relative_scores(value_a: float, value_b: float, lower_is_better: bool) -> tuple:
+    """Score two arms against each other on one metric: the better arm gets 1.0, the other gets
+    its fraction of that (best / value when lower is better, value / best when higher is).
+    A tie scores 1.0 for both. If the better arm is at 0 (say a zero-cost run) the other scores 0."""
+    if value_a == value_b:
+        return 1.0, 1.0
+    if lower_is_better:
+        best = min(value_a, value_b)
+        return tuple(1.0 if v == best else (best / v if v else 1.0) for v in (value_a, value_b))
+    best = max(value_a, value_b)
+    return tuple(1.0 if v == best else v / best for v in (value_a, value_b))
 
-    categories = ["Success Rate", "Fewer Steps", "Faster", "Cheaper"]
-    # Normalize so higher = better, scale 0-1
-    max_steps = max(bu["avg_steps_per_task"], ri["avg_steps_per_task"], 1)
-    max_dur = max(bu["avg_duration_ms"], ri["avg_duration_ms"], 1)
-    max_cost = max(bu["avg_cost_per_task_usd"], ri["avg_cost_per_task_usd"], 0.001)
 
-    bu_vals = [
-        bu["success_rate"],
-        1 - bu["avg_steps_per_task"] / max_steps,
-        1 - bu["avg_duration_ms"] / max_dur,
-        1 - bu["avg_cost_per_task_usd"] / max_cost,
-    ]
-    ri_vals = [
-        ri["success_rate"],
-        1 - ri["avg_steps_per_task"] / max_steps,
-        1 - ri["avg_duration_ms"] / max_dur,
-        1 - ri["avg_cost_per_task_usd"] / max_cost,
-    ]
+# (label, value from an arm's summary, lower is better, how to print the raw value)
+RELATIVE_METRICS = [
+    ("Success rate", lambda arm: arm["success_rate"], False, lambda v: f"{v:.0%}"),
+    ("Steps\nper task", lambda arm: arm["avg_steps_per_task"], True, lambda v: f"{v:.1f}"),
+    ("Duration\nper task", lambda arm: arm["avg_duration_ms"] / 1000, True, lambda v: f"{v:.1f}s"),
+    ("Cost\nper task", lambda arm: arm["avg_cost_per_task_usd"], True, lambda v: f"${v:.4f}"),
+]
 
-    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-    bu_vals += bu_vals[:1]
-    ri_vals += ri_vals[:1]
-    angles += angles[:1]
 
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
-    ax.plot(angles, bu_vals, "o-", color=COLORS["browseruse"], label="BrowserUse")
-    ax.fill(angles, bu_vals, alpha=0.15, color=COLORS["browseruse"])
-    ax.plot(angles, ri_vals, "o-", color=COLORS["rindler"], label="Rindler")
-    ax.fill(angles, ri_vals, alpha=0.15, color=COLORS["rindler"])
-    ax.set_thetagrids(np.degrees(angles[:-1]), categories)
-    ax.set_ylim(0, 1)
-    ax.set_title(f"Agent Comparison — {summary['benchmark']['site']}", pad=20)
-    ax.legend(loc="lower right")
-    plt.tight_layout()
-    plt.savefig(charts_dir / "radar_comparison.png", dpi=150)
+def relative_chart_data(summary: dict) -> list:
+    """One row per metric: label, each arm's score against the better arm, and each arm's raw value as text."""
+    bu, ri = summary["browseruse"], summary["rindler"]
+    rows = []
+    for label, value, lower_is_better, show in RELATIVE_METRICS:
+        a, b = relative_scores(value(bu), value(ri), lower_is_better)
+        rows.append({"label": label, "browseruse": a, "rindler": b,
+                     "browseruse_raw": show(value(bu)), "rindler_raw": show(value(ri))})
+    return rows
+
+
+def chart_relative_comparison(summary: dict, charts_dir: Path):
+    """Grouped bars, one pair per metric, each metric scored against the better arm (1.0 = best).
+
+    Both arms are scored the same way on every metric, so neither bar is zero by construction.
+    The raw averages are printed above the bars; the bar height only says how close an arm
+    comes to the better one."""
+    rows = relative_chart_data(summary)
+    labels = [r["label"] for r in rows]
+    bu_scores, ri_scores = [r["browseruse"] for r in rows], [r["rindler"] for r in rows]
+    bu_raw, ri_raw = [r["browseruse_raw"] for r in rows], [r["rindler_raw"] for r in rows]
+
+    x = np.arange(len(labels))
+    width = 0.36
+    fig, ax = plt.subplots(figsize=(8.5, 5.4))
+    bars = (
+        ax.bar(x - width / 2 - 0.01, bu_scores, width, label="BrowserUse", color=COLORS["browseruse"]),
+        ax.bar(x + width / 2 + 0.01, ri_scores, width, label="Rindler", color=COLORS["rindler"]),
+    )
+    for group, raws in zip(bars, (bu_raw, ri_raw)):
+        for bar, raw in zip(group, raws):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02, raw,
+                    ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1.18)
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_ylabel("Score against the better arm (1.0 = best)")
+    ax.yaxis.grid(True, color="#dddddd", linewidth=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    n_tasks = summary["benchmark"].get("total_tasks")
+    ax.set_title(f"Agent Comparison — {summary['benchmark']['site']}"
+                 + (f" ({n_tasks} task{'s' if n_tasks != 1 else ''})" if n_tasks else ""))
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=2, frameon=False)
+    fig.text(0.5, 0.01,
+             "Higher is better on every axis. Success: value / best. Steps, duration, cost: best / value.\n"
+             "The number above each bar is the arm's raw average.",
+             ha="center", va="bottom", fontsize=8, color="#555555")
+    plt.tight_layout(rect=(0, 0.07, 1, 1))
+    plt.savefig(charts_dir / "relative_comparison.png", dpi=150)
     plt.close()
 
 
@@ -237,15 +271,15 @@ def main():
         chart_grouped_bars(summary, charts_dir, "cost_usd", "Cost (USD)", "Cost per Task", "cost_per_task.png")
         print("  cost_per_task.png")
     else:
-        print("  only one arm ran: skipping the per-task and radar comparisons")
+        print("  only one arm ran: skipping the comparison charts")
 
     chart_failure_categories(summary, charts_dir, "browseruse")
     chart_failure_categories(summary, charts_dir, "rindler")
     print("  failure_categories (if applicable)")
 
     if both_ran(summary):
-        chart_radar(summary, charts_dir)
-        print("  radar_comparison.png")
+        chart_relative_comparison(summary, charts_dir)
+        print("  relative_comparison.png")
 
     chart_token_usage(summary, charts_dir)
     print("  token_usage.png")

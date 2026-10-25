@@ -71,6 +71,7 @@ A step is one model turn. The Rindler session start is logged as step 0 and not 
 The mapping, the extractor and `instructions/prose.yaml` were last checked against the live site on 2026-10-24 (see the commit history for what was fixed).
 
 - `instructions/prose-hard.yaml` is **not** current. Its puzzles were built on March prices (brushes $72, now $85, and a new $26 eye patch) and need new answers: the exact-$107 cart, the best cart under $200, three brushes totalling $216, and the price-per-ounce task.
+- prose.com renamed its candle from "Prose Candle" to "Arcadia Candle" (same $52.00 price, 8.6 fl oz). `instructions/prose.yaml` now uses the new name; `prose-hard.yaml` still refers to "the candle" generically.
 - The mapping has no action to type into a form field, so tasks that need typing (the gift card recipient name) can only be done by the BrowserUse arm.
 
 ## Tests

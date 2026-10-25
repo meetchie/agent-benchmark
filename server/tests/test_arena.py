@@ -132,8 +132,121 @@ def test_analyze_runs_reads_the_march_archive_and_new_runs_side_by_side(tmp_path
     out = capsys.readouterr().out
     rows = [l for l in out.splitlines() if l.startswith("| vhlistings_bundle_promo")]
     assert len(rows) == 2  # March (model "-") and the new run are separate rows
-    assert any("| -" in r and "| 66" in r for r in rows)
-    assert any("claude-sonnet-5-5" in r and "| 1 " in r and "0%" in r for r in rows)
+    march = next(r for r in rows if "claude-sonnet-5-5" not in r)
+    new_run = next(r for r in rows if "claude-sonnet-5-5" in r)
+    assert [c.strip() for c in march.split("|")[3:5]] == ["-", "66"]
+    assert march.split("|")[5].strip() == "65/66 (98.5%)"   # Judge Pass, then Reported (the agents' own claims)
+    assert march.split("|")[6].strip() == "66/66 (100.0%)"
+    assert new_run.split("|")[5].strip() == "0/1 (0.0%)"      # the judge failed the new run
+
+
+def run_row(agent, verdict="PASS", success=True, when=None, scenario="s", model=None, cost=0.1):
+    return {"agent": agent, "scenario": scenario, "model": model, "success": success, "judge_verdict": verdict,
+            "steps": 4, "cost_usd": cost, "duration_s": 10.0, "timestamp": when}
+
+
+def test_table_shows_counts_with_percentages_and_names_the_agents_own_claim_reported(capsys):
+    runs = [run_row("RINDLER", "PASS"), run_row("RINDLER", "PASS"), run_row("RINDLER", "FAIL"),
+            run_row("RINDLER", "ERROR"), run_row("BROWSERUSE", "FAIL", success=True), run_row("BROWSERUSE", None, success=False)]
+    table = analyze_runs.format_table(analyze_runs.aggregate_runs(runs))
+    header = table.splitlines()[0]
+    assert "Success" not in header
+    assert [c.strip() for c in header.split("|")[4:7]] == ["Runs", "Judge Pass", "Reported"]
+    rindler = next(l for l in table.splitlines() if "RINDLER" in l)
+    assert "2/3 (66.7%)" in rindler and "4/4 (100.0%)" in rindler  # ERROR is not judged, but the run counts
+    browseruse = next(l for l in table.splitlines() if "BROWSERUSE" in l)
+    assert "0/1 (0.0%)" in browseruse and "1/2 (50.0%)" in browseruse
+    notes = analyze_runs.table_notes(analyze_runs.aggregate_runs(runs))
+    assert "fewer judged runs than runs" in notes
+    assert "fewer judged" not in analyze_runs.table_notes(analyze_runs.aggregate_runs([run_row("RINDLER")]))
+    assert "n/a" in analyze_runs.format_table(analyze_runs.aggregate_runs([run_row("RINDLER", None)]))
+
+
+def test_parse_when_takes_a_date_or_a_date_and_time():
+    from datetime import datetime
+
+    assert analyze_runs.parse_when("2026-03-31") == datetime(2026, 3, 31)
+    assert analyze_runs.parse_when("2026-03-31", end_of_day=True) > datetime(2026, 3, 31, 23, 59, 59)
+    assert analyze_runs.parse_when("2026-03-31 00:28:27") == datetime(2026, 3, 31, 0, 28, 27)
+    assert analyze_runs.parse_when("2026-03-31T00:28:27") == datetime(2026, 3, 31, 0, 28, 27)
+    assert analyze_runs.parse_when("2026-03-31 00:28") == datetime(2026, 3, 31, 0, 28)
+    assert analyze_runs.parse_when("2026-03-31 00:28", end_of_day=True) == datetime(2026, 3, 31, 0, 28)
+    for bad in ("2026-3-31 x", "31/03/2026", "yesterday", ""):
+        with pytest.raises(ValueError):
+            analyze_runs.parse_when(bad)
+
+
+def test_since_and_until_are_inclusive_and_drop_runs_with_no_time():
+    from datetime import datetime
+
+    at = lambda h, m, s: run_row("RINDLER", when=datetime(2026, 3, 31, h, m, s))
+    runs = [at(0, 28, 26), at(0, 28, 27), at(1, 0, 0), at(23, 59, 59), run_row("RINDLER", when=None)]
+    since = analyze_runs.parse_when("2026-03-31 00:28:27")
+    assert len(analyze_runs.filter_runs(runs, since=since)) == 3          # not the 00:28:26 one; time-less run dropped
+    assert len(analyze_runs.filter_runs(runs, until=analyze_runs.parse_when("2026-03-31", True))) == 4
+    assert len(analyze_runs.filter_runs(runs, until=analyze_runs.parse_when("2026-03-31 01:00:00"))) == 3
+    assert len(analyze_runs.filter_runs(runs, since=since, until=analyze_runs.parse_when("2026-03-31 01:00:00"))) == 2
+    assert len(analyze_runs.filter_runs(runs)) == 5                       # no time limit, nothing dropped
+    assert len(analyze_runs.filter_runs(runs, agents="browseruse")) == 0
+
+
+def test_since_accepts_a_time_on_the_command_line_and_rejects_nonsense(capsys):
+    analyze_runs.main(["--log-dir", str(ARCHIVE), "--scenarios", "vhlistings_bundle_promo", "--agents", "RINDLER",
+                       "--since", "2026-03-31 00:28:27", "--until", "2026-03-31"])
+    assert "| 60 " in capsys.readouterr().out
+    analyze_runs.main(["--log-dir", str(ARCHIVE), "--scenarios", "vhlistings_bundle_promo", "--agents", "RINDLER",
+                       "--since", "2026-03-31T00:24:15"])
+    assert "| 61 " in capsys.readouterr().out  # the 00:24:15 run is the last of the four earlier ones
+    with pytest.raises(SystemExit):
+        analyze_runs.main(["--since", "last tuesday"])
+    assert "not a date" in capsys.readouterr().err
+
+
+def test_march_headline_prints_59_of_60_against_1_of_60(tmp_path, capsys):
+    analyze_runs.main(["--march-headline"])
+    out = capsys.readouterr().out
+    rows = {l.split("|")[2].strip(): l for l in out.splitlines() if l.startswith("| vhlistings_bundle_promo")}
+    assert set(rows) == {"BROWSERUSE", "RINDLER"}
+    assert "| 60 " in rows["RINDLER"] and "59/60 (98.3%)" in rows["RINDLER"]
+    assert "| 60 " in rows["BROWSERUSE"] and "1/60 (1.7%)" in rows["BROWSERUSE"]
+    assert "$0.1366" in rows["RINDLER"] and "$0.7130" in rows["BROWSERUSE"]       # the README's $0.14 vs $0.71
+    assert "Headline (judge pass): BROWSERUSE 1/60 (1.7%) vs RINDLER 59/60 (98.3%)" in out
+    assert "120 runs" in out and "Warning" not in out
+
+    # The set is exact: 60 per agent, the first Rindler log is 00:28:27 and the four earlier ones are out.
+    runs = [analyze_runs.parse_log_file(p) for p in sorted(ARCHIVE.glob("arena_*.log"))]
+    picked = analyze_runs.filter_runs(runs, agents=analyze_runs.MARCH_HEADLINE["agents"],
+                                      scenarios=analyze_runs.MARCH_HEADLINE["scenario"],
+                                      since=analyze_runs.MARCH_HEADLINE["since"], until=analyze_runs.MARCH_HEADLINE["until"])
+    rindler = sorted(Path(r["path"]).name for r in picked if r["agent"] == "RINDLER")
+    assert len(rindler) == 60
+    assert rindler[0] == "arena_rindler_vhlistings_20260331_002827.log" and rindler[-1].endswith("_20260331_032405.log")
+    assert sum(r["agent"] == "BROWSERUSE" for r in picked) == 60
+
+    # Newer runs of the same scenario never leak into the March headline, even from a log dir given with it.
+    scenario = get_scenario("vhlistings_bundle_promo")
+    agent = DummyAgent(run_id="r3", goal=scenario.goal, lane="RINDLER")
+    sample_events(agent)
+    arena.save_log(agent, {"success": True}, 10.0, scenario, arena.calculate_totals(agent.telemetry_events),
+                   judge_result={"verdict": "PASS", "reason": "ok"}, log_dir=str(tmp_path))
+    analyze_runs.main(["--march-headline", "--log-dir", str(ARCHIVE), "--log-dir", str(tmp_path)])
+    assert "59/60 (98.3%)" in capsys.readouterr().out
+
+
+def test_march_headline_warns_when_the_archive_is_short(tmp_path, capsys):
+    for name in ("arena_rindler_vhlistings_20260331_002827.log", "arena_browseruse_vhlistings_20260331_005641.log"):
+        (tmp_path / name).write_text((ARCHIVE / name).read_text())
+    analyze_runs.main(["--march-headline", "--log-dir", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert "Warning: RINDLER has 1 runs here, the headline uses 60" in out
+    assert "Warning: BROWSERUSE has 1 runs here, the headline uses 60" in out
+
+
+def test_march_headline_is_not_combined_with_other_filters(capsys):
+    for extra in (["--agents", "RINDLER"], ["--scenarios", "x"], ["--since", "2026-03-01"], ["--until", "2026-04-01"]):
+        with pytest.raises(SystemExit):
+            analyze_runs.main(["--march-headline", *extra])
+        assert "--march-headline selects its own runs" in capsys.readouterr().err
 
 
 def test_arena_cli_lists_and_validates(capsys):

@@ -121,12 +121,12 @@ tasks:
   # Task 5: Add candle to cart
   # --------------------------------------------------------------------------
   - id: add-candle
-    name: Add the Prose Candle to cart
+    name: Add the Arcadia Candle to cart
     goal: |
       Go to prose.com.
 
       1. Navigate to the accessories section.
-      2. Find the Prose Candle product (8.6 oz).
+      2. Find the Arcadia Candle (8.6 fl oz).
       3. Click "Add to cart".
       4. Navigate to the cart to verify the item was added.
 
@@ -134,9 +134,9 @@ tasks:
     start_url: https://www.prose.com
     success_criteria: |
       The task is SUCCESSFUL if and only if ALL of these conditions are met:
-      1. The agent navigated to the Prose Candle product page
+      1. The agent navigated to the Arcadia Candle product page
       2. The "Add to cart" button was clicked
-      3. The cart was viewed and contains a Prose Candle at $52.00
+      3. The cart was viewed and contains an Arcadia Candle at $52.00
 
       The task FAILS if:
       - The wrong product was added
@@ -223,7 +223,7 @@ tasks:
       1. Navigate to the accessories section.
       2. Add the Hair Towel Wrap ($35.00) to cart.
       3. Navigate back to accessories.
-      4. Add the Prose Candle ($52.00) to cart.
+      4. Add the Arcadia Candle ($52.00) to cart.
       5. Navigate to the brushes page.
       6. Select any brush variant you prefer and add it to cart ($85.00).
       7. Navigate to the cart to verify all 3 items are present.
@@ -233,7 +233,7 @@ tasks:
     success_criteria: |
       The task is SUCCESSFUL if and only if ALL of these conditions are met:
       1. The Hair Towel Wrap ($35.00) is in the cart
-      2. The Prose Candle ($52.00) is in the cart
+      2. The Arcadia Candle ($52.00) is in the cart
       3. A brush variant ($85.00) is in the cart
       4. The cart contains exactly 3 items
       5. The total is approximately $172.00

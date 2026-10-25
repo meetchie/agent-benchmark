@@ -40,6 +40,7 @@ uv run python arena.py --list-scenarios --tag e-commerce
 uv run python arena.py --agent RINDLER    --scenario vhlistings_product_attribute_search
 uv run python arena.py --agent BROWSERUSE --scenario vhlistings_product_attribute_search
 uv run python analyze_runs.py                               # table over March + new runs
+uv run python analyze_runs.py --march-headline              # the March headline: Rindler 59/60 vs BrowserUse 1/60
 ```
 
 ### The two arms
@@ -80,7 +81,7 @@ After a run the judge (`run_judge` in `arena.py`, the March prompt unchanged, ve
 
 New runs are written to `arena_runs/arena_<agent>_<site>_<YYYYmmdd_HHMMSS>.log` (gitignored). The format is the March one: header lines (`Agent:`, `Scenario:`, `Goal:`, `Start URL:`, `Duration:`, `Agent Reported Success:`), the `--- JUDGE EVALUATION ---` block, `Token Burn:` and `Cost:`, then `Telemetry Events:` followed by a JSON list of `step_start` / `step_end` events. New logs add `Agent Model:`, `Max Steps:`, `Mapping:` (RINDLER), `Judge Model:`, `Judge Cost:` and `Final Report:`; older readers ignore them. Each `step_end` carries `tokens_input` (all prompt tokens, cache reads and writes included), `tokens_output`, `tokens_cache_read`, `tokens_cache_write` and `cost_usd` (from `constants.COST_RATES`).
 
-`analyze_runs.py` reads `arena_logs/` and `arena_runs/` (or any `--log-dir`, repeatable) and groups runs by scenario, agent and agent model, so the March runs (model not recorded, shown as `-`) never mix with new ones. Filters: `--agents`, `--scenarios`, `--since YYYY-MM-DD`. The log viewer in `../viewer` reads the same format: copy logs into `viewer/public/logs/` and add them to its `manifest.json`.
+`analyze_runs.py` reads `arena_logs/` and `arena_runs/` (or any `--log-dir`, repeatable) and groups runs by scenario, agent and agent model, so the March runs (model not recorded, shown as `-`) never mix with new ones. Judge Pass and Reported are shown as counts with percentages (`59/60 (98.3%)`). Reported is only the agent's own claim of success. Filters: `--agents`, `--scenarios`, `--since` and `--until` (a date, or a date and time such as `"2026-03-31 00:28:27"`, both inclusive). `uv run python analyze_runs.py --march-headline` prints the March headline table, the exact set behind it (all 60 BrowserUse and the last 60 Rindler `vhlistings_bundle_promo` logs, Rindler 59/60 against BrowserUse 1/60), from `arena_logs/` only. The log viewer in `../viewer` reads the same format: copy logs into `viewer/public/logs/` and add them to its `manifest.json`.
 
 ## Local Rindler (`rindler_local/`)
 
@@ -139,7 +140,7 @@ The store no longer has a chain belt under $35. Both Rindler runs added "Gravech
 
 ## The March 2026 results (`arena_logs/`)
 
-`arena_logs/` holds the 137 archived March logs (131 runs plus 6 Rindler context logs) and stays untouched. The headline result, vhlistings_bundle_promo, is Rindler 59/60 judge passes against BrowserUse 1/60, at $0.14 vs $0.71 mean cost and 70 s vs 307 s mean duration. Read it with these caveats, all checked in the code and history:
+`arena_logs/` holds the 137 archived March logs (131 runs plus 6 Rindler context logs) and stays untouched. The headline result, vhlistings_bundle_promo, is Rindler 59/60 judge passes against BrowserUse 1/60 (`uv run python analyze_runs.py --march-headline` prints it), at $0.14 vs $0.71 mean cost and 70 s vs 307 s mean duration. Read it with these caveats, all checked in the code and history:
 
 1. The Rindler arm drove a hand-mapped site (25 mapping versions tuned on this exact site and task); BrowserUse had no mapping. The VIP criterion is met by the mapping's own cleanup step.
 2. The task text both arms got contained Rindler tool vocabulary ("Start a session", "call view_cart", "remove_from_cart"). It has since been removed from the scenarios.

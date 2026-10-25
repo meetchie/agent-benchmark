@@ -6,9 +6,9 @@ synthetic ``done``. The model never sees HTML or selectors, only the JSON envelo
 tool returns, and it never sees a tool the mapping does not define. One tool call per
 model turn; the step budget is the same as the BrowserUse arm's.
 
-SYSTEM_PROMPT describes the envelope the host actually returns (see the arena note in
-rindler_local/host.py). tests/test_rindler_arm.py checks every field the host returns
-is named in it.
+SYSTEM_PROMPT describes the envelope the host actually returns (the shape is documented
+at the top of rindler_local/host.py). tests/test_rindler_arm.py checks every field the host
+returns is named in it.
 """
 
 from __future__ import annotations

@@ -140,6 +140,34 @@ def test_a_skipped_stand_in_is_never_loaded_as_a_cached_result(tmp_path):
     assert results.load_cached(rdir, "browseruse", "t1", model="m", max_steps=12) is None
 
 
+def test_relative_scores_put_the_better_arm_at_one_on_every_metric():
+    from visualize import relative_scores
+
+    assert relative_scores(0.3, 0.9, lower_is_better=False) == pytest.approx((1 / 3, 1.0))
+    assert relative_scores(9, 3, lower_is_better=True) == pytest.approx((1 / 3, 1.0))
+    assert relative_scores(3, 9, lower_is_better=True) == pytest.approx((1.0, 1 / 3))
+    assert relative_scores(5, 5, lower_is_better=True) == (1.0, 1.0)      # a tie is not a loss
+    assert relative_scores(0.0, 0.0, lower_is_better=False) == (1.0, 1.0)  # both failed everything
+    assert relative_scores(0.0, 0.04, lower_is_better=True) == (1.0, 0.0)  # a free run against a paid one
+
+
+def test_the_comparison_chart_scores_both_arms_not_only_rindler():
+    """The March radar scored every metric as a reduction against BrowserUse, so its BrowserUse polygon
+    collapsed to the centre. Both arms now get a real score on every metric."""
+    from visualize import relative_chart_data
+
+    bu = [make_record(t, agent="browseruse", verdict="pass", steps=9, cost=0.4, duration_s=60) for t in TASKS]
+    ri = [make_record(t, agent="rindler", verdict="fail", steps=3, cost=0.04, duration_s=30) for t in TASKS]
+    rows = {r["label"].replace("\n", " "): r for r in
+            relative_chart_data(results.build_summary("shop", "d", TASKS, bu, ri, model="m", judge_model="m"))}
+    assert list(rows) == ["Success rate", "Steps per task", "Duration per task", "Cost per task"]
+    assert (rows["Success rate"]["browseruse"], rows["Success rate"]["rindler"]) == (1.0, 0.0)  # BrowserUse is better here
+    for metric in ("Steps per task", "Duration per task", "Cost per task"):
+        assert rows[metric]["rindler"] == 1.0 and 0 < rows[metric]["browseruse"] < 1.0
+    assert rows["Steps per task"]["browseruse"] == pytest.approx(1 / 3)
+    assert rows["Cost per task"]["browseruse_raw"] == "$0.4000" and rows["Steps per task"]["rindler_raw"] == "3.0"
+
+
 def test_visualize_draws_every_chart_from_the_new_summary(tmp_path):
     """visualize.py reads summary.json; run it for real on a two-arm and a one-arm summary."""
     from pathlib import Path
@@ -155,7 +183,7 @@ def test_visualize_draws_every_chart_from_the_new_summary(tmp_path):
 
     for name, summary, expected in (
         ("both", both, {"success_rate.png", "steps_per_task.png", "duration_per_task.png", "cost_per_task.png",
-                        "radar_comparison.png", "token_usage.png", "failure_categories_browseruse.png"}),
+                        "relative_comparison.png", "token_usage.png", "failure_categories_browseruse.png"}),
         ("one", one_arm, {"success_rate.png", "token_usage.png", "failure_categories_browseruse.png"}),
     ):
         rdir = tmp_path / name

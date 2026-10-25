@@ -1,6 +1,6 @@
 {
   "_notes": [
-    "Checked against the live site on 2026-10-24 by driving each action without a model.",
+    "Checked against the live site on 2026-10-24 by driving each action through the local host without a model. The notes below list what had drifted since March and what was fixed.",
     "page_extractor: the cart page no longer exposes 'Remove <item>' links in its accessibility tree, so view_cart returned no cart_items. On /cart the extractor now also reads Shopify's /cart.js and returns cart_item_count and cart_lines (name, quantity, line_price). The /checkouts/ branch is the March extractor unchanged.",
     "context_extractors: the March server never ran them. cart_badge used 'link[name^=Cart]' (an accessibility-tree notation that matches nothing as a selector); it now reads #cart-icon-bubble. bundle_progress ('generic:has-text(Add)') could not match anything and is removed.",
     "actions.next_page / prev_page: the March selectors are 'link[name=\"Next\"]' (accessibility-tree notation, matches nothing as a selector) and the text 'Next', but the pagination arrows carry no text, only aria-label 'Next page' / 'Previous page'. A css fallback on that aria-label is added after the March ones.",
