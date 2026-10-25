@@ -125,7 +125,9 @@ vhlistings.com, each action driven without a model:
 | apply_promo | runs, but the site rejects the code `SPRING` ("Enter a valid discount code or gift card"), so `vhlistings_bundle_promo` cannot pass today on either arm |
 | VIP Membership | still added to the cart by the site and re-added whenever /cart is opened; `checkout` still removes it before the order summary |
 
-shipt.com, driven without a model: start_session, update_address (with the placeholder address), search_products (the store slug defaults to `target`), add_to_cart and view_cart work. checkout, remove_from_cart, update_quantity and select_store were not tried, and no shipt scenario has been run with a model since March.
+shipt.com, driven without a model (checked 2026-10-25): start_session, update_address, search_products (the store slug defaults to `target`), add_to_cart and view_cart work. checkout, remove_from_cart, update_quantity and select_store were not tried.
+
+update_address types the address and clicks the first suggestion of the site's address search, so the address must be a real one. The placeholder the scenarios used until 2026-10-25, 1 Main St, Springfield, IL 62701, is not one the address search knows: its first suggestion was the bare street "Main Street, Springfield, IL", which Shipt refuses ("Please enter and select a valid address."), so no shipt scenario could get past its first step. Every scenario now uses 401 S 2nd St, Springfield, IL 62701, the Illinois State Capitol, a public building that Shipt suggests first and accepts. A Rindler run of `shipt_add_to_cart` then passed on 2026-10-25 (claude-sonnet-5-5, 5 steps, 57 s, $0.0185 agent and $0.0069 judge). The archived March shipt logs keep the old placeholder.
 
 ### First local runs (2026-10-24, claude-sonnet-5-5 on both arms and the judge)
 

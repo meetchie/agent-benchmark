@@ -324,17 +324,20 @@ class FakeAgent:
 
     instances = []
 
-    def __init__(self, *, steps=3, done=True, **kwargs):
+    def __init__(self, *, steps=3, done=True, hang_at=None, **kwargs):
         self.kwargs = kwargs
         self.history = FakeHistory(done=done)
         self.token_cost_service = FakeTokenService()
         self.steps = steps
+        self.hang_at = hang_at  # a step that never ends (until the run is cancelled)
         FakeAgent.instances.append(self)
 
     async def run(self, max_steps, on_step_start, on_step_end):
         self.max_steps = max_steps
         for i in range(min(self.steps, max_steps)):
             await on_step_start(self)
+            if self.hang_at == i + 1:
+                await asyncio.sleep(60)
             self.history._actions.append({["navigate", "click", "done"][i % 3]: {"index": i}})
             s = self.token_cost_service.summary
             self.token_cost_service.summary = FakeSummary(s.total_prompt_tokens + 1000, s.total_prompt_cached_tokens + 400,
@@ -408,3 +411,12 @@ async def test_browseruse_arm_reports_running_out_of_steps(no_browser):
     assert FakeAgent.instances[0].kwargs["initial_actions"] is None
     assert result["success"] is False and result["steps"] == 2
     assert "Reached max_steps (2) without calling done" in result["errors_detected"]
+
+
+async def test_a_timed_out_browseruse_run_is_not_reported_as_out_of_steps(no_browser):
+    agent = BrowserUseTelemetricAgent(run_id="r", goal="g", max_steps=30, timeout_s=1,
+                                      agent_factory=lambda **kw: FakeAgent(done=False, hang_at=2, **kw))
+    result = await agent.run(start_url=None)
+    assert result["errors_detected"] == ["run stopped after the 1s time limit"]  # this text reaches the judge
+    assert result["message"] == "Agent did not finish within the 1s time limit"
+    assert result["success"] is False

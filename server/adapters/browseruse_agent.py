@@ -95,6 +95,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         }
         start_time = datetime.now()
         history = None
+        timed_out = False
         counted = llm.Usage()
         try:
             agent = self._make_agent(start_url, profile)
@@ -145,13 +146,14 @@ class BrowserUseTelemetricAgent(BaseAgent):
             try:
                 history = await (asyncio.wait_for(run, timeout=self.timeout_s) if self.timeout_s else run)
             except asyncio.TimeoutError:
+                timed_out = True
                 result["errors_detected"].append(f"run stopped after the {self.timeout_s:.0f}s time limit")
                 history = getattr(agent, "history", None)
 
             self.usage = await self._usage_now(agent)
             leftover = usage_delta(self.usage, counted)
             self._add_leftover(leftover)
-            self._read_history(history, result)
+            self._read_history(history, result, timed_out=timed_out)
         except Exception as e:
             result["message"] = f"Error: {e}"
             result["errors_detected"].append(str(e))
@@ -184,7 +186,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
         last["tokens_output"] = (last.get("tokens_output") or 0) + leftover.output_tokens
         last["cost_usd"] = (last.get("cost_usd") or 0.0) + (leftover.cost_usd(self.model) or 0.0)
 
-    def _read_history(self, history, result: Dict[str, Any]) -> None:
+    def _read_history(self, history, result: Dict[str, Any], timed_out: bool = False) -> None:
         """Success and the final report come from browser-use's own done action."""
         if history is None:
             result["message"] = "no history"
@@ -209,6 +211,8 @@ class BrowserUseTelemetricAgent(BaseAgent):
         result["success"] = success
         if done:
             result["message"] = "Agent finished and reported " + ("success" if success else "failure")
+        elif timed_out:  # the time limit, already in errors_detected, stopped it, not the step budget
+            result["message"] = f"Agent did not finish within the {self.timeout_s:.0f}s time limit"
         else:
             result["message"] = f"Agent did not finish within {self.max_steps} steps"
             result["errors_detected"].append(f"Reached max_steps ({self.max_steps}) without calling done")

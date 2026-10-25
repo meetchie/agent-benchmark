@@ -54,14 +54,14 @@ register_scenario(Scenario(
     goal="""You are shopping on Shipt (shipt.com).
 
 1. Go to shipt.com.
-2. Set the delivery address to "1 Main St, Springfield, IL 62701".
+2. Set the delivery address to "401 S 2nd St, Springfield, IL 62701".
 3. Search for "Organic Bananas".
 4. Add the first result to your cart.
 5. Navigate to the cart/bag page and verify the item is there.
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to 1 Main St, Springfield, IL 62701
+1. The delivery address was set to 401 S 2nd St, Springfield, IL 62701
 2. A search for "Organic Bananas" was performed
 3. An organic bananas product was added to the cart
 4. The cart was viewed and contains at least one bananas product
@@ -80,7 +80,7 @@ register_scenario(Scenario(
     goal="""You are shopping on Shipt (shipt.com).
 
 1. Go to shipt.com.
-2. Set the delivery address to "1 Main St, Springfield, IL 62701".
+2. Set the delivery address to "401 S 2nd St, Springfield, IL 62701".
 
 3. Search for "Granny Smith Apples".
    - PREFERRED: Add 6 loose individual Granny Smith apples.
@@ -388,7 +388,7 @@ register_scenario(Scenario(
     tags=["food-delivery", "cart", "restaurant"],
     goal="""Go to doordash.com.
 
-First, set your delivery address to: 1 Main St, Springfield, IL 62701
+First, set your delivery address to: 401 S 2nd St, Springfield, IL 62701
 Wait for the address to be confirmed and restaurants to load.
 
 Search for "pizza" restaurants in your area.
@@ -406,7 +406,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to 1 Main St, Springfield, IL 62701
+1. The delivery address was set to 401 S 2nd St, Springfield, IL 62701
 2. A search for "pizza" restaurants was performed
 3. A pizza restaurant with 4+ stars was selected
 4. A pizza item was added to the cart
@@ -426,7 +426,7 @@ register_scenario(Scenario(
     tags=["food-delivery", "cart", "restaurant"],
     goal="""Go to grubhub.com.
 
-First, set your delivery address to: 1 Main St, Springfield, IL 62701
+First, set your delivery address to: 401 S 2nd St, Springfield, IL 62701
 Wait for the address to be confirmed.
 
 Search for "Chinese food" restaurants.
@@ -444,7 +444,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to 1 Main St, Springfield, IL 62701
+1. The delivery address was set to 401 S 2nd St, Springfield, IL 62701
 2. A search for "Chinese food" restaurants was performed
 3. A Chinese restaurant with good rating was selected
 4. A dish (e.g., General Tso's Chicken or similar) was added to the cart
@@ -464,7 +464,7 @@ register_scenario(Scenario(
     tags=["food-delivery", "cart", "restaurant"],
     goal="""Go to ubereats.com.
 
-First, set your delivery address to: 1 Main St, Springfield, IL 62701
+First, set your delivery address to: 401 S 2nd St, Springfield, IL 62701
 Wait for the address to be confirmed and nearby restaurants to load.
 
 Search for "burger" restaurants.
@@ -482,7 +482,7 @@ After adding to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to 1 Main St, Springfield, IL 62701
+1. The delivery address was set to 401 S 2nd St, Springfield, IL 62701
 2. A search for "burger" restaurants was performed
 3. A burger restaurant was selected
 4. A burger item was added to the cart
@@ -502,7 +502,7 @@ register_scenario(Scenario(
     tags=["grocery", "cart", "food-delivery"],
     goal="""Go to instacart.com.
 
-First, set your delivery address to: 1 Main St, Springfield, IL 62701
+First, set your delivery address to: 401 S 2nd St, Springfield, IL 62701
 Wait for nearby stores to load.
 
 Select a store (preferably a major grocery store like Stop & Shop, Whole Foods, or similar).
@@ -521,7 +521,7 @@ After clicking add to cart, look for ANY of these success indicators:
 
 VERIFICATION: After completing the task, navigate to the cart/bag page and report the exact cart contents including each product name, quantity, and price.""",
     success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
-1. The delivery address was set to 1 Main St, Springfield, IL 62701
+1. The delivery address was set to 401 S 2nd St, Springfield, IL 62701
 2. A grocery store was selected
 3. Milk was searched for or found in the dairy section
 4. A gallon of whole or 2% milk was added to the cart

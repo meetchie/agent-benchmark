@@ -20,9 +20,12 @@ TOOL_NAMES = {n for n in TOOL_NAMES if "_" in n}
 # ZIPs are kept as they are. Streets are not named here at all: every street address a scenario
 # contains must be the placeholder, which rules out any old one without spelling it.
 OLD_PLACES = ("San Mateo", "94403", "Cambridge", "02139")
-PLACEHOLDER_STREET = "1 Main St"
+# A public building (the Illinois State Capitol), so shipt.com's address search offers it as its
+# first suggestion and accepts it. An address that does not exist is rejected there.
+PLACEHOLDER = "401 S 2nd St, Springfield, IL 62701"
+PLACEHOLDER_STREET = "401 S 2nd St"
 STREET_ADDRESS = re.compile(
-    r"\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Z][A-Za-z]*\s+){1,3}"
+    r"\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?:(?:[A-Z][A-Za-z]*|\d+(?:st|nd|rd|th))\s+){1,3}"
     r"(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Way|Pl|Place|Ct|Court)\b"
 )
 
@@ -49,13 +52,14 @@ def test_one_placeholder_address_everywhere(name):
     others = [a for a in street_addresses(text) if a != PLACEHOLDER_STREET]
     assert not others, f"{name} mentions a street address other than the placeholder: {others}"
     criteria = scenario.success_criteria or ""
-    if "1 Main St" in scenario.goal and "address" in criteria.lower():
-        assert "1 Main St, Springfield, IL 62701" in criteria, f"{name}: criteria check a different address"
+    if PLACEHOLDER_STREET in scenario.goal and "address" in criteria.lower():
+        assert PLACEHOLDER in criteria, f"{name}: criteria check a different address"
 
 
 def test_the_street_check_finds_street_addresses_and_only_those():
     text = "Ship to 1 Main St, Springfield, IL 62701, or to 42 N Elm Street; 3 items, 2 days."
     assert street_addresses(text) == ["1 Main St", "42 N Elm Street"]
+    assert street_addresses(f"Deliver to {PLACEHOLDER}, then 12 W 3rd Ave") == [PLACEHOLDER_STREET, "12 W 3rd Ave"]
     assert street_addresses("Order 3 Grey Jackets in size M") == []
     assert street_addresses("Deliver to 1 Main St.") == ["1 Main St"]
 
