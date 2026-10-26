@@ -4,14 +4,16 @@ BrowserUse arm: browser-use driving a local headless Chromium on its own (no sit
 The browser comes from browser_env.browser_profile() (local, headless by default, the
 macOS keychain flags always on) and the model from llm.agent_llm(): BENCHMARK_AGENT_MODEL,
 else claude-sonnet-5-5. Per-step tokens are read from browser-use's own token counter at
-the end of every step, so each step_end carries its real token count and cost.
+the end of every step, so each step_end carries its real token count and cost. Each
+step_start carries the step's actions with their arguments (action_data), which the judge
+reads, as it reads a Rindler tool call's input.
 """
 
 from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import llm
 from browser_env import agent_files_dir, browser_profile, cleanup_profile, track_agent_dir
@@ -39,6 +41,29 @@ def usage_delta(now: llm.Usage, before: llm.Usage) -> llm.Usage:
 
 def prompt_tokens(usage: llm.Usage) -> int:
     return usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
+
+
+def step_actions(model_actions: list) -> List[Dict[str, Any]]:
+    """browser-use's records of a step's actions as {"action", "params", "element"} dicts.
+
+    A record from history.model_actions() is {"click": {"index": 12}, "interacted_element": ...}.
+    "element" is the accessible name of the element the action targeted, when it has one: the
+    index means nothing outside that page, the name says what was clicked or typed into.
+    """
+    out: List[Dict[str, Any]] = []
+    for record in model_actions:
+        if not isinstance(record, dict):
+            continue
+        name = next((k for k in record if k != "interacted_element"), None)
+        if name is None:
+            continue
+        params = record[name]
+        action: Dict[str, Any] = {"action": name, "params": params if isinstance(params, dict) else {}}
+        label = " ".join(str(getattr(record.get("interacted_element"), "ax_name", None) or "").split())
+        if label:
+            action["element"] = label
+        out.append(action)
+    return out
 
 
 class BrowserUseTelemetricAgent(BaseAgent):
@@ -101,24 +126,31 @@ class BrowserUseTelemetricAgent(BaseAgent):
             agent = self._make_agent(start_url, profile)
             track_agent_dir(profile, agent)  # its step screenshots go with the profile
 
+            recorded = 0  # how many actions browser-use had recorded when this step started
+
             async def on_step_start(agent):
-                action_data = None
-                self.log_step_start(action_type=None, action_data=action_data)
+                nonlocal recorded
+                try:
+                    recorded = len(agent.history.model_actions())
+                except Exception:
+                    pass
+                self.log_step_start(action_type=None)
                 print(f"[Step {self._current_step_index}] START")
 
             async def on_step_end(agent):
-                nonlocal counted
+                nonlocal counted, recorded
                 observation = None
-                action_type = None
+                actions = []
                 try:
-                    actions = agent.history.model_actions()
-                    if actions and isinstance(actions[-1], dict):
-                        action_type = next(iter(k for k in actions[-1] if k != "interacted_element"), None)
+                    # Only what this step added: a step that failed inside browser-use
+                    # records none, and must not be labelled with the step before it.
+                    actions = step_actions(agent.history.model_actions()[recorded:])
                     extracted = agent.history.extracted_content()
                     if extracted:
                         observation = {"extracted_content": extracted[-1]}
                 except Exception:
                     pass
+                action_type = actions[-1]["action"] if actions else None
                 now = await self._usage_now(agent)
                 step_usage = usage_delta(now, counted)
                 counted = now
@@ -128,12 +160,14 @@ class BrowserUseTelemetricAgent(BaseAgent):
                     observation=observation,
                 )
                 if action_type:
-                    # browser-use only knows a step's action once the step is over; label
-                    # both halves of the step with it (step_start saw the previous one).
+                    # browser-use only knows a step's actions once the step is over. Both
+                    # halves of the step get the last one's name; step_start, the event the
+                    # judge reads, also gets every action with its arguments.
                     event["action_type"] = action_type
                     for earlier in reversed(self.telemetry_events):
                         if earlier.get("event_type") == "step_start" and earlier.get("step_index") == event["step_index"]:
                             earlier["action_type"] = action_type
+                            earlier["action_data"] = actions
                             break
                 event["cost_usd"] = step_usage.cost_usd(self.model) or 0.0
                 event["tokens_cache_read"] = step_usage.cache_read_input_tokens

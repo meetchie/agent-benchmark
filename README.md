@@ -131,7 +131,7 @@ make arena AGENT=BROWSERUSE SCENARIO=vhlistings_product_attribute_search
 make analyze                                  # table over arena_logs/ and arena_runs/
 ```
 
-The judge gets the goal, the scenario's success criteria, the agent's own report and its step trace, and answers PASS or FAIL. It cannot see the site, so a PASS means the judge believed the report. Logs go to `server/arena_runs/` in the same format as the March ones, with a few added fields. [server/README.md](server/README.md) has the flags, the log format and what the mappings look like.
+The judge gets the goal, the scenario's success criteria, the agent's own report and its step trace, and answers PASS or FAIL. Each step in the trace is the action it ran with its arguments, on both arms: `search_products(query="belt")` for Rindler, `navigation(url="https://vhlistings.com/search?q=belt", new_tab=false)` or `click(index=22742) on "ADD TO CART"` for BrowserUse. It cannot see the site, so a PASS means the judge believed the report. Logs go to `server/arena_runs/` in the same format as the March ones, with a few added fields. [server/README.md](server/README.md) has the flags, the log format and what the mappings look like.
 
 ## The prose comparison CLI
 
@@ -194,6 +194,8 @@ On 2026-10-24 the arms were run again in this standalone form (claude-sonnet-5-5
 | prose.com `add-hair-towel` (CLI) | BrowserUse | pass | 7 | 36.4 s | $0.170 |
 | prose.com `add-candle` (CLI) | Rindler | pass | 5 | 16.2 s | $0.017 |
 | prose.com `add-candle` (CLI) | BrowserUse | pass | 6 | 26.7 s | $0.072 |
+
+**What the judge read for these rows.** The judge of these runs saw each step's action name only, not its arguments. That says what a Rindler step did (`search_products`) but not what a BrowserUse step did (`navigation`, `click`). The BrowserUse `vhlistings_add_to_cart` PASS came from a run whose report said it searched; a run on 2026-10-25 that opened the search URL, but did not say so in its report, was failed for never searching. The judge now reads every step's arguments. Re-run on 2026-10-25 with that judge, `vhlistings_add_to_cart` passed on both arms: BrowserUse in 6 steps, 40.3 s, $0.201, the judge citing the `search?q=belt` URL, and Rindler in 6 steps, 34.4 s, $0.021.
 
 **Why the BrowserUse `vhlistings_product_attribute_search` row changed.** It first read 9 steps, 109 s and $0.589, measured before the browser-use adapter fix, when each step took about 2.3 API calls (21 calls for 9 steps: the model answered with the action itself and the adapter asked again to have it wrapped). The row is now the last run on the final code, with one API call per step and no repairs. The two runs before it on that code took 27 steps ($0.586 and $0.709), and all four runs failed. The task cannot be completed on today's store, so how long the agent keeps looking varies from run to run, and 23 or 27 steps against 9 says nothing about speed. The `add-hair-towel` BrowserUse row is also from before the fix (its log shows the old repair calls) and was not re-run.
 

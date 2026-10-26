@@ -138,6 +138,9 @@ async def test_loop_runs_tools_until_done(monkeypatch, mapping):
     # Telemetry: one step per model turn, prompt tokens include cache reads and writes.
     ends = [e for e in agent.telemetry_events if e["event_type"] == "step_end"]
     assert [e["action_type"] for e in ends] == ["search_products", "no_tool_call", "done"]
+    # Each call's input is logged with it; the judge reads it (arena.describe_step).
+    starts = [e for e in agent.telemetry_events if e["event_type"] == "step_start"]
+    assert starts[0]["action_data"] == {"query": "chain belt"}
     assert all(e["tokens_input"] == 160 and e["tokens_output"] == 20 for e in ends)
     assert ends[0]["tokens_cache_read"] == 50 and ends[0]["tokens_cache_write"] == 10
     assert ends[0]["action_category"] == "search" and ends[-1]["action_category"] == "finish"

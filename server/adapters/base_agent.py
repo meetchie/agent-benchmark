@@ -62,7 +62,7 @@ class BaseAgent(ABC):
     
     def _convert_event_to_dict(self, event: TelemetryEvent) -> Dict[str, Any]:
         """Convert TelemetryEvent dataclass to dictionary for JSON serialization."""
-        return {
+        out = {
             'trace_id': event.trace_id,
             'run_id': event.run_id,
             'lane': event.lane,
@@ -76,6 +76,11 @@ class BaseAgent(ABC):
             'action_type': event.action_type,
             'observation_hash': event.observation_hash
         }
+        # The step's arguments (a tool call's input, browser-use's actions): the judge reads
+        # them, so they go in the log as well.
+        if event.action_data is not None:
+            out['action_data'] = event.action_data
+        return out
     
     def log_artifact(self, artifact_type: str, artifact_url: str) -> Dict[str, Any]:
         """

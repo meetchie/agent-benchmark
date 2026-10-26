@@ -107,6 +107,38 @@ ACTION_NORMALIZE = {
     "navigate": "navigation",
 }
 
+# How much of one action the judge reads: the name, its arguments and, for browser-use, the
+# element it targeted. Long arguments (a done message, extracted text) are cut.
+ACTION_TEXT_LIMIT = 120
+
+
+def describe_call(name: Optional[str], args: Any = None, element: Optional[str] = None) -> str:
+    """One action as the judge reads it: search_products(query="belt"),
+    navigation(url="https://vhlistings.com/search?q=belt", new_tab=false), click(index=9) on "Add to cart".
+    An action logged without arguments (the March logs) is its name alone."""
+    name = ACTION_NORMALIZE.get(name, name) or "?"
+    text = name
+    if isinstance(args, dict):
+        text += "(" + ", ".join(f"{k}={json.dumps(v, ensure_ascii=False, default=str)}"
+                                for k, v in args.items() if v is not None) + ")"
+    if element:
+        text += f" on {json.dumps(element, ensure_ascii=False)}"
+    return text if len(text) <= ACTION_TEXT_LIMIT else text[:ACTION_TEXT_LIMIT - 1] + "…"
+
+
+def describe_step(event: Dict[str, Any]) -> str:
+    """A step_start event as the judge reads it. A Rindler step is one tool call (action_type
+    with its input as action_data); a browser-use step lists every action it ran."""
+    data = event.get("action_data")
+    if isinstance(data, list):
+        calls = [describe_call(a.get("action"), a.get("params"), a.get("element"))
+                 for a in data if isinstance(a, dict) and a.get("action")]
+        if calls:
+            return "; ".join(calls)
+    if not event.get("action_type"):
+        return "no action recorded"
+    return describe_call(event["action_type"], data if isinstance(data, dict) else None)
+
 
 def build_judge_prompt(scenario: Scenario, result: Dict[str, Any], telemetry_events: list) -> str:
     """The judge's user prompt: goal, criteria, a log summary and the agent's final report."""
@@ -128,19 +160,17 @@ Look for evidence that each action was performed and verified."""
     if errors_in_log:
         log_summary_parts.append(f"Errors detected: {'; '.join(errors_in_log)}")
 
-    actions_taken = []
-    for event in telemetry_events:
-        if event.get("event_type") == "step_start" and event.get("action_type"):
-            raw_action = event.get("action_type")
-            normalized = ACTION_NORMALIZE.get(raw_action, raw_action)
-            actions_taken.append(f"Step {event.get('step_index')}: {normalized}")
+    # Each step as the action it ran with its arguments, for both arms: a search done by
+    # opening the site's search URL reads as one, like a search_products(query=...) call.
+    actions_taken = [f"Step {event.get('step_index')}: {describe_step(event)}"
+                     for event in telemetry_events if event.get("event_type") == "step_start"]
     if actions_taken:
         # Only show first 10 and last 5 to keep context manageable
         if len(actions_taken) > 15:
             shown_actions = actions_taken[:10] + ["..."] + actions_taken[-5:]
         else:
             shown_actions = actions_taken
-        log_summary_parts.append(f"Actions taken: {', '.join(shown_actions)}")
+        log_summary_parts.append("Actions taken:\n" + "\n".join(shown_actions))
     log_summary = "\n".join(log_summary_parts)
 
     verification_section = ""
@@ -171,8 +201,9 @@ def run_judge(scenario: Scenario, result: Dict[str, Any], telemetry_events: list
               model: Optional[str] = None) -> Dict[str, Any]:
     """Grade one run. Returns {verdict, reason, details, judge_model, judge_cost_usd, judge_usage}.
 
-    The judge reads only the agent's own report and step names; it never looks at the
-    site. verdict is PASS or FAIL, or ERROR when the judge call itself failed.
+    The judge reads only the agent's own report and its steps' actions with their
+    arguments; it never looks at the site. verdict is PASS or FAIL, or ERROR when the
+    judge call itself failed.
     """
     model = (model or "").strip() or llm.model_for("judge")
     prompt = build_judge_prompt(scenario, result, telemetry_events)

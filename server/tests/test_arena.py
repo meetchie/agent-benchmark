@@ -48,7 +48,8 @@ def test_judge_prompt_carries_goal_criteria_actions_and_report():
     assert scenario.goal in prompt and scenario.success_criteria in prompt
     assert "## VERIFICATION FOCUS\n" + scenario.verification_hint in prompt
     assert "Agent reported success: True" in prompt and "Total steps taken: 2" in prompt
-    assert "Actions taken: Step 1: search_products, Step 2: navigation" in prompt
+    # A step reads as the call it made, arguments included; one logged without any keeps its name.
+    assert 'Actions taken:\nStep 1: search_products(query="chain belt")\nStep 2: navigation\n' in prompt
     assert "Errors detected: Reached max_steps" in prompt
     assert prompt.rstrip().endswith("Return your verdict as JSON.")
     assert "## FINAL EXTRACTION / RESULT\nIron Chain Belt $29.00" in prompt
@@ -110,6 +111,8 @@ def test_save_log_round_trips_through_analyze_runs(tmp_path):
         assert line in text.splitlines(), line
     events = json.loads(text.split("Telemetry Events:\n", 1)[1])
     assert len(events) == 4
+    # The arguments the judge read are in the log too.
+    assert events[0]["action_data"] == {"query": "chain belt"} and "action_data" not in events[1]
 
     run = analyze_runs.parse_log_file(Path(path))
     assert run["agent"] == "RINDLER" and run["judge_verdict"] == "PASS" and run["model"] == "claude-sonnet-5-5"
@@ -324,12 +327,14 @@ class FakeAgent:
 
     instances = []
 
-    def __init__(self, *, steps=3, done=True, hang_at=None, **kwargs):
+    def __init__(self, *, steps=3, done=True, hang_at=None, script=None, **kwargs):
         self.kwargs = kwargs
         self.history = FakeHistory(done=done)
         self.token_cost_service = FakeTokenService()
-        self.steps = steps
+        self.steps = len(script) if script is not None else steps
         self.hang_at = hang_at  # a step that never ends (until the run is cancelled)
+        # Per step, the actions browser-use records for it, in its model_actions() shape.
+        self.script = script
         FakeAgent.instances.append(self)
 
     async def run(self, max_steps, on_step_start, on_step_end):
@@ -338,7 +343,10 @@ class FakeAgent:
             await on_step_start(self)
             if self.hang_at == i + 1:
                 await asyncio.sleep(60)
-            self.history._actions.append({["navigate", "click", "done"][i % 3]: {"index": i}})
+            if self.script is not None:
+                self.history._actions.extend(self.script[i])
+            else:
+                self.history._actions.append({["navigate", "click", "done"][i % 3]: {"index": i}})
             s = self.token_cost_service.summary
             self.token_cost_service.summary = FakeSummary(s.total_prompt_tokens + 1000, s.total_prompt_cached_tokens + 400,
                                                           s.total_completion_tokens + 100)
@@ -379,6 +387,49 @@ async def test_browseruse_arm_logs_real_per_step_tokens(no_browser):
     assert all(e["tokens_cache_read"] == 400 for e in ends)
     per_step = llm.Usage(input_tokens=600, output_tokens=100, cache_read_input_tokens=400).cost_usd("claude-sonnet-5-5")
     assert sum(e["cost_usd"] for e in ends) == pytest.approx(3 * per_step)
+
+
+class FakeElement:
+    """browser-use's DOMInteractedElement, as far as the arm reads it."""
+
+    def __init__(self, ax_name):
+        self.ax_name = ax_name
+
+
+async def test_browseruse_steps_reach_the_judge_with_what_they_did(no_browser):
+    """A search done by opening the site's search URL has to read as one to the judge, the way
+    the Rindler arm's search_products(query=...) does."""
+    script = [
+        [{"navigate": {"url": "https://vhlistings.com/search?q=belt", "new_tab": False}, "interacted_element": None}],
+        # browser-use can run several actions in one step.
+        [{"input": {"index": 4, "text": "belt", "clear": True}, "interacted_element": FakeElement(" Search\n ")},
+         {"click": {"index": 9}, "interacted_element": FakeElement("Bullet Studded Belt")}],
+        [],  # a step browser-use recorded no action for (its model call failed, say)
+        [{"done": {"text": "Cart: Bullet Studded Belt, $30.00 " + "x" * 300, "success": True},
+          "interacted_element": None}],
+    ]
+    agent = BrowserUseTelemetricAgent(run_id="r", goal="g", agent_factory=lambda **kw: FakeAgent(script=script, **kw))
+    await agent.run(start_url="https://vhlistings.com")
+
+    starts = [e for e in agent.telemetry_events if e["event_type"] == "step_start"]
+    # The empty step is not labelled with the action of the step before it.
+    assert [e["action_type"] for e in starts] == ["navigate", "click", None, "done"]
+    assert starts[0]["action_data"] == [
+        {"action": "navigate", "params": {"url": "https://vhlistings.com/search?q=belt", "new_tab": False}}]
+    assert starts[1]["action_data"] == [
+        {"action": "input", "params": {"index": 4, "text": "belt", "clear": True}, "element": "Search"},
+        {"action": "click", "params": {"index": 9}, "element": "Bullet Studded Belt"}]
+    assert "action_data" not in starts[2]
+
+    prompt = arena.build_judge_prompt(get_scenario("vhlistings_add_to_cart"), {"success": True, "steps": 4},
+                                      agent.telemetry_events)
+    lines = prompt.splitlines()
+    assert 'Step 1: navigation(url="https://vhlistings.com/search?q=belt", new_tab=false)' in lines
+    assert 'Step 2: input(index=4, text="belt", clear=true) on "Search"; click(index=9) on "Bullet Studded Belt"' in lines
+    assert "Step 3: no action recorded" in lines
+    done = next(line for line in lines if line.startswith("Step 4: "))
+    assert done.startswith('Step 4: done(text="Cart: Bullet Studded Belt, $30.00 xxx')
+    assert done.endswith("…") and len(done) == len("Step 4: ") + arena.ACTION_TEXT_LIMIT
 
 
 async def test_browseruse_arm_cleans_up_when_the_run_is_cancelled(no_browser, monkeypatch):

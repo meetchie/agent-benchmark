@@ -219,12 +219,19 @@ def start_server_with_a_run(tmp_path, shop, model, seen_browsers):
         except httpx.HTTPError:
             return proc.poll() is not None and pytest.fail(proc.stdout.read())
 
-    wait_for(healthy, 60, "the server to start")
-    run_id = httpx.post(base + "/benchmark/start", json={"url": shop.base + "/", "goal": "Find the Iron Chain Belt"},
-                        timeout=10).json()["run_id"]
-    seen_browsers += wait_for(lambda: browsers_of(proc.pid), 60, "the run's Chromium")
-    wait_for(lambda: model.requests, 60, "the agent's first model call")
-    seen_browsers += [p for p in browsers_of(proc.pid) if p not in seen_browsers]
+    # The caller stops only a server it gets back: if the run does not get going, stop it here.
+    try:
+        wait_for(healthy, 60, "the server to start")
+        started = httpx.post(base + "/benchmark/start", json={"url": shop.base + "/", "goal": "Find the Iron Chain Belt"},
+                             timeout=10)
+        assert started.status_code == 200, started.text
+        run_id = started.json()["run_id"]
+        seen_browsers += wait_for(lambda: browsers_of(proc.pid), 60, "the run's Chromium")
+        wait_for(lambda: model.requests, 60, "the agent's first model call")
+        seen_browsers += [p for p in browsers_of(proc.pid) if p not in seen_browsers]
+    except BaseException:
+        stop_child(proc)
+        raise
     return proc, run_id
 
 
