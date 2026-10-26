@@ -1,6 +1,7 @@
 """Tests for task_generator.py"""
 
 import asyncio
+import ipaddress
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +12,7 @@ import pytest
 import llm
 from task_generator import (
     TASKS_SCHEMA,
+    _is_internal,
     check_url,
     extract_metadata,
     fetch_and_generate,
@@ -216,6 +218,24 @@ async def test_check_url_allows_a_public_host():
 async def test_check_url_allows_public_addresses_in_every_form(address):
     with patch("task_generator.socket.getaddrinfo", return_value=_addrinfo(address)):
         assert await check_url("https://www.example.com/") is None
+
+
+class _IPv6AddressOnOlderPython(ipaddress.IPv6Address):
+    """An IPv6Address as Debian 12's Python 3.11.2 has it: an IPv4-mapped address lies
+    inside ::/8, which that version calls reserved whatever IPv4 address it carries."""
+
+    @property
+    def is_reserved(self):
+        return self in ipaddress.ip_network("::/8") or super().is_reserved
+
+
+def test_an_ipv4_mapped_address_is_judged_by_its_ipv4_address_on_every_python():
+    public = _IPv6AddressOnOlderPython("::ffff:93.184.216.34")
+    assert public.is_reserved  # what the guard must not go by
+    assert _is_internal(public) is False
+    assert _is_internal(_IPv6AddressOnOlderPython("::ffff:127.0.0.1")) is True
+    assert _is_internal(_IPv6AddressOnOlderPython("::ffff:10.0.0.1")) is True
+    assert _is_internal(_IPv6AddressOnOlderPython("::127.0.0.1")) is True  # IPv4-compatible, not mapped
 
 
 async def test_check_url_says_when_a_host_does_not_resolve():

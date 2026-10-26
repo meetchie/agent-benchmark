@@ -28,13 +28,17 @@ from tests.fixture_shop import FixtureShop
 SERVER_DIR = Path(__file__).resolve().parents[1]
 
 
-def _have_chromium() -> bool:
-    from browser_env import chromium_path
+def _no_chromium_reason() -> str | None:
+    """Why these tests cannot drive a Chromium here (none installed, or it cannot start), or None."""
+    try:
+        from browser_env import chromium_problem
+    except ImportError as exc:
+        return f"browser_env cannot be imported: {exc}"
+    return chromium_problem()
 
-    return bool(chromium_path())
 
-
-pytestmark = pytest.mark.skipif(not _have_chromium(), reason="no local Chromium (uv run playwright install chromium)")
+_NO_CHROMIUM = _no_chromium_reason()
+pytestmark = pytest.mark.skipif(_NO_CHROMIUM is not None, reason=f"no Chromium that starts: {_NO_CHROMIUM}")
 
 
 class SilentModelAPI:
@@ -78,9 +82,22 @@ class SilentModelAPI:
             conn.close()
 
 
-def child_env(tmp_path: Path, model_url: str) -> dict[str, str]:
-    tmp = tmp_path / "tmp"
+# Longer than the 61 bytes Chromium on Linux can start with (browser_env.CHROMIUM_SOCKET_IN_TMPDIR).
+CHILD_TMPDIR_LENGTH = 100
+
+
+def child_tmp(tmp_path: Path) -> Path:
+    """The children's TMPDIR, at least CHILD_TMPDIR_LENGTH characters wherever pytest's temp
+    dir is, so every run here also checks that a long TMPDIR does not stop the browser."""
+    name = "tmp"
+    name += "-" * max(0, CHILD_TMPDIR_LENGTH - len(str(tmp_path / name)))
+    tmp = tmp_path / name
     tmp.mkdir(exist_ok=True)
+    return tmp
+
+
+def child_env(tmp_path: Path, model_url: str) -> dict[str, str]:
+    tmp = child_tmp(tmp_path)
     env = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}
     env.update(
         ANTHROPIC_API_KEY="test-key-not-real",  # the stand-in API never checks it
@@ -133,7 +150,7 @@ def alive(pid: int) -> bool:
 
 def leftover_temp_dirs(tmp_path: Path) -> list[str]:
     names = ("browseruse-tmp-", "browser_use_agent_", "agent-benchmark-agent-files-")
-    return sorted(p.name for p in (tmp_path / "tmp").iterdir() if p.name.startswith(names))
+    return sorted(p.name for p in child_tmp(tmp_path).iterdir() if p.name.startswith(names))
 
 
 @pytest.fixture

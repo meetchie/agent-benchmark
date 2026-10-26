@@ -158,4 +158,4 @@ New runs on Claude models, both arms local, equal step budgets and neutral task 
 
 ## Tests
 
-`uv run pytest -q` runs everything offline. The arena's part: `tests/test_rindler_local.py` (the interpreter on a real headless Chromium against a local fixture shop, `tests/fixture_shop.py`; skipped if no Chromium is installed), `test_seed_to_json.py`, `test_rindler_agent.py`, `test_arena.py` (judge with a mocked model, logs, analyze_runs, the BrowserUse arm with a fake browser-use Agent) and `test_scenarios.py`.
+`uv run pytest -q` runs everything offline. The arena's part: `tests/test_rindler_local.py` (the interpreter on a real headless Chromium against a local fixture shop, `tests/fixture_shop.py`; skipped, with the reason, when no Chromium is installed or the one installed cannot start), `test_seed_to_json.py`, `test_rindler_agent.py`, `test_arena.py` (judge with a mocked model, logs, analyze_runs, the BrowserUse arm with a fake browser-use Agent) and `test_scenarios.py`.

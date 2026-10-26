@@ -95,6 +95,46 @@ def test_chromium_args_always_carry_keychain_flags():
     ]
 
 
+@pytest.mark.parametrize("length, changed", [(61, False), (62, True), (120, True)])
+def test_on_linux_a_tmpdir_too_long_for_chromiums_socket_becomes_tmp(monkeypatch, length, changed):
+    # Chromium's socket goes to $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket, at most 107 bytes.
+    monkeypatch.setattr(browser_env.platform, "system", lambda: "Linux")
+    long_dir = "/" + "t" * (length - 1)
+    monkeypatch.setenv("TMPDIR", long_dir + "/")  # a trailing slash adds nothing to the socket path
+    assert browser_env.fit_tmpdir_for_chromium() is changed
+    assert os.environ["TMPDIR"] == ("/tmp" if changed else long_dir + "/")
+
+
+def test_the_process_keeps_its_own_temp_dir_when_browsers_get_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(browser_env.platform, "system", lambda: "Linux")
+    long_dir = tmp_path / ("t" * max(1, 100 - len(str(tmp_path))))
+    long_dir.mkdir()
+    monkeypatch.setenv("TMPDIR", str(long_dir))
+    monkeypatch.setattr(browser_env.tempfile, "tempdir", None)  # not settled yet
+    assert browser_env.fit_tmpdir_for_chromium() is True
+    assert os.environ["TMPDIR"] == "/tmp"
+    assert browser_env.tempfile.gettempdir() == str(long_dir)
+
+
+def test_tmpdir_is_left_alone_off_linux_or_when_tmp_cannot_be_written(tmp_path, monkeypatch):
+    long_dir = "/" + "t" * 120
+    monkeypatch.setenv("TMPDIR", long_dir)
+    monkeypatch.setattr(browser_env.platform, "system", lambda: "Darwin")
+    assert browser_env.fit_tmpdir_for_chromium() is False
+    monkeypatch.setattr(browser_env.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(browser_env, "SHORT_TMPDIR", str(tmp_path / "missing"))
+    assert browser_env.fit_tmpdir_for_chromium() is False
+    assert os.environ["TMPDIR"] == long_dir
+
+
+def test_browser_profile_gives_the_browser_a_tmpdir_it_can_start_with(fake_chrome, monkeypatch):
+    monkeypatch.setattr(browser_env.platform, "system", lambda: "Linux")
+    monkeypatch.setenv("TMPDIR", "/" + "t" * 120)
+    profile = browser_env.browser_profile()
+    assert os.environ["TMPDIR"] == "/tmp"
+    browser_env.cleanup_profile(profile)
+
+
 @pytest.mark.parametrize("system", ["Darwin", "Linux"])
 def test_prefers_the_revision_playwright_expects(fake_cache, monkeypatch, system):
     monkeypatch.setattr(browser_env.platform, "system", lambda: system)

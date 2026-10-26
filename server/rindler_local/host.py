@@ -84,6 +84,15 @@ def _check_chromium_starts(executable: str) -> None:
         raise ChromiumNotFoundError(problem)
 
 
+def _fit_tmpdir_for_chromium() -> None:
+    """On Linux, a TMPDIR short enough for Chromium to start (see browser_env)."""
+    try:
+        from browser_env import fit_tmpdir_for_chromium
+    except ImportError:
+        return
+    fit_tmpdir_for_chromium()
+
+
 def _headless_default() -> bool:
     try:
         from browser_env import headless
@@ -168,6 +177,7 @@ class LocalRindlerHost:
         executable = self.executable_path or _chromium_executable()
         if executable:
             _check_chromium_starts(executable)
+        _fit_tmpdir_for_chromium()  # before Playwright starts: its browsers get its environment
         self._pw = await async_playwright().start()
         args = _keychain_args()
         for arg in self.extra_args:

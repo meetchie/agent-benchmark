@@ -217,9 +217,14 @@ def _is_internal(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
     An IPv6 address that carries an IPv4 one (``::ffff:127.0.0.1``, 6to4, Teredo) is
     judged by that IPv4 address too, because that is where a connection to it ends up.
+    An IPv4-mapped one is judged by its IPv4 address alone, because some Python versions
+    (Debian 12's 3.11.2, for one) count all of ``::ffff:0:0/96`` as reserved, which
+    would refuse every public host that resolves to such an address.
     """
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _is_internal(ip.ipv4_mapped)
     if isinstance(ip, ipaddress.IPv6Address):
-        embedded = [ip.ipv4_mapped, ip.sixtofour, ip.teredo[1] if ip.teredo else None]
+        embedded = [ip.sixtofour, ip.teredo[1] if ip.teredo else None]
         if any(inner is not None and _is_internal(inner) for inner in embedded):
             return True
     if any(ip in network for network in _PRIVATE_NETWORKS):

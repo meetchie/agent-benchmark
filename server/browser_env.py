@@ -58,6 +58,11 @@ on Linux without its system libraries (``libnspr4.so``, ``libnss3.so``, ...), ra
 (``LINUX_DEPS_HINT``), instead of browser-use failing later with "process not found".
 ``chromium_problem()`` answers the same question for whatever Chromium would be used,
 and ``python browser_env.py`` (the last step of ``make setup``) prints it.
+
+One cause the start check cannot see: on Linux, Chromium aborts as it starts when
+TMPDIR is longer than 61 bytes (its socket path would not fit). ``browser_profile()``
+and the local Rindler host call ``fit_tmpdir_for_chromium()``, which then starts
+browsers with TMPDIR=/tmp.
 """
 
 from __future__ import annotations
@@ -91,6 +96,14 @@ START_CHECK_TIMEOUT_S = 15.0
 # - "browser-use-user-data-dir-": BrowserProfile then skips _copy_profile(), which would
 #   otherwise copy the dir into another temp dir that nothing ever deletes.
 PROFILE_DIR_PREFIX = "browseruse-tmp-agent-benchmark-browser-use-user-data-dir-"
+# Chromium on Linux makes its single-instance socket at
+# $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket and aborts as it starts when that
+# path does not fit in a Unix socket address (107 bytes), so any TMPDIR longer than 61
+# bytes stops every launch (see fit_tmpdir_for_chromium). The profile dir's length does
+# not matter, and Chromium on macOS does not put this socket under TMPDIR.
+CHROMIUM_SOCKET_IN_TMPDIR = "/.org.chromium.Chromium.XXXXXX/SingletonSocket"
+UNIX_SOCKET_PATH_MAX = 107
+SHORT_TMPDIR = "/tmp"
 
 AGENT_FILES_PREFIX = "agent-benchmark-agent-files-"
 # browser-use's own name for an Agent's dir under the temp dir (see track_agent_dir)
@@ -264,6 +277,31 @@ def chromium_args(extra: list[str] | tuple[str, ...] | None = None) -> list[str]
         if arg not in args:
             args.append(arg)
     return args
+
+
+def fit_tmpdir_for_chromium() -> bool:
+    """On Linux, make TMPDIR short enough for the Chromium this process starts; True if changed.
+
+    When TMPDIR leaves no room for Chromium's socket path (``CHROMIUM_SOCKET_IN_TMPDIR``),
+    this process keeps its own temp files where TMPDIR says, and the processes it starts
+    from now on, Chromium among them, get TMPDIR=/tmp. (browser-use starts Chromium with
+    this process's environment and no way to pass another.) Does nothing on other systems,
+    or when /tmp cannot be written to.
+    """
+    if platform.system() != "Linux":
+        return False
+    current = os.environ.get("TMPDIR", "").rstrip("/")
+    if len(os.fsencode(current)) + len(CHROMIUM_SOCKET_IN_TMPDIR) <= UNIX_SOCKET_PATH_MAX:
+        return False
+    if not os.access(SHORT_TMPDIR, os.W_OK | os.X_OK):
+        log.warning("TMPDIR is too long for Chromium to start (%d characters) and %s cannot be written to; "
+                    "set TMPDIR to a shorter path.", len(current), SHORT_TMPDIR)
+        return False
+    tempfile.gettempdir()  # settles this process's own temp dir before TMPDIR changes
+    os.environ["TMPDIR"] = SHORT_TMPDIR
+    log.info("TMPDIR is %d characters, too long for Chromium on Linux; browsers start with TMPDIR=%s.",
+             len(current), SHORT_TMPDIR)
+    return True
 
 
 def playwright_browsers_path() -> Path:
@@ -441,6 +479,7 @@ def browser_profile(
     problem = chromium_start_problem(str(executable))
     if problem:
         raise ChromiumNotFoundError(problem)
+    fit_tmpdir_for_chromium()
 
     use_headless = _headless_default() if headless is None else headless
     size = dict(viewport or DEFAULT_VIEWPORT)

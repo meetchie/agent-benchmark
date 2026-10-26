@@ -581,7 +581,27 @@ def _error_message(exc: BaseException) -> str:
 
     if isinstance(exc, (llm.LLMError, ChromiumNotFoundError, ValueError)):
         return f"The run encountered an error: {_one_line(exc)}"
+    if _browser_exited_at_start(exc):
+        return (
+            "The run encountered an error: Chromium exited as soon as it started, before the agent could "
+            "connect to it. server/SETUP.md (Troubleshooting) says how to see why."
+        )
     return "The run encountered an error."
+
+
+def _browser_exited_at_start(exc: BaseException) -> bool:
+    """Whether browser-use failed because the Chromium it launched was gone before it connected.
+
+    browser-use says "... exited before CDP became available", or, when the process is gone
+    before it even looks at it (it was already reaped), lets psutil.NoSuchProcess through.
+    """
+    if "exited before CDP became available" in str(exc):
+        return True
+    try:
+        import psutil
+    except ImportError:  # a browser-use dependency; without it there is no such error
+        return False
+    return isinstance(exc, psutil.NoSuchProcess)
 
 
 async def _record_agent_usage(state: "RunState", agent, shielded: bool = False) -> None:

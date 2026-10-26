@@ -1032,6 +1032,39 @@ async def test_a_chromium_that_cannot_start_says_why_and_how_to_fix_it(fake_run,
     assert persistence.read_run("run-1")["status"] == "error"
 
 
+CHROMIUM_EXITED = (
+    "The run encountered an error: Chromium exited as soon as it started, before the agent could "
+    "connect to it. server/SETUP.md (Troubleshooting) says how to see why."
+)
+
+
+@pytest.mark.parametrize("dies", ["exit 133", "sleep 1; exit 133"], ids=["at-once", "after-a-moment"])
+async def test_a_chromium_that_exits_as_it_starts_is_named_in_the_message(monkeypatch, tmp_path, dies):
+    # The real Agent and launch path, with a Chromium that passes the start check (--version)
+    # and exits on a real launch. browser-use then raises "Browser process ... exited before
+    # CDP became available" (or psutil.NoSuchProcess when the process was reaped before it
+    # looked), and the run used to say no more than "The run encountered an error."
+    chrome = tmp_path / "chrome"
+    chrome.write_text('#!/bin/sh\nfor a in "$@"; do [ "$a" = --version ] && { echo "Chromium 1.0"; exit 0; }; done\n'
+                      + dies + "\n")
+    chrome.chmod(0o755)
+    monkeypatch.setenv("BENCHMARK_CHROMIUM_PATH", str(chrome))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    state = make_state()
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+    assert (state.status, state.result_state) == ("error", "error")
+    assert state.message == CHROMIUM_EXITED
+
+
+def test_a_browser_process_gone_before_browser_use_looked_is_named_too():
+    import psutil
+
+    from benchmark_runner import _error_message
+
+    assert _error_message(psutil.NoSuchProcess(pid=4242)) == CHROMIUM_EXITED
+    assert _error_message(RuntimeError("something else")) == "The run encountered an error."
+
+
 async def test_unexpected_errors_stay_generic(fake_run, monkeypatch):
     fake_run.agent_cls.raises = RuntimeError("secret internal path /Users/someone/x")
     state = make_state()

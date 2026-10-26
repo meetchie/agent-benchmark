@@ -414,3 +414,19 @@ async def test_browser_runs_headless_with_keychain_flags(shop):
             assert "--headless" in command
     finally:
         await host.close()
+
+
+@browser
+async def test_a_long_tmpdir_does_not_stop_the_browser(shop, tmp_path, monkeypatch):
+    # On Linux Chromium aborts as it starts when TMPDIR is over 61 bytes (its socket path
+    # would not fit); macOS's Chromium does not use TMPDIR for it.
+    long_tmp = tmp_path / ("t" * max(1, 100 - len(str(tmp_path))))
+    long_tmp.mkdir()
+    monkeypatch.setenv("TMPDIR", str(long_tmp))
+    host = _host(shop)
+    try:
+        env = await host.call("start_session", {"url": shop.base + "/"})
+        assert "error" not in env, env
+        assert env["screen"] == "landing"
+    finally:
+        await host.close()

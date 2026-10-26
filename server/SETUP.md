@@ -105,6 +105,15 @@ and the page's element list on every step, so it costs several times more per st
   them with your package manager, then check with `uv run python browser_env.py`.
   `make setup` stops with this message, the server logs it at start-up, and a run ends
   as `error` with it.
+- **"Chromium exited as soon as it started"** (a live run's message; the arena log says
+  "Browser process ... exited before CDP became available"): Chromium passed the start
+  check but died when a run launched it. To see its own error, start it by hand the way
+  a run does: `uv run python browser_env.py` prints its path, then run
+  `"<that path>" --headless=new --use-mock-keychain --password-store=basic --user-data-dir="$(mktemp -d)" about:blank`
+  (add `--no-sandbox` as root in a container, as browser-use does there; Ctrl-C stops it
+  if it keeps running). On Linux Chromium also aborts as it starts when `TMPDIR` is
+  longer than 61 characters (its socket path would not fit), so runs then start it with
+  `TMPDIR=/tmp`; set a shorter `TMPDIR` yourself only if `/tmp` cannot be written to.
 - **"no model API key"**: `ANTHROPIC_API_KEY` is not set in the shell or a `.env` file.
 - **`No site mapping covers ...`** (RINDLER): the start URL's domain has no
   `mappings/*.json`; use `--mapping` or run that scenario on BROWSERUSE.
