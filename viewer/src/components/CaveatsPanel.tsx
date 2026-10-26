@@ -1,7 +1,7 @@
 // What the headline numbers do not say. Shown inside the hero, right under the
 // 98.3% vs 1.7% boxes, so that a screenshot of the headline carries it too.
 // Every item is checked against the archived logs and the original arena code;
-// see "The seven caveats" in the README for the detail.
+// see "The seven caveats" in docs/results.md for the detail.
 
 export const CAVEATS: ReadonlyArray<{ lead: string; text: string }> = [
   {
