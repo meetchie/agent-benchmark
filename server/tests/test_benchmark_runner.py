@@ -70,8 +70,9 @@ import browser_use
 import httpx
 import llm
 import persistence
-from benchmark_runner import _format_action, get_agent_timeout, run_benchmark
+from benchmark_runner import _format_action, _step_evidence, get_agent_timeout, run_benchmark
 from constants import COST_RATES
+from tests import browser_use_history as bu
 from tests.fakes import install_fake_anthropic, text_response
 
 REAL_BROWSER_PROFILE = browser_env.browser_profile
@@ -262,10 +263,15 @@ def action(**kwargs):
 
 
 def agent_after_step(next_goal, *actions, elements=None):
-    """The part of a browser-use Agent that _format_action reads, one step in."""
+    """The part of a browser-use Agent that _format_action reads, one step in: every action ran."""
     output = SimpleNamespace(next_goal=next_goal, action=list(actions))
     state = SimpleNamespace(interacted_element=elements)
-    return SimpleNamespace(history=SimpleNamespace(history=[SimpleNamespace(model_output=output, state=state)]))
+    results = [bu.ActionResult() for _ in actions]
+    return SimpleNamespace(history=SimpleNamespace(history=[SimpleNamespace(model_output=output, state=state, result=results)]))
+
+
+def agent_after(item):
+    return SimpleNamespace(history=SimpleNamespace(history=[item]))
 
 
 def element(**attributes):
@@ -335,6 +341,56 @@ def test_a_step_with_several_actions_lists_them_all():
         elements=[element(type="search"), None],
     )
     assert _format_action(agent) == "Type 'top' into the search box, then press Enter"
+
+
+def test_a_step_is_described_by_the_actions_that_ran_not_the_ones_skipped():
+    """browser-use runs a step's planned actions in order and skips the rest after a page
+    change (here Enter loaded the results), a navigation or a failed action."""
+    item = bu.history_item(
+        [bu.action(input={"index": 3, "text": "top"}), bu.action(send_keys={"keys": "Enter"}), bu.action(click={"index": 7})],
+        [bu.ActionResult(extracted_content="Typed 'top'"), bu.ActionResult(extracted_content="Sent keys: Enter")],
+        elements=[bu.element(type="search"), None, bu.element(**{"aria-label": "Blue Top"})],
+    )
+    assert _format_action(agent_after(item)) == "Type 'top' into the search box, then press Enter"
+
+
+def test_a_failed_action_is_described_as_failed_and_the_ones_after_it_not_at_all():
+    item = bu.history_item(
+        [bu.action(click={"index": 9}), bu.action(click={"index": 15})],
+        [bu.ActionResult(error="Element index 9 not available - page may have changed.")],
+        elements=[bu.element(**{"aria-label": "Add to cart"}), bu.element(**{"aria-label": "View cart"})],
+    )
+    assert _format_action(agent_after(item)) == 'Click element 9 ("Add to cart") (failed)'
+
+
+def test_the_judge_reads_each_action_that_ran_with_what_it_returned():
+    """The description is the model's goal, written before it acted ("... then open the cart");
+    the result lines are what says which actions ran."""
+    item = bu.history_item(
+        [bu.action(click={"index": 9}), bu.action(click={"index": 15})],
+        [bu.ActionResult(extracted_content="Clicked button 'Add to cart'")],
+        elements=[bu.element(**{"aria-label": "Add to cart"}), bu.element(**{"aria-label": "View cart"})],
+        next_goal="Add the belt to the cart, then open the cart", evaluation="Success - the belt page is open.",
+    )
+    assert _step_evidence(agent_after(item)) == (
+        "Success - the belt page is open.", ['Click element 9 ("Add to cart") -> Clicked button \'Add to cart\''])
+
+    failed = bu.history_item(
+        [bu.action(click={"index": 9}), bu.action(extract={"query": "cart rows"})],
+        [bu.ActionResult(error="Element index 9 not available")],
+        elements=[bu.element(**{"aria-label": "Add to cart"}), None],
+    )
+    assert _step_evidence(agent_after(failed))[1] == ['Click element 9 ("Add to cart") -> error: Element index 9 not available']
+
+    # An action that returned nothing still shows that it ran; the done text is the final report.
+    quiet = bu.history_item([bu.action(scroll={"down": True, "pages": 1.0})], [bu.ActionResult()])
+    assert _step_evidence(agent_after(quiet))[1] == ["Scroll down"]
+    done = bu.history_item([bu.action(done={"text": "Cart: Blue Top", "success": True})],
+                           [bu.ActionResult(is_done=True, success=True, extracted_content="Cart: Blue Top")])
+    assert _step_evidence(agent_after(done))[1] == []
+    # A step whose model call failed has a result and no action.
+    no_model = bu.history_item([], [bu.ActionResult(error="LLM call timed out")])
+    assert _step_evidence(agent_after(no_model))[1] == ["error: LLM call timed out"]
 
 
 def test_a_long_description_is_cut():
@@ -429,6 +485,7 @@ class FakeAgent:
     raises = None
     raises_after = None  # raise ``raises`` after this many steps instead of before the first
     unrecorded_step = None  # index of a step browser-use keeps no history item for
+    items = None  # real browser-use history items (tests/browser_use_history.py) instead of the above
     instances: list = []
 
     def __init__(self, **kwargs):
@@ -447,6 +504,8 @@ class FakeAgent:
 
     def _items(self):
         cls = type(self)
+        if cls.items is not None:
+            return list(cls.items)
         evaluations = cls.evaluations or [None] * len(cls.goals)
         results = cls.results or [()] * len(cls.goals)
         # A goal of None is a step whose model call failed: browser-use keeps no model output.
@@ -888,6 +947,37 @@ async def test_the_judge_reads_what_the_agent_saw_and_its_final_report(fake_run,
     assert persistence.read_run("run-1")["final_report"] == state.final_report
     # None of it goes to the UI's status payload.
     assert all(set(s) == {"step", "description", "elapsed_ms"} for s in state.to_dict()["steps"][:-1])
+
+
+async def test_the_step_list_and_the_judge_see_only_the_actions_that_ran(fake_run, monkeypatch):
+    """browser-use's real history: the model planned more than ran in two of the steps."""
+    fake_run.agent_cls.items = [
+        bu.history_item(  # no goal text: described from its actions; Enter loaded a new page
+            [bu.action(input={"index": 3, "text": "belt"}), bu.action(send_keys={"keys": "Enter"}), bu.action(click={"index": 7})],
+            [bu.ActionResult(extracted_content="Typed 'belt'"), bu.ActionResult(extracted_content="Sent keys: Enter")],
+            elements=[bu.element(type="search"), None, bu.element(**{"aria-label": "Bullet Studded Belt"})],
+        ),
+        bu.history_item(  # the click failed, so the cart was never opened
+            [bu.action(click={"index": 9}), bu.action(click={"index": 15})],
+            [bu.ActionResult(error="Element index 9 not available - page may have changed.")],
+            elements=[bu.element(**{"aria-label": "Add to cart"}), bu.element(**{"aria-label": "View cart"})],
+            next_goal="Add the belt to the cart, then open the cart",
+        ),
+    ]
+    fake_run.agent_cls.done = False
+    calls = install_fake_anthropic(monkeypatch, text_response({**VERDICT_PASS, "success": False, "phases": []}))
+    state = make_state()
+
+    await run_benchmark(state, "https://shop.example", "Goal")
+
+    assert [s.description for s in state.steps] == [
+        "Type 'belt' into the search box, then press Enter", "Add the belt to the cart, then open the cart"]
+    prompt = calls[0]["messages"][0]["content"]
+    assert "result: Type 'belt' into the search box -> Typed 'belt'" in prompt
+    assert "result: Press Enter -> Sent keys: Enter" in prompt
+    assert 'result: Click element 9 ("Add to cart") -> error: Element index 9 not available - page may have changed.' in prompt
+    assert "element 7" not in prompt and "Bullet Studded Belt" not in prompt
+    assert "element 15" not in prompt and "View cart" not in prompt
 
 
 async def test_a_step_without_a_history_item_does_not_repeat_the_one_before(fake_run, monkeypatch):

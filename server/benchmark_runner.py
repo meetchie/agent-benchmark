@@ -342,19 +342,27 @@ def _describe_action(name: str, params, element=None) -> str:
     return name.replace("_", " ").capitalize()
 
 
-def _step_actions(history_item) -> list[tuple[str, object, object]]:
-    """(action name, parameters, touched element) for each action of one history step."""
+def _step_actions(history_item) -> list[tuple[str, object, object, object]]:
+    """(action name, parameters, touched element, result) for each action one history step ran.
+
+    The model can plan several actions in one step, and browser-use runs them in order but
+    stops early: after an action that fails, after a navigation, or once the page changes.
+    Each action it ran left one result, in the same order, so pairing the planned actions
+    with the results (as browser-use's own AgentHistoryList.action_history() does) keeps
+    the ones that ran and leaves out the ones it skipped.
+    """
     mo = getattr(history_item, "model_output", None)
     actions = list(getattr(mo, "action", None) or [])
+    results = list(getattr(history_item, "result", None) or [])
     state = getattr(history_item, "state", None)
     elements = list(getattr(state, "interacted_element", None) or [])
     steps = []
-    for i, action in enumerate(actions):
+    for i, (action, result) in enumerate(zip(actions, results)):
         dumped = action.model_dump(exclude_none=True, mode="json") if hasattr(action, "model_dump") else action
         if not isinstance(dumped, dict) or not dumped:
             continue
         name = next(iter(dumped))
-        steps.append((name, dumped[name], elements[i] if i < len(elements) else None))
+        steps.append((name, dumped[name], elements[i] if i < len(elements) else None, result))
     return steps
 
 
@@ -363,8 +371,8 @@ def _format_action(agent) -> str:
 
     The agent's own 'next_goal' ("Click on the Menu link") is the best description. Some
     steps have none (the model left it empty and only chose actions); those are described
-    from their actions instead, for example "Run a script on the page" or
-    "Type 'top' into the search box".
+    from the actions that ran instead, for example "Run a script on the page" or
+    "Type 'top' into the search box", with "(failed)" after one that failed.
     """
     try:
         if agent.history.history:
@@ -373,7 +381,8 @@ def _format_action(agent) -> str:
             goal = getattr(mo, "next_goal", "") if mo else ""
             if goal and str(goal).strip():
                 return str(goal)
-            parts = [_describe_action(*a) for a in _step_actions(last_item)]
+            parts = [_describe_action(name, params, element) + (" (failed)" if getattr(result, "error", None) else "")
+                     for name, params, element, result in _step_actions(last_item)]
             if parts:
                 # "Click element 3, then press Enter"
                 text = ", then ".join([parts[0]] + [p[:1].lower() + p[1:] for p in parts[1:]])
@@ -391,12 +400,16 @@ _MAX_ERROR_CHARS = 300
 
 
 def _step_evidence(agent) -> tuple[str, list[str]]:
-    """The agent's evaluation and its action results for the step it just finished.
+    """The agent's evaluation and the actions it ran, with their results, for the step it just finished.
 
     ``evaluation`` is the model's own verdict on the step before ("Success - the cart
-    shows ..."); ``results`` is what each browser action returned: page text the agent
-    read, a short note such as "Clicked button 'View Cart'", or an error. The done
-    action's text is left out here, it is the run's final report.
+    shows ..."); ``results`` has one line per browser action the step ran, in plain words
+    and with what it returned: page text the agent read, a short note such as "Clicked
+    button 'View Cart'", or an error. The step's description is often the model's goal,
+    written before it acted, so these lines are what says which actions ran: one it
+    planned and browser-use skipped has none. The done action's text is left out here, it
+    is the run's final report. A result without an action (the model call failed, say)
+    is listed on its own.
     """
     try:
         item = agent.history.history[-1]
@@ -404,7 +417,23 @@ def _step_evidence(agent) -> tuple[str, list[str]]:
         return "", []
     mo = getattr(item, "model_output", None)
     evaluation = getattr(mo, "evaluation_previous_goal", "") if mo else ""
-    return (_clip(evaluation, _MAX_EVALUATION_CHARS) if evaluation else ""), _result_lines(getattr(item, "result", None))
+    planned = list(getattr(mo, "action", None) or [])
+    results = list(getattr(item, "result", None) or [])
+    lines = [line for line in (_ran_action_line(*a) for a in _step_actions(item)) if line]
+    lines += _result_lines(results[len(planned):])
+    return (_clip(evaluation, _MAX_EVALUATION_CHARS) if evaluation else ""), lines
+
+
+def _ran_action_line(name: str, params, element, result) -> str:
+    """'Click element 9 ("Add to cart") -> Clicked button ...', or '... -> error: ...'."""
+    what = _describe_action(name, params, element)
+    if getattr(result, "error", None):
+        return f"{what} -> error: {_clip(result.error, _MAX_ERROR_CHARS)}"
+    if getattr(result, "is_done", False):
+        return ""
+    if getattr(result, "extracted_content", None):
+        return f"{what} -> {_clip(result.extracted_content, _MAX_RESULT_CHARS)}"
+    return what
 
 
 def _result_lines(action_results) -> list[str]:

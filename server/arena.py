@@ -110,6 +110,8 @@ ACTION_NORMALIZE = {
 # How much of one action the judge reads: the name, its arguments and, for browser-use, the
 # element it targeted. Long arguments (a done message, extracted text) are cut.
 ACTION_TEXT_LIMIT = 120
+# A browser-use action that failed is followed by the start of its error.
+ACTION_ERROR_LIMIT = 80
 
 
 def describe_call(name: Optional[str], args: Any = None, element: Optional[str] = None) -> str:
@@ -126,13 +128,23 @@ def describe_call(name: Optional[str], args: Any = None, element: Optional[str] 
     return text if len(text) <= ACTION_TEXT_LIMIT else text[:ACTION_TEXT_LIMIT - 1] + "…"
 
 
+def describe_ran_action(action: Dict[str, Any]) -> str:
+    """One action a browser-use step ran: click(index=9) on "Add to cart", and for one that
+    failed, its error after it: click(index=9) on "Add to cart" -> error: Element index 9 ..."""
+    text = describe_call(action.get("action"), action.get("params"), action.get("element"))
+    error = " ".join(str(action.get("error") or "").split())
+    if error:
+        text += " -> error: " + (error if len(error) <= ACTION_ERROR_LIMIT else error[:ACTION_ERROR_LIMIT - 1] + "…")
+    return text
+
+
 def describe_step(event: Dict[str, Any]) -> str:
     """A step_start event as the judge reads it. A Rindler step is one tool call (action_type
-    with its input as action_data); a browser-use step lists every action it ran."""
+    with its input as action_data); a browser-use step lists every action it ran (the adapter
+    leaves out the ones the model planned and browser-use skipped)."""
     data = event.get("action_data")
     if isinstance(data, list):
-        calls = [describe_call(a.get("action"), a.get("params"), a.get("element"))
-                 for a in data if isinstance(a, dict) and a.get("action")]
+        calls = [describe_ran_action(a) for a in data if isinstance(a, dict) and a.get("action")]
         if calls:
             return "; ".join(calls)
     if not event.get("action_type"):

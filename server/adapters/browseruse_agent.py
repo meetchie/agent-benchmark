@@ -5,8 +5,9 @@ The browser comes from browser_env.browser_profile() (local, headless by default
 macOS keychain flags always on) and the model from llm.agent_llm(): BENCHMARK_AGENT_MODEL,
 else claude-sonnet-5-5. Per-step tokens are read from browser-use's own token counter at
 the end of every step, so each step_end carries its real token count and cost. Each
-step_start carries the step's actions with their arguments (action_data), which the judge
-reads, as it reads a Rindler tool call's input.
+step_start carries the actions the step ran, with their arguments and, for one that failed,
+its error (action_data), which the judge reads, as it reads a Rindler tool call's input.
+Actions the model planned that browser-use then skipped are left out (see ran_actions).
 """
 
 from __future__ import annotations
@@ -43,27 +44,55 @@ def prompt_tokens(usage: llm.Usage) -> int:
     return usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
 
 
-def step_actions(model_actions: list) -> List[Dict[str, Any]]:
-    """browser-use's records of a step's actions as {"action", "params", "element"} dicts.
+# How much of a failed action's error the log keeps (the judge reads less, see arena.py).
+ERROR_TEXT_LIMIT = 300
 
-    A record from history.model_actions() is {"click": {"index": 12}, "interacted_element": ...}.
+
+def ran_actions(history_items: list) -> List[Dict[str, Any]]:
+    """The actions browser-use ran in some history items, as {"action", "params", "element", "error"} dicts.
+
+    The model can plan several actions in one step, and browser-use runs them in order but
+    stops early: after an action that fails, after a navigation, or once the page changes.
+    Each action it ran left one result in item.result, in the same order, so pairing the
+    planned actions with the results (as browser-use's own AgentHistoryList.action_history()
+    does) keeps the ones that ran and drops the ones it skipped. history.model_actions() lists
+    every planned action, skipped or not, so it cannot be used for this.
+
     "element" is the accessible name of the element the action targeted, when it has one: the
     index means nothing outside that page, the name says what was clicked or typed into.
+    "error" is there only for an action that failed, as one line of its error.
     """
     out: List[Dict[str, Any]] = []
-    for record in model_actions:
-        if not isinstance(record, dict):
-            continue
-        name = next((k for k in record if k != "interacted_element"), None)
-        if name is None:
-            continue
-        params = record[name]
-        action: Dict[str, Any] = {"action": name, "params": params if isinstance(params, dict) else {}}
-        label = " ".join(str(getattr(record.get("interacted_element"), "ax_name", None) or "").split())
-        if label:
-            action["element"] = label
-        out.append(action)
+    for item in history_items:
+        planned = list(getattr(getattr(item, "model_output", None), "action", None) or [])
+        results = list(getattr(item, "result", None) or [])
+        elements = list(getattr(getattr(item, "state", None), "interacted_element", None) or [])
+        for i, (planned_action, result) in enumerate(zip(planned, results)):
+            try:
+                dumped = planned_action.model_dump(exclude_none=True, mode="json")
+            except Exception:
+                continue
+            if not isinstance(dumped, dict) or not dumped:
+                continue
+            name = next(iter(dumped))
+            params = dumped[name]
+            action: Dict[str, Any] = {"action": name, "params": params if isinstance(params, dict) else {}}
+            element = elements[i] if i < len(elements) else None
+            label = " ".join(str(getattr(element, "ax_name", None) or "").split())
+            if label:
+                action["element"] = label
+            error = " ".join(str(getattr(result, "error", None) or "").split())
+            if error:
+                action["error"] = error[:ERROR_TEXT_LIMIT]
+            out.append(action)
     return out
+
+
+def _history_items(agent) -> list:
+    try:
+        return list(agent.history.history)
+    except Exception:
+        return []
 
 
 class BrowserUseTelemetricAgent(BaseAgent):
@@ -126,14 +155,11 @@ class BrowserUseTelemetricAgent(BaseAgent):
             agent = self._make_agent(start_url, profile)
             track_agent_dir(profile, agent)  # its step screenshots go with the profile
 
-            recorded = 0  # how many actions browser-use had recorded when this step started
+            recorded = 0  # how many history items browser-use had when this step started
 
             async def on_step_start(agent):
                 nonlocal recorded
-                try:
-                    recorded = len(agent.history.model_actions())
-                except Exception:
-                    pass
+                recorded = len(_history_items(agent))
                 self.log_step_start(action_type=None)
                 print(f"[Step {self._current_step_index}] START")
 
@@ -142,14 +168,17 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 observation = None
                 actions = []
                 try:
-                    # Only what this step added: a step that failed inside browser-use
-                    # records none, and must not be labelled with the step before it.
-                    actions = step_actions(agent.history.model_actions()[recorded:])
-                    extracted = agent.history.extracted_content()
+                    # Only the history item(s) this step added: a step that failed inside
+                    # browser-use adds none, and must not be labelled with the step before it.
+                    added = _history_items(agent)[recorded:]
+                    actions = ran_actions(added)
+                    extracted = [r.extracted_content for item in added for r in (item.result or [])
+                                 if getattr(r, "extracted_content", None)]
                     if extracted:
                         observation = {"extracted_content": extracted[-1]}
                 except Exception:
                     pass
+                # The last action that ran, not the last one the model planned.
                 action_type = actions[-1]["action"] if actions else None
                 now = await self._usage_now(agent)
                 step_usage = usage_delta(now, counted)
@@ -161,8 +190,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 )
                 if action_type:
                     # browser-use only knows a step's actions once the step is over. Both
-                    # halves of the step get the last one's name; step_start, the event the
-                    # judge reads, also gets every action with its arguments.
+                    # halves of the step get the name of the last one that ran; step_start,
+                    # the event the judge reads, also gets every action that ran, with its
+                    # arguments and any error.
                     event["action_type"] = action_type
                     for earlier in reversed(self.telemetry_events):
                         if earlier.get("event_type") == "step_start" and earlier.get("step_index") == event["step_index"]:

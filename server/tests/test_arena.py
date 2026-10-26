@@ -16,6 +16,7 @@ from adapters import AGENTS
 from adapters.base_agent import BaseAgent
 from adapters.browseruse_agent import BrowserUseTelemetricAgent
 from scenarios import get_scenario
+from tests import browser_use_history as bu
 
 ARCHIVE = Path(__file__).resolve().parent.parent / "arena_logs"
 
@@ -294,15 +295,23 @@ class FakeSummary:
 
 
 class FakeHistory:
+    """browser-use's AgentHistoryList with real history items (tests/browser_use_history.py); only
+    whether the run is done, its success flag and its final result are scripted."""
+
     def __init__(self, done=True, success=True, final="Iron Chain Belt, $29.00"):
-        self._actions = []
+        self.history = []
         self._done, self._success, self._final = done, success, final
 
+    def _real(self):
+        from browser_use.agent.views import AgentHistoryList
+
+        return AgentHistoryList(history=self.history)
+
     def model_actions(self):
-        return self._actions
+        return self._real().model_actions()
 
     def extracted_content(self):
-        return ["page text"] if self._actions else []
+        return self._real().extracted_content()
 
     def is_done(self):
         return self._done
@@ -333,9 +342,18 @@ class FakeAgent:
         self.token_cost_service = FakeTokenService()
         self.steps = len(script) if script is not None else steps
         self.hang_at = hang_at  # a step that never ends (until the run is cancelled)
-        # Per step, the actions browser-use records for it, in its model_actions() shape.
+        # Per step, the history items browser-use adds for it (none for a step it kept no item for).
         self.script = script
         FakeAgent.instances.append(self)
+
+    @staticmethod
+    def default_step(i):
+        planned = [
+            bu.action(navigate={"url": "https://vhlistings.com/", "new_tab": False}),
+            bu.action(click={"index": i + 1}),
+            bu.action(done={"text": "Iron Chain Belt, $29.00", "success": True}),
+        ][i % 3]
+        return [bu.history_item([planned], [bu.ActionResult(extracted_content="page text")])]
 
     async def run(self, max_steps, on_step_start, on_step_end):
         self.max_steps = max_steps
@@ -343,10 +361,7 @@ class FakeAgent:
             await on_step_start(self)
             if self.hang_at == i + 1:
                 await asyncio.sleep(60)
-            if self.script is not None:
-                self.history._actions.extend(self.script[i])
-            else:
-                self.history._actions.append({["navigate", "click", "done"][i % 3]: {"index": i}})
+            self.history.history.extend(self.script[i] if self.script is not None else self.default_step(i))
             s = self.token_cost_service.summary
             self.token_cost_service.summary = FakeSummary(s.total_prompt_tokens + 1000, s.total_prompt_cached_tokens + 400,
                                                           s.total_completion_tokens + 100)
@@ -389,24 +404,23 @@ async def test_browseruse_arm_logs_real_per_step_tokens(no_browser):
     assert sum(e["cost_usd"] for e in ends) == pytest.approx(3 * per_step)
 
 
-class FakeElement:
-    """browser-use's DOMInteractedElement, as far as the arm reads it."""
-
-    def __init__(self, ax_name):
-        self.ax_name = ax_name
+def ran(*results):
+    return [bu.ActionResult(extracted_content=text) for text in results]
 
 
 async def test_browseruse_steps_reach_the_judge_with_what_they_did(no_browser):
     """A search done by opening the site's search URL has to read as one to the judge, the way
     the Rindler arm's search_products(query=...) does."""
     script = [
-        [{"navigate": {"url": "https://vhlistings.com/search?q=belt", "new_tab": False}, "interacted_element": None}],
+        [bu.history_item([bu.action(navigate={"url": "https://vhlistings.com/search?q=belt", "new_tab": False})],
+                         ran("Navigated to https://vhlistings.com/search?q=belt"))],
         # browser-use can run several actions in one step.
-        [{"input": {"index": 4, "text": "belt", "clear": True}, "interacted_element": FakeElement(" Search\n ")},
-         {"click": {"index": 9}, "interacted_element": FakeElement("Bullet Studded Belt")}],
-        [],  # a step browser-use recorded no action for (its model call failed, say)
-        [{"done": {"text": "Cart: Bullet Studded Belt, $30.00 " + "x" * 300, "success": True},
-          "interacted_element": None}],
+        [bu.history_item([bu.action(input={"index": 4, "text": "belt", "clear": True}), bu.action(click={"index": 9})],
+                         ran("Typed 'belt'", "Clicked a"),
+                         elements=[bu.element(" Search\n "), bu.element("Bullet Studded Belt")])],
+        [],  # a step browser-use kept no history item for (it timed out inside the agent, say)
+        [bu.history_item([bu.action(done={"text": "Cart: Bullet Studded Belt, $30.00 " + "x" * 300, "success": True})],
+                         [bu.ActionResult(is_done=True, success=True, extracted_content="Cart: Bullet Studded Belt")])],
     ]
     agent = BrowserUseTelemetricAgent(run_id="r", goal="g", agent_factory=lambda **kw: FakeAgent(script=script, **kw))
     await agent.run(start_url="https://vhlistings.com")
@@ -430,6 +444,56 @@ async def test_browseruse_steps_reach_the_judge_with_what_they_did(no_browser):
     done = next(line for line in lines if line.startswith("Step 4: "))
     assert done.startswith('Step 4: done(text="Cart: Bullet Studded Belt, $30.00 xxx')
     assert done.endswith("…") and len(done) == len("Step 4: ") + arena.ACTION_TEXT_LIMIT
+
+
+async def test_the_judge_reads_only_the_actions_browser_use_ran(no_browser):
+    """The model plans several actions per step; browser-use runs them in order and skips the
+    rest after a page change, a navigation or a failed action. Only the ones it ran (one result
+    each) may reach the judge, a failed one with its error, and the step is named after the
+    last one that ran."""
+    not_found = "Element index 9 not available - page may have changed. Try refreshing browser state. " + "x" * 200
+    script = [
+        # Typing and Enter ran; Enter loaded the results page, so the click was skipped.
+        [bu.history_item([bu.action(input={"index": 4, "text": "belt", "clear": True}),
+                          bu.action(send_keys={"keys": "Enter"}), bu.action(click={"index": 9})],
+                         ran("Typed 'belt'", "Sent keys: Enter"),
+                         elements=[bu.element("Search"), None, bu.element("Bullet Studded Belt")])],
+        # The first click failed, so the second never ran.
+        [bu.history_item([bu.action(click={"index": 9}), bu.action(click={"index": 15})],
+                         [bu.ActionResult(error=not_found)],
+                         elements=[bu.element("Add to cart"), bu.element("View cart")])],
+        # A navigation ends the step: the extract planned after it was skipped.
+        [bu.history_item([bu.action(navigate={"url": "https://vhlistings.com/cart", "new_tab": False}),
+                          bu.action(extract={"query": "cart rows"})],
+                         ran("Navigated to https://vhlistings.com/cart"))],
+    ]
+    agent = BrowserUseTelemetricAgent(run_id="r", goal="g", agent_factory=lambda **kw: FakeAgent(script=script, done=False, **kw))
+    await agent.run(start_url="https://vhlistings.com")
+
+    starts = [e for e in agent.telemetry_events if e["event_type"] == "step_start"]
+    ends = [e for e in agent.telemetry_events if e["event_type"] == "step_end"]
+    assert [e["action_type"] for e in starts] == ["send_keys", "click", "navigate"]
+    assert [e["action_type"] for e in ends] == ["send_keys", "click", "navigate"]
+    assert starts[0]["action_data"] == [
+        {"action": "input", "params": {"index": 4, "text": "belt", "clear": True}, "element": "Search"},
+        {"action": "send_keys", "params": {"keys": "Enter"}}]
+    assert starts[1]["action_data"] == [
+        {"action": "click", "params": {"index": 9}, "element": "Add to cart", "error": not_found}]
+    assert starts[2]["action_data"] == [
+        {"action": "navigate", "params": {"url": "https://vhlistings.com/cart", "new_tab": False}}]
+    # A step that read nothing new does not carry the page text of the step before it.
+    assert ends[1]["observation_hash"] is None and ends[0]["observation_hash"] != ends[2]["observation_hash"]
+
+    prompt = arena.build_judge_prompt(get_scenario("vhlistings_add_to_cart"), {"success": False, "steps": 3},
+                                      agent.telemetry_events)
+    lines = prompt.splitlines()
+    assert 'Step 1: input(index=4, text="belt", clear=true) on "Search"; send_keys(keys="Enter")' in lines
+    error = "Element index 9 not available - page may have changed. Try refreshing browser s…"
+    assert len(error) == arena.ACTION_ERROR_LIMIT
+    assert f'Step 2: click(index=9) on "Add to cart" -> error: {error}' in lines
+    assert 'Step 3: navigation(url="https://vhlistings.com/cart", new_tab=false)' in lines
+    for skipped in ("Bullet Studded Belt", "index=15", "View cart", "extract(", "cart rows"):
+        assert skipped not in prompt
 
 
 async def test_browseruse_arm_cleans_up_when_the_run_is_cancelled(no_browser, monkeypatch):

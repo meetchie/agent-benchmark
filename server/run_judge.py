@@ -61,7 +61,7 @@ RESULT STATE: {result_state}
 {result_state_note}
 
 STEPS THE AGENT TOOK (with timing):
-Under a step, "evaluation of the step before" is the agent's own verdict on the previous step, and "result" is what the browser action returned (page text the agent read, cut short when long, or an error).
+Under a step, "evaluation of the step before" is the agent's own verdict on the previous step, and each "result" is one browser action the step ran and what it returned (page text the agent read, cut short when long, or an error). A step's own line is often the agent's goal for it, written before it acted: an action it planned but did not get to run has no result line.
 {steps_text}
 
 THE AGENT'S FINAL REPORT (its own claim, not checked):
