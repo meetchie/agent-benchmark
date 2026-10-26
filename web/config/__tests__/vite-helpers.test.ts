@@ -74,10 +74,11 @@ describe("apiProxy", () => {
     return fn(path);
   };
 
-  it("proxies exactly the five API routes the Cloudflare functions covered, plus health", () => {
+  it("proxies exactly the five API routes the Cloudflare functions covered, plus health and the live frame", () => {
     expect(Object.keys(proxy).sort()).toEqual(
       [
         "/api/benchmark/cancel",
+        "/api/benchmark/frame",
         "/api/benchmark/generate-tasks",
         "/api/benchmark/health",
         "/api/benchmark/quota",
@@ -85,7 +86,7 @@ describe("apiProxy", () => {
         "/api/benchmark/status",
       ].sort()
     );
-    expect(API_ROUTES).toHaveLength(6);
+    expect(API_ROUTES).toHaveLength(7);
   });
 
   it("maps /api/benchmark/health to the backend's /health", () => {
@@ -108,8 +109,9 @@ describe("apiProxy", () => {
     expect(rewrite("/api/benchmark/quota", "/api/benchmark/quota")).toBe("/benchmark/quota");
   });
 
-  it("keeps the run id when mapping status and cancel", () => {
+  it("keeps the run id when mapping status, frame and cancel", () => {
     expect(rewrite("/api/benchmark/status", "/api/benchmark/status/3f2a-run")).toBe("/benchmark/status/3f2a-run");
+    expect(rewrite("/api/benchmark/frame", "/api/benchmark/frame/3f2a-run?seq=4")).toBe("/benchmark/frame/3f2a-run?seq=4");
     expect(rewrite("/api/benchmark/cancel", "/api/benchmark/cancel/3f2a-run")).toBe("/benchmark/cancel/3f2a-run");
   });
 });

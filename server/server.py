@@ -6,6 +6,7 @@ Start: uv run uvicorn server:app --port 8000 --reload
 Endpoints:
   POST /benchmark/start           → { run_id, remaining, resets_in, limit }
   GET  /benchmark/status/{run_id} → RunState as JSON (see RunState.to_dict)
+  GET  /benchmark/frame/{run_id}  → the newest JPEG of the agent's page (404 until there is one)
   POST /benchmark/cancel/{run_id} → { ok: true }
   POST /benchmark/generate-tasks  → { tasks: [{id, label, goal} x3] }
   GET  /benchmark/quota           → { remaining, resets_in, limit }
@@ -39,7 +40,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -463,8 +464,13 @@ async def _demo_run(state: RunState, url: str, goal: str):
     ]
 
     overall_start = datetime.now()
+    state.set_run_phase("opening_site")
+    await _aio.sleep(1.0)
     for i, desc in enumerate(demo_steps):
-        await _aio.sleep(random.uniform(1.5, 4.0))
+        state.set_run_phase("deciding", i + 1)
+        await _aio.sleep(random.uniform(1.0, 3.0))
+        state.set_run_phase("acting", i + 1)
+        await _aio.sleep(random.uniform(0.5, 1.0))
         elapsed = random.randint(800, 5000)
         state.steps.append(StepRecord(
             step=i + 1,
@@ -612,6 +618,21 @@ async def get_status(run_id: str, _: None = Depends(verify_internal_key)):
     if not state:
         raise HTTPException(status_code=404, detail="Not found")
     return state.to_dict()
+
+
+@app.get("/benchmark/frame/{run_id}")
+async def get_frame(run_id: str, _: None = Depends(verify_internal_key)):
+    """The newest picture of the run's page, as a JPEG; the status reply's ``frame.seq``
+    says when there is a new one. The finished run keeps its last frame."""
+    state = _runs.get(run_id)
+    frame = state.frame if state else None
+    if frame is None:
+        raise HTTPException(status_code=404, detail="No frame yet")
+    return Response(
+        content=frame,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store", "X-Frame-Seq": str(state.frame_seq)},
+    )
 
 
 # How long a cancel waits for the run to stop its agent and record the usage it billed.

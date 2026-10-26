@@ -125,6 +125,72 @@ describe("RunningView", () => {
     expect(imgs[0]).toHaveAttribute("src", "data:image/png;base64,abc");
   });
 
+  describe("live preview", () => {
+    const FRAME = "/api/benchmark/frame/run-1?seq=3";
+
+    it("shows the whole browser picture scaled to fit, never cropped", () => {
+      render(<RunningView {...defaultProps} screenshot={FRAME} runPhase={{ name: "deciding", step: 1 }} />);
+      const imgs = screen.getAllByTestId("live-frame");
+      expect(imgs).toHaveLength(2); // desktop and mobile panes
+      for (const img of imgs) {
+        expect(img).toHaveAttribute("src", FRAME);
+        expect(img).toHaveClass("object-contain", "w-full", "h-full");
+        expect(img.className).not.toMatch(/object-cover/);
+      }
+    });
+
+    it("says what the run is doing over the picture while it runs", () => {
+      render(<RunningView {...defaultProps} screenshot={FRAME} runPhase={{ name: "deciding", step: 3 }} />);
+      expect(screen.getAllByTestId("run-phase").map((el) => el.textContent)).toEqual(["Deciding step 3", "Deciding step 3"]);
+    });
+
+    it("explains the wait before the first picture", () => {
+      render(<RunningView {...defaultProps} runPhase={{ name: "starting_browser" }} />);
+      expect(screen.getAllByText("Starting the browser…")).toHaveLength(2);
+      expect(document.querySelectorAll(".animate-spin").length).toBeGreaterThan(0);
+    });
+
+    it("names the site while it opens", () => {
+      render(<RunningView {...defaultProps} runPhase={{ name: "opening_site" }} />);
+      expect(screen.getAllByText("Opening shipt.com…")).toHaveLength(2);
+    });
+
+    it("drops the label once the run is over, and keeps the last picture", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          summary={makeSummary()}
+          steps={[makeStep(1)]}
+          screenshot={FRAME}
+          runPhase={{ name: "acting", step: 1 }}
+        />
+      );
+      expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+      expect(screen.getAllByTestId("live-frame")[0]).toHaveAttribute("src", FRAME);
+    });
+
+    it("says the run is being judged while it is analyzing", () => {
+      render(
+        <RunningView
+          {...defaultProps}
+          isRunning={false}
+          isAnalyzing
+          analyzingStats={{ total_ms: 4000, input_tokens: 5000, output_tokens: 500, total_tokens: 5500, cost_usd: null }}
+          steps={[makeStep(1)]}
+          screenshot={FRAME}
+          runPhase={{ name: "judging" }}
+        />
+      );
+      expect(screen.getAllByTestId("run-phase")[0]).toHaveTextContent("Judging the run");
+    });
+
+    it("shows no label when the backend gives no phase", () => {
+      render(<RunningView {...defaultProps} screenshot={FRAME} />);
+      expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows 'Benchmark complete' banner and ResultsOverlay when summary is provided", () => {
     const summary = makeSummary();
     render(
@@ -386,6 +452,17 @@ describe("RunningView", () => {
       render(<RunningView {...defaultProps} steps={[makeStep(1)]} />);
       tick(3000);
       expect(timeCells()).toEqual(timeCells().map(() => "0:03"));
+    });
+
+    it("starts as soon as the backend says the run is going, before the first step", () => {
+      const { rerender } = render(<RunningView {...defaultProps} />);
+      tick(3000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:00"));
+      rerender(<RunningView {...defaultProps} runPhase={{ name: "starting_browser" }} />);
+      tick(2000);
+      rerender(<RunningView {...defaultProps} runPhase={{ name: "deciding", step: 1 }} />);
+      tick(2000);
+      expect(timeCells()).toEqual(timeCells().map(() => "0:04"));
     });
 
     it("starts when the first poll already brings several steps", () => {

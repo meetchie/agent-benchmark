@@ -479,3 +479,31 @@ def test_stop_browser_with_nothing_running_returns_at_once(tmp_path):
     assert browser_env.stop_browser(str(tmp_path)) == []
     assert browser_env.stop_browser("") == []
     assert time.monotonic() - started < 1
+
+
+@pytest.mark.parametrize("asked, given", [
+    ({"width": 1339, "height": 460}, {"width": 1339, "height": 753}),   # a wide, short preview pane
+    ({"width": 1280, "height": 720}, {"width": 1280, "height": 720}),   # a usable size is kept
+    ({"width": 1440, "height": 900}, {"width": 1440, "height": 900}),
+    ({"width": 358, "height": 380}, {"width": 1024, "height": 768}),    # a phone: 4:3, scaled up
+    ({"width": 1024, "height": 1400}, {"width": 1024, "height": 768}),  # tall: held to 4:3
+    ({"width": 3840, "height": 2160}, {"width": 1920, "height": 1080}), # huge: scaled down, shape kept
+    ({"width": 800, "height": 450}, {"width": 1280, "height": 720}),    # small: scaled up, shape kept
+    ({"width": 1600, "height": 1600}, {"width": 1600, "height": 1200}),
+    ({"width": 1920, "height": 400}, {"width": 1920, "height": 1080}),
+    ({"width": 2400, "height": 1200}, {"width": 1920, "height": 1080}),
+])
+def test_fit_viewport_gives_a_desktop_size_between_4_3_and_16_9(asked, given):
+    fitted = browser_env.fit_viewport(asked)
+    assert fitted == given
+    assert 1024 <= fitted["width"] <= 1920 and 720 <= fitted["height"] <= 1200
+    assert 4 / 3 - 0.01 <= fitted["width"] / fitted["height"] <= 16 / 9 + 0.01
+
+
+@pytest.mark.parametrize("asked", [
+    None, {}, {"width": 0, "height": 700}, {"width": -5, "height": -5}, {"width": "wide", "height": 700},
+    {"width": float("inf"), "height": 700}, {"width": float("nan"), "height": 700}, {"width": True, "height": 700},
+    {"width": 1300},
+])
+def test_fit_viewport_without_a_usable_size_gives_the_default(asked):
+    assert browser_env.fit_viewport(asked) == {"width": 1280, "height": 720}

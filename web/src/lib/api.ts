@@ -108,6 +108,15 @@ export async function startBenchmark(
   return res.json();
 }
 
+/**
+ * Where the picture behind a status reply's frame {seq} is. The seq only makes
+ * each new picture a new URL (the backend always serves its newest one), so an
+ * unchanged frame costs no request.
+ */
+export function frameUrl(runId: string, seq: number): string {
+  return `/api/benchmark/frame/${encodeURIComponent(runId)}?seq=${seq}`;
+}
+
 export async function pollStatus(runId: string): Promise<StatusResponse> {
   const res = await fetch(`/api/benchmark/status/${runId}`);
   if (!res.ok) throw new Error(`Status poll failed: ${res.status}`);

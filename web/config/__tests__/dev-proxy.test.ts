@@ -89,6 +89,12 @@ describe("vite dev proxy to the backend", () => {
     expect(got.url).toBe("/benchmark/status/abc-123");
   });
 
+  it("GET /api/benchmark/frame/<id> keeps the id and the frame number", async () => {
+    const got = await call("/api/benchmark/frame/abc-123?seq=7");
+    expect(got.method).toBe("GET");
+    expect(got.url).toBe("/benchmark/frame/abc-123?seq=7");
+  });
+
   it("POST /api/benchmark/cancel/<id> keeps the id", async () => {
     const got = await call("/api/benchmark/cancel/abc-123", { method: "POST" });
     expect(got.method).toBe("POST");

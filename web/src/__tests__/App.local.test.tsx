@@ -98,6 +98,37 @@ describe("App in local mode (no Clerk key)", () => {
     });
   });
 
+  it("shows the agent's page as soon as there is a frame, and what the run is doing", async () => {
+    // What the backend says over the first seconds of a run: the browser starting,
+    // the site opening (the first frame), then the model choosing step 1.
+    const replies = [
+      { status: "running", steps: [], run_phase: { name: "starting_browser" }, frame: null },
+      { status: "running", steps: [], run_phase: { name: "opening_site" }, frame: { seq: 1 } },
+      { status: "running", steps: [], run_phase: { name: "deciding", step: 1 }, frame: { seq: 2 } },
+    ];
+    let poll = 0;
+    const fetchMock = stubBackend({
+      "/api/benchmark/quota": () => json({ remaining: 0, resets_in: 0, limit: 0 }),
+      "/api/benchmark/generate-tasks": () => json({ tasks: [TASK] }),
+      "/api/benchmark/run": () => json({ run_id: "run-1" }),
+      "/api/benchmark/status": () => json(replies[Math.min(poll++, replies.length - 1)]),
+    });
+    const { user, input } = await openSetup();
+    await user.type(input, "https://books.example{Enter}");
+    await user.click(await screen.findByText(TASK.label));
+    await user.click(screen.getByRole("button", { name: "Run Benchmark" }));
+
+    expect((await screen.findAllByText("Starting the browser…", {}, { timeout: 3000 })).length).toBeGreaterThan(0);
+    const firstFrame = await screen.findAllByTestId("live-frame", {}, { timeout: 3000 });
+    expect(firstFrame[0]).toHaveAttribute("src", "/api/benchmark/frame/run-1?seq=1");
+    expect(screen.getAllByTestId("run-phase")[0]).toHaveTextContent("Opening books.example");
+
+    await waitFor(() => expect(screen.getAllByTestId("live-frame")[0]).toHaveAttribute("src", "/api/benchmark/frame/run-1?seq=2"), { timeout: 3000 });
+    expect(screen.getAllByTestId("run-phase")[0]).toHaveTextContent("Deciding step 1");
+    // The picture is fetched by the <img>, never through the status poll.
+    expect(fetchMock.mock.calls.map((c) => c[0]).filter((u) => u.startsWith("/api/benchmark/frame"))).toEqual([]);
+  }, 12000);
+
   describe("a finished run", () => {
     const COMPLETE = {
       status: "complete",

@@ -65,6 +65,7 @@ export const API_ROUTES: ReadonlyArray<{ from: string; to: string; kind: "fixed"
   { from: "/api/benchmark/quota", to: "/benchmark/quota", kind: "fixed" },
   { from: "/api/benchmark/health", to: "/health", kind: "fixed" },
   { from: "/api/benchmark/status", to: "/benchmark/status", kind: "prefix" },
+  { from: "/api/benchmark/frame", to: "/benchmark/frame", kind: "prefix" },
   { from: "/api/benchmark/cancel", to: "/benchmark/cancel", kind: "prefix" },
 ];
 

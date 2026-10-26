@@ -6,6 +6,8 @@ interface StepLogProps {
   steps: StepRecord[];
   isRunning: boolean;
   totalMs?: number;
+  /** What the run is doing before its first step ("Starting the browser"); a generic line when unknown. */
+  startingLabel?: string | null;
 }
 
 /* Layout: 16px left padding, then the line at 16px, dots centered on 16px, text starts at 32px */
@@ -15,7 +17,7 @@ const ACTIVE_DOT_SIZE = 10; // px (active dots)
 const DOT_OFFSET = LINE_LEFT - DOT_SIZE / 2; // 10px — centers dot on line
 const LINE_PAD = 8;   // px of gradient fade before first dot / after last dot
 
-export function StepLog({ steps, isRunning, totalMs }: StepLogProps) {
+export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogProps) {
   const currentStep = isRunning && steps.length > 0 ? steps[steps.length - 1] : null;
   const completedSteps = currentStep ? steps.slice(0, -1) : steps;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,7 @@ export function StepLog({ steps, isRunning, totalMs }: StepLogProps) {
                 className="absolute rounded-full bg-[#3c49ad] dot-pulse"
                 style={{ left: DOT_OFFSET - 32, top: 5, width: ACTIVE_DOT_SIZE, height: ACTIVE_DOT_SIZE }}
               />
-              <span className="text-xs text-slate-400">Starting agent...</span>
+              <span className="text-xs text-slate-400">{startingLabel ? `${startingLabel}…` : "Starting agent..."}</span>
             </div>
           )}
 

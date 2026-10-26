@@ -4,27 +4,50 @@ import pytest
 from benchmark_runner import StepRecord, RunState
 
 
-def make_step(n: int, has_screenshot: bool = True) -> StepRecord:
-    return StepRecord(
-        step=n,
-        description=f"Step {n}",
-        elapsed_ms=500,
-        screenshot_b64="data:image/jpeg;base64,abc" if has_screenshot else None,
-    )
+def make_step(n: int) -> StepRecord:
+    return StepRecord(step=n, description=f"Step {n}", elapsed_ms=500)
 
 
-def test_running_response_omits_screenshots_except_latest():
+def test_the_status_reply_carries_no_picture_only_the_frame_number():
+    """Polled every second: the picture itself comes from GET /benchmark/frame/<run_id>."""
     state = RunState(run_id="test-1")
     state.steps = [make_step(1), make_step(2), make_step(3)]
+    assert state.to_dict()["frame"] is None
 
+    state.put_frame(b"\xff\xd8one")
+    state.put_frame(b"\xff\xd8two")
     resp = state.to_response()
 
     assert resp["status"] == "running"
-    assert len(resp["steps"]) == 3
-    # Only last step has screenshot
-    assert "screenshot_b64" not in resp["steps"][0]
-    assert "screenshot_b64" not in resp["steps"][1]
-    assert "screenshot_b64" in resp["steps"][2]
+    assert resp["steps"] == [{"step": n, "description": f"Step {n}", "elapsed_ms": 500} for n in (1, 2, 3)]
+    assert resp["frame"] == {"seq": 2}
+    assert state.frame == b"\xff\xd8two"
+    assert "\\xff" not in str(resp) and "base64" not in str(resp)
+
+
+@pytest.mark.parametrize("status", ["complete", "error", "analyzing"])
+def test_a_finished_run_keeps_its_last_frame(status):
+    state = RunState(run_id="test-1", status=status)
+    state.put_frame(b"\xff\xd8last")
+    assert state.to_dict()["frame"] == {"seq": 1}
+
+
+def test_the_status_reply_says_what_the_run_is_doing():
+    state = RunState(run_id="test-1")
+    assert state.to_dict()["run_phase"] == {"name": "starting_browser"}
+    state.set_run_phase("opening_site")
+    assert state.to_dict()["run_phase"] == {"name": "opening_site"}
+    state.set_run_phase("deciding", 3)
+    assert state.to_dict()["run_phase"] == {"name": "deciding", "step": 3}
+    state.set_run_phase("acting", 3)
+    assert state.to_dict()["run_phase"] == {"name": "acting", "step": 3}
+    state.status = "analyzing"
+    assert state.to_dict()["run_phase"] == {"name": "judging"}
+    for status in ("complete", "error"):
+        state.status = status
+        assert "run_phase" not in state.to_dict()
+    with pytest.raises(ValueError):
+        state.set_run_phase("thinking")
 
 
 def test_complete_response_includes_summary():
@@ -70,10 +93,11 @@ import browser_use
 import httpx
 import llm
 import persistence
+import live_preview
 from benchmark_runner import _format_action, _step_evidence, get_agent_timeout, run_benchmark
 from constants import COST_RATES
 from tests import browser_use_history as bu
-from tests.fakes import install_fake_anthropic, text_response
+from tests.fakes import FakeBrowserSession, install_fake_anthropic, text_response
 
 REAL_BROWSER_PROFILE = browser_env.browser_profile
 
@@ -470,7 +494,13 @@ class FakeHistory:
 
 
 class FakeAgent:
-    """Stands in for browser_use.Agent. Class attributes script the run."""
+    """Stands in for browser_use.Agent. Class attributes script the run.
+
+    Its browser (a FakeBrowserSession) opens a blank tab when the run starts, then the
+    start URL from ``initial_actions``, and every step leaves a new picture on the page.
+    ``probe(tag)``, when set, is called at each of those moments (``blank-tab``,
+    ``deciding-<n>``, ``acting-<n>``, ...) so a test can look at the run state mid-run.
+    """
 
     goals = ["Open the site", "Search for a book", "Click add to basket"]
     evaluations = None  # per step: the model's verdict on the step before
@@ -486,18 +516,26 @@ class FakeAgent:
     raises_after = None  # raise ``raises`` after this many steps instead of before the first
     unrecorded_step = None  # index of a step browser-use keeps no history item for
     items = None  # real browser-use history items (tests/browser_use_history.py) instead of the above
+    startup_sleep = 0.0  # how long the browser shows its blank tab before the start URL
+    probe = None
     instances: list = []
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.history = FakeHistory([])
-        self.browser_session = SimpleNamespace(take_screenshot=self._screenshot)
+        self.browser_session = FakeBrowserSession()
         self.token_cost_service = SimpleNamespace(get_usage_summary=self._usage)
         type(self).instances.append(self)
 
-    async def _screenshot(self, format="png", quality=None):
-        assert (format, quality) == ("jpeg", 80)
-        return b"\xff\xd8fake-jpeg"
+    def _probe(self, tag):
+        if type(self).probe is not None:
+            type(self).probe(tag)
+
+    def _start_url(self):
+        for action in self.kwargs.get("initial_actions") or []:
+            if "navigate" in action:
+                return action["navigate"]["url"]
+        return None
 
     async def _usage(self):
         return type(self).usage
@@ -516,16 +554,30 @@ class FakeAgent:
 
     async def run(self, on_step_start=None, on_step_end=None):
         cls = type(self)
+        browser = self.browser_session
+        self._probe("before-browser")
         if cls.raises and cls.raises_after is None:
             raise cls.raises
+        browser.open_tab()
+        await asyncio.sleep(cls.startup_sleep)
+        self._probe("blank-tab")
+        url = self._start_url()
+        if url:  # browser-use runs initial_actions before the model's first turn
+            browser.show(url, b"\xff\xd8start-page")
         items = self._items()
         recorded = []
+        new_step = self.kwargs.get("register_new_step_callback")
         for i in range(len(items)):
             if cls.raises and i == cls.raises_after:
                 raise cls.raises
             await on_step_start(self)
+            self._probe(f"deciding-{i + 1}")
             if cls.sleep:
-                await asyncio.sleep(cls.sleep)
+                await asyncio.sleep(cls.sleep)  # the model's turn
+            if new_step is not None and items[i].model_output is not None:
+                new_step(None, items[i].model_output, i + 1)
+            self._probe(f"acting-{i + 1}")
+            browser.show(browser.url, b"\xff\xd8after-step-%d" % (i + 1))
             if i == cls.unrecorded_step:
                 # Like a step that timed out inside browser-use: no history item, an error result.
                 self.state = SimpleNamespace(last_result=[action_result(error=f"Step {i + 1} timed out after 60 seconds")])
@@ -548,6 +600,8 @@ def fake_run(monkeypatch, tmp_path):
 
     FakeAgentForTest.instances = []
     seen.agent_cls = FakeAgentForTest
+    monkeypatch.setattr(live_preview, "FRAME_INTERVAL_S", 0.01)
+    monkeypatch.setattr(live_preview, "PAGE_POLL_S", 0.005)
 
     def fake_profile(**kwargs):
         seen.profile_calls.append(kwargs)
@@ -573,6 +627,7 @@ def make_state(**kwargs):
 
 async def test_successful_run_end_to_end(fake_run, monkeypatch):
     fake_run.agent_cls.usage = usage_summary()
+    fake_run.agent_cls.sleep = 0.02  # model turns long enough for the preview to look
     calls = install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
     await persistence.persist_run_start("run-1", "local", "https://books.toscrape.com", "Add", "G", agent_model="claude-sonnet-5-5")
     state = make_state()
@@ -583,7 +638,7 @@ async def test_successful_run_end_to_end(fake_run, monkeypatch):
     assert state.result_state == "pass"
     assert state.success is True
     assert [s.description for s in state.steps] == fake_run.agent_cls.goals
-    assert state.steps[0].screenshot_b64.startswith("data:image/jpeg;base64,")
+    assert state.frame is not None and state.frame.startswith(b"\xff\xd8")
     assert state.summary == "Added the book to the basket."
     assert [p["steps"] for p in state.phases] == [[1], [2, 3]]
     assert state.agent_model == "claude-sonnet-5-5"
@@ -690,17 +745,118 @@ async def test_agent_is_built_from_the_llm_layer_and_the_shared_browser_profile(
     install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
     state = make_state()
 
-    await run_benchmark(state, "https://books.toscrape.com", "Goal", viewport={"width": 390, "height": 844})
+    await run_benchmark(state, "https://books.toscrape.com", "Goal", viewport={"width": 1440, "height": 900})
 
     (agent,) = fake_run.agent_cls.instances
     assert agent.kwargs["llm"] is fake_run.sentinel_llm
     assert fake_run.llm_models == [state.agent_model]
     assert agent.kwargs["browser_profile"] is fake_run.profiles[0]
-    assert fake_run.profile_calls == [{"viewport": {"width": 390, "height": 844}}]
+    assert fake_run.profile_calls == [{"viewport": {"width": 1440, "height": 900}}]
     assert agent.kwargs["task"] == "Go to https://books.toscrape.com\n\nGoal"
     assert agent.kwargs["use_judge"] is False
     assert agent.kwargs["enable_signal_handler"] is False
     assert agent.kwargs["file_system_path"]
+
+
+@pytest.mark.parametrize("asked, given", [
+    ({"width": 1339, "height": 460}, {"width": 1339, "height": 753}),  # a wide, short preview pane
+    ({"width": 358, "height": 380}, {"width": 1024, "height": 768}),   # a phone
+    (None, {"width": 1280, "height": 720}),
+])
+async def test_the_browser_gets_a_usable_size_whatever_the_preview_pane_asked(fake_run, monkeypatch, asked, given):
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    await run_benchmark(make_state(), "https://books.toscrape.com", "Goal", viewport=asked)
+    assert fake_run.profile_calls == [{"viewport": given}]
+
+
+@pytest.mark.parametrize("url", ["https://books.toscrape.com", "https://books.toscrape.com/"])
+async def test_the_start_url_is_opened_before_the_models_first_turn(fake_run, monkeypatch, url):
+    """Whatever the goal says: a goal that names another address made browser-use skip it."""
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    await run_benchmark(make_state(), url, "Check books.toscrape.com/catalogue for a cheap book.")
+    (agent,) = fake_run.agent_cls.instances
+    assert agent.kwargs["initial_actions"] == [{"navigate": {"url": url, "new_tab": False}}]
+
+
+async def test_the_status_says_what_the_run_is_doing_at_each_moment(fake_run, monkeypatch):
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    state = make_state()
+    seen = []
+    fake_run.agent_cls.goals = ["Open the site", "Search for a book"]
+    fake_run.agent_cls.startup_sleep = 0.1
+    fake_run.agent_cls.probe = lambda tag: seen.append((tag, state.to_dict()["run_phase"]))
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    assert seen == [
+        ("before-browser", {"name": "starting_browser"}),
+        ("blank-tab", {"name": "opening_site"}),
+        ("deciding-1", {"name": "deciding", "step": 1}),
+        ("acting-1", {"name": "acting", "step": 1}),
+        ("deciding-2", {"name": "deciding", "step": 2}),
+        ("acting-2", {"name": "acting", "step": 2}),
+    ]
+    assert state.status == "complete" and "run_phase" not in state.to_dict()
+
+
+async def test_the_preview_shows_the_site_while_the_model_decides_the_first_step(fake_run, monkeypatch):
+    """The complaint: the preview stayed empty until the first step was done."""
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    state = make_state()
+    seen, frames = {}, []
+    put_frame = state.put_frame
+    state.put_frame = lambda jpeg: (frames.append(jpeg), put_frame(jpeg))
+    fake_run.agent_cls.sleep = 0.15  # each model turn
+    fake_run.agent_cls.probe = lambda tag: seen.setdefault(tag, (len(state.steps), state.frame, state.to_dict()["frame"]))
+
+    await run_benchmark(state, "https://books.toscrape.com", "Goal")
+
+    steps, frame, reply = seen["acting-1"]  # the model has answered, nothing is done yet
+    assert steps == 0
+    assert frame == b"\xff\xd8start-page"
+    assert reply["seq"] >= 1
+    # What each step left on the page showed up during the next model turn.
+    assert frames[:3] == [b"\xff\xd8start-page", b"\xff\xd8after-step-1", b"\xff\xd8after-step-2"]
+    assert state.to_dict()["frame"] == {"seq": len(frames)}
+
+
+def preview_tasks():
+    return [t for t in asyncio.all_tasks() if t.get_name() == "live-preview" and not t.done()]
+
+
+@pytest.mark.parametrize("ending", ["complete", "timeout", "error", "cancel", "bad-setting"])
+async def test_the_picture_loop_stops_however_the_run_ends(fake_run, monkeypatch, ending):
+    install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
+    state = make_state()
+    agent_cls = fake_run.agent_cls
+    agent_cls.sleep = 0.1
+    if ending == "timeout":
+        monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "0.15")
+    elif ending == "error":
+        agent_cls.raises, agent_cls.raises_after = RuntimeError("browser crashed"), 1
+    elif ending == "bad-setting":
+        monkeypatch.setenv("BENCHMARK_TIMEOUT_S", "-1")
+
+    running_mid_run = []
+    agent_cls.probe = lambda tag: running_mid_run.append(bool(preview_tasks())) if tag == "deciding-1" else None
+
+    task = asyncio.create_task(run_benchmark(state, "https://books.toscrape.com", "Goal"))
+    if ending == "cancel":
+        await asyncio.sleep(0.15)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        await task
+
+    assert running_mid_run == ([] if ending == "bad-setting" else [True])
+    assert preview_tasks() == []
+    if agent_cls.instances:
+        browser = agent_cls.instances[0].browser_session
+        captures = browser.captures
+        await asyncio.sleep(0.05)
+        assert browser.captures == captures
+    assert state.status in ("complete", "error")
 
 
 async def test_the_run_cleans_up_its_temp_dirs(fake_run, monkeypatch):

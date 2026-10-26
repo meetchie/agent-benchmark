@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from pathlib import Path
 
@@ -1018,6 +1019,80 @@ def test_start_passes_the_viewport_to_the_runner(live):
         run_id = live.post("/benchmark/start", json=body).json()["run_id"]
         wait_for_status(live, run_id)
     assert seen["viewport"] == {"width": 390, "height": 844}
+
+
+# ---------------------------------------------------------------------------
+# Live preview: the frame endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_the_frame_endpoint_serves_the_newest_picture_of_the_page(live):
+    release = threading.Event()
+
+    async def shows_two_frames(state, url, goal, viewport=None):
+        state.put_frame(b"\xff\xd8first")
+        state.put_frame(b"\xff\xd8second")
+        while not release.is_set():
+            await asyncio.sleep(0.01)
+        state.status = "complete"
+
+    with patch("server.run_benchmark", side_effect=shows_two_frames):
+        run_id = live.post("/benchmark/start", json=START).json()["run_id"]
+        body = wait_for_status(live, run_id, wanted=("running",))
+        deadline = time.time() + 5
+        while body["frame"] is None and time.time() < deadline:
+            body = live.get(f"/benchmark/status/{run_id}").json()
+        assert body["frame"] == {"seq": 2}
+
+        resp = live.get(f"/benchmark/frame/{run_id}?seq=2")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/jpeg"
+        assert resp.headers["cache-control"] == "no-store"
+        assert resp.headers["x-frame-seq"] == "2"
+        assert resp.content == b"\xff\xd8second"
+
+        release.set()
+        wait_for_status(live, run_id)
+    # The finished run keeps its last frame.
+    assert live.get(f"/benchmark/frame/{run_id}").content == b"\xff\xd8second"
+
+
+def test_no_frame_yet_and_unknown_runs_are_404(live):
+    async def no_frame(state, url, goal, viewport=None):
+        state.status = "complete"
+
+    with patch("server.run_benchmark", side_effect=no_frame):
+        run_id = live.post("/benchmark/start", json=START).json()["run_id"]
+        wait_for_status(live, run_id)
+    assert live.get(f"/benchmark/status/{run_id}").json()["frame"] is None
+    assert live.get(f"/benchmark/frame/{run_id}").status_code == 404
+    assert live.get("/benchmark/frame/not-a-run").status_code == 404
+
+
+def test_the_frame_endpoint_wants_the_internal_key_like_status(live, monkeypatch):
+    monkeypatch.setattr(server_module, "_INTERNAL_API_KEY", "shared-secret")
+    state = server_module.RunState(run_id="r1")
+    state.put_frame(b"\xff\xd8x")
+    server_module._runs["r1"] = state
+    assert live.get("/benchmark/frame/r1").status_code == 403
+    assert live.get("/benchmark/frame/r1", headers={"X-Internal-Key": "shared-secret"}).status_code == 200
+
+
+def test_a_demo_run_says_what_it_is_doing(no_keys, monkeypatch, instant_sleep):
+    monkeypatch.setenv("DEMO_MODE", "true")
+    phases = set()
+    with TestClient(app) as c:
+        run_id = c.post("/benchmark/start", json=START).json()["run_id"]
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            body = c.get(f"/benchmark/status/{run_id}").json()
+            if body["status"] == "complete":
+                break
+            phases.add(body["run_phase"]["name"])
+            time.sleep(0.005)
+    assert body["status"] == "complete"
+    assert phases >= {"deciding", "acting"}
+    assert body["frame"] is None  # a demo run has no browser, so no picture
 
 
 # ---------------------------------------------------------------------------

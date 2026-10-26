@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
-import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota, fetchHealth, normalizeQuota, pollLimitSeconds, UNKNOWN_QUOTA } from "./lib/api";
+import { startBenchmark, pollStatus, generateTasks, cancelBenchmark, fetchQuota, fetchHealth, frameUrl, normalizeQuota, pollLimitSeconds, UNKNOWN_QUOTA } from "./lib/api";
 import { isClerkMode } from "./lib/auth-mode";
-import type { Task, StepRecord, RunStatus, RunStats, SummaryData, Quota, Health } from "./lib/types";
+import type { Task, StepRecord, RunStatus, RunStats, SummaryData, Quota, Health, RunPhase } from "./lib/types";
 
 import { SignInModal } from "./components/SignInPage";
 import { SetupView } from "./components/SetupView";
@@ -40,7 +40,9 @@ export default function App() {
   useEffect(() => { if (taskId) sessionStorage.setItem("bench_taskId", taskId); else sessionStorage.removeItem("bench_taskId"); }, [taskId]);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [steps, setSteps] = useState<StepRecord[]>([]);
+  // URL of the newest picture of the agent's page (a new URL per new frame).
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [runPhase, setRunPhase] = useState<RunPhase | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [analyzingStats, setAnalyzingStats] = useState<RunStats | null>(null);
@@ -85,6 +87,7 @@ export default function App() {
   const [showExhausted, setShowExhausted] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollBusyRef = useRef(false); // a status request is on its way: the next tick waits for it
   const pollCountRef = useRef(0);
   const retriesRef = useRef(0);
   const currentRunIdRef = useRef<string | null>(null);
@@ -236,7 +239,17 @@ export default function App() {
       retriesRef.current = 0;
       const maxPolls = Math.ceil((pollLimitSeconds(healthRef.current?.timeout_s) * 1000) / POLL_INTERVAL_MS);
 
-      pollRef.current = setInterval(async () => {
+      const poll = async () => {
+        if (pollBusyRef.current) return;
+        pollBusyRef.current = true;
+        try {
+          await pollOnce();
+        } finally {
+          pollBusyRef.current = false;
+        }
+      };
+
+      const pollOnce = async () => {
         pollCountRef.current++;
 
         if (pollCountRef.current > maxPolls) {
@@ -248,6 +261,11 @@ export default function App() {
 
         try {
           const data = await pollStatus(runId);
+          if (currentRunIdRef.current !== runId) return; // a reply for a run the viewer left
+
+          // The newest picture of the page, whatever the status (a finished run keeps its last).
+          if (data.frame) setScreenshot(frameUrl(runId, data.frame.seq));
+          setRunPhase(data.status === "running" || data.status === "analyzing" ? data.run_phase ?? null : null);
 
           if (data.status === "error") {
             stopPolling();
@@ -270,11 +288,6 @@ export default function App() {
           }
 
           setSteps(data.steps);
-
-          const latest = data.steps[data.steps.length - 1];
-          if (latest?.screenshot_b64) {
-            setScreenshot(latest.screenshot_b64);
-          }
 
           if (data.status === "analyzing") {
             setRunStatus("analyzing");
@@ -320,7 +333,11 @@ export default function App() {
             setErrorMsg("Lost connection to server.");
           }
         }
-      }, POLL_INTERVAL_MS);
+      };
+
+      pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
+      // Ask at once too: the first reply already says what the run is doing.
+      void poll();
     },
     [stopPolling]
   );
@@ -356,13 +373,18 @@ export default function App() {
     setRunStatus("running");
     setSteps([]);
     setScreenshot(null);
+    setRunPhase(null);
     setSummary(null);
     setErrorMsg(null);
     setAnalyzingStats(null);
     setView("running");
+    currentRunIdRef.current = null;
 
     try {
-      // Compute the screenshot container size to match the viewer's browser
+      // Ask for a browser the size of the preview pane, so the picture fills it.
+      // The backend keeps it a usable desktop size (browser_env.fit_viewport: at
+      // least 1024x720, between 4:3 and 16:9), and the pane scales whatever
+      // arrives to fit, whole.
       // Mobile (< 768px): full width minus padding, no sidebar
       // Desktop: full width minus sidebar (300px) minus padding (16*2) minus gap (16) minus border (4)
       const isMobile = window.innerWidth < 768;
@@ -407,6 +429,7 @@ export default function App() {
     setRunStatus("idle");
     setSteps([]);
     setScreenshot(null);
+    setRunPhase(null);
     setSummary(null);
     setErrorMsg(null);
     setAnalyzingStats(null);
@@ -455,6 +478,7 @@ export default function App() {
           analyzingStats={analyzingStats}
           steps={steps}
           screenshot={screenshot}
+          runPhase={runPhase}
           summary={summary}
           errorMsg={errorMsg}
           onRunAgain={handleRunAgain}

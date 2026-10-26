@@ -61,10 +61,17 @@ a dev-server restart or a rebuild.
 | `GET /api/benchmark/health` | `GET /health` |
 | `POST /api/benchmark/run` `{url, goal, label, viewport_width, viewport_height}` | `POST /benchmark/start` |
 | `GET /api/benchmark/status/<run_id>` | `GET /benchmark/status/<run_id>` |
+| `GET /api/benchmark/frame/<run_id>?seq=<n>` | `GET /benchmark/frame/<run_id>` |
 | `POST /api/benchmark/cancel/<run_id>` | `POST /benchmark/cancel/<run_id>` |
 
 The map lives in `config/vite-helpers.ts` (`API_ROUTES`) and is tested against a real Vite
 server in `config/__tests__/dev-proxy.test.ts`.
+
+While a run is going the status payload carries `run_phase` (`starting_browser`,
+`opening_site`, `deciding` or `acting` with its `step`, `judging`), shown as a short label, and
+`frame: {seq}`, and the preview loads `/api/benchmark/frame/<run_id>?seq=<n>`: the newest JPEG
+of the agent's page, about one a second while it changes, scaled to fit the pane whole. The
+browser is sized to the pane, but the backend keeps it at least 1024x720 and between 4:3 and 16:9.
 
 The status payload, once the agent has finished (`analyzing` and `complete`), carries the
 token counts plus two fields the UI shows as given:

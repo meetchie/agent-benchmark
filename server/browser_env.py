@@ -71,6 +71,7 @@ import atexit
 import glob
 import json
 import logging
+import math
 import os
 import platform
 import re
@@ -87,6 +88,13 @@ log = logging.getLogger(__name__)
 
 KEYCHAIN_ARGS: tuple[str, ...] = ("--use-mock-keychain", "--password-store=basic")
 DEFAULT_VIEWPORT: dict[str, int] = {"width": 1280, "height": 720}
+# The live benchmark sizes the browser to the viewer's preview pane (fit_viewport), but
+# never below a desktop size or outside these shapes: a short or narrow window would make
+# the agent scroll (and pay for) far more than the site needs.
+MIN_VIEWPORT: dict[str, int] = {"width": 1024, "height": 720}
+MAX_VIEWPORT: dict[str, int] = {"width": 1920, "height": 1200}
+MIN_ASPECT = 4 / 3   # width / height: no taller than 4:3
+MAX_ASPECT = 16 / 9  # no wider than 16:9
 INSTALL_HINT = "cd server && uv run playwright install chromium"
 LINUX_DEPS_HINT = "cd server && uv run playwright install-deps chromium"
 # How long `chromium --version` may take before the start check gives up on it.
@@ -268,6 +276,37 @@ def headless() -> bool:
     if not value:
         return True
     return value not in _FALSE_WORDS
+
+
+def fit_viewport(requested: dict[str, Any] | None) -> dict[str, int]:
+    """The viewport for a live run asked for ``requested`` (the viewer's preview pane).
+
+    The shape is first held between 4:3 and 16:9 (by changing the height), then the size
+    is scaled, shape kept, until it is within MIN_VIEWPORT..MAX_VIEWPORT. A pane of
+    1339x460 gives 1339x753, a 3840x2160 screen 1920x1080, a phone's 358x380 1024x768.
+    Nothing asked (or nothing usable) gives the default 1280x720. The preview scales the
+    frame to fit its pane, so any of these shows whole.
+    """
+    def number(key: str) -> float | None:
+        value = (requested or {}).get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return None
+        return float(value)
+
+    width, height = number("width"), number("height")
+    if not width or not height or width <= 0 or height <= 0:
+        return dict(DEFAULT_VIEWPORT)
+    aspect = min(max(width / height, MIN_ASPECT), MAX_ASPECT)
+    height = width / aspect
+    grow = max(MIN_VIEWPORT["width"] / width, MIN_VIEWPORT["height"] / height, 1.0)
+    width, height = width * grow, height * grow
+    shrink = min(MAX_VIEWPORT["width"] / width, MAX_VIEWPORT["height"] / height, 1.0)
+    width, height = width * shrink, height * shrink
+
+    def held(value: float, key: str) -> int:
+        return min(max(round(value), MIN_VIEWPORT[key]), MAX_VIEWPORT[key])
+
+    return {"width": held(width, "width"), "height": held(height, "height")}
 
 
 def chromium_args(extra: list[str] | tuple[str, ...] | None = None) -> list[str]:

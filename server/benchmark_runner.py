@@ -1,8 +1,8 @@
 """
-Benchmark Runner - Runs BrowserUse agent with live step tracking and screenshots.
+Benchmark Runner - Runs BrowserUse agent with live step tracking and a live preview.
 
-Manages in-memory run state, captures screenshots after each agent action,
-and provides step descriptions for the benchmark UI.
+Manages in-memory run state: the steps with their descriptions, what the run is doing
+right now (``run_phase``) and the newest frame of the agent's page (see live_preview.py).
 
 Configuration (environment, see ``llm.py`` and ``browser_env.py`` for the rest):
   BENCHMARK_TIMEOUT_S         hard limit for the agent, in seconds (default 180)
@@ -14,10 +14,8 @@ Configuration (environment, see ``llm.py`` and ``browser_env.py`` for the rest):
 import runtime_env  # noqa: F401  (first: loads .env and turns browser-use telemetry off)
 
 import asyncio
-import base64
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 import logging
 import math
 import os
@@ -88,21 +86,22 @@ class StepRecord:
     step: int
     description: str
     elapsed_ms: int
-    screenshot_b64: Optional[str] = None
     # For the judge only (not in the status payload): the agent's verdict on the step
     # before this one, and what each of this step's browser actions returned.
     evaluation: str = ""
     results: list[str] = field(default_factory=list)
 
-    def to_dict(self, include_screenshot: bool = False) -> dict:
-        d = {
+    def to_dict(self) -> dict:
+        return {
             "step": self.step,
             "description": self.description,
             "elapsed_ms": self.elapsed_ms,
         }
-        if include_screenshot and self.screenshot_b64:
-            d["screenshot_b64"] = self.screenshot_b64
-        return d
+
+
+# What a running run is doing, in order (RunState.run_phase). "judging" is reported for
+# the whole "analyzing" status.
+RUN_PHASES = ("starting_browser", "opening_site", "deciding", "acting", "judging")
 
 
 @dataclass
@@ -132,6 +131,32 @@ class RunState:
     final_report: str | None = None  # The agent's closing report, None unless it finished on its own
     agent_reported_success: bool | None = None  # The success flag the agent set when it finished
     stopped_at: datetime | None = None  # When a cancel was asked for (the run's time ends there)
+    # What the run is doing now (one of RUN_PHASES) and, while deciding or acting, the
+    # number of the step that will be added next.
+    run_phase: str = "starting_browser"
+    run_phase_step: int | None = None
+    # The newest JPEG of the agent's page (served by GET /benchmark/frame/<run_id>) and how
+    # many frames there have been; only the newest is kept.
+    frame: bytes | None = field(default=None, repr=False)
+    frame_seq: int = 0
+
+    def set_run_phase(self, name: str, step: int | None = None) -> None:
+        if name not in RUN_PHASES:
+            raise ValueError(f"unknown run phase {name!r}")
+        self.run_phase = name
+        self.run_phase_step = step if name in ("deciding", "acting") else None
+
+    def put_frame(self, jpeg: bytes) -> None:
+        self.frame = jpeg
+        self.frame_seq += 1
+
+    def _run_phase_payload(self) -> dict:
+        if self.status == "analyzing":
+            return {"name": "judging"}
+        payload = {"name": self.run_phase}
+        if self.run_phase_step is not None:
+            payload["step"] = self.run_phase_step
+        return payload
 
     def record_usage(self, summary) -> None:
         """Take the agent's token usage from a browser-use UsageSummary.
@@ -154,7 +179,14 @@ class RunState:
         self.cost_usd = usage.cost_usd(self.agent_model)
 
     def to_dict(self) -> dict:
-        """Serialize for the status API. Only the latest step includes screenshot_b64.
+        """Serialize for the status API.
+
+        Every reply carries ``frame``: ``{"seq": n}`` once the agent's page has been
+        captured (fetch the picture from GET /benchmark/frame/<run_id>; ``seq`` grows with
+        every new frame), else null. No picture is ever inside the reply, so polling it
+        stays cheap. While the run is going (``running`` and ``analyzing``) it also
+        carries ``run_phase``: ``{"name": ..., "step": n}`` with a name from RUN_PHASES
+        (``step`` only while deciding or acting).
 
         Once the agent has finished (``analyzing`` and ``complete``) the payload carries
         the token counts plus ``cost_usd`` (US dollars for the agent's tokens at
@@ -169,17 +201,17 @@ class RunState:
         it (``final_report`` and ``agent_reported_success``, both null when the agent did
         not finish on its own), so the user can read what the judge read.
         """
-        steps_data = []
-        for i, step in enumerate(self.steps):
-            is_latest = i == len(self.steps) - 1
-            steps_data.append(step.to_dict(include_screenshot=is_latest))
+        steps_data = [step.to_dict() for step in self.steps]
+        frame = {"seq": self.frame_seq} if self.frame is not None else None
 
         if self.status == "running":
-            return {"status": "running", "steps": steps_data}
+            return {"status": "running", "steps": steps_data, "run_phase": self._run_phase_payload(), "frame": frame}
         elif self.status == "analyzing":
             return {
                 "status": "analyzing",
                 "steps": steps_data,
+                "run_phase": self._run_phase_payload(),
+                "frame": frame,
                 "total_ms": self.total_ms,
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
@@ -191,6 +223,7 @@ class RunState:
             payload = {
                 "status": "complete",
                 "steps": steps_data,
+                "frame": frame,
                 "success": self.success,
                 "summary": self.summary,
                 "result_state": self.result_state,
@@ -212,6 +245,7 @@ class RunState:
                 "status": "error",
                 "message": self.message,
                 "steps": steps_data,
+                "frame": frame,
             }
             if self.total_tokens or self.cost_usd is not None:
                 # The agent ran (and was billed) before the run ended, for example a
@@ -454,22 +488,6 @@ def _history_length(agent) -> int:
         return 0
 
 
-async def _take_screenshot(agent) -> Optional[str]:
-    """Capture a JPEG screenshot (quality 80) of the current page.
-
-    The size is the browser viewport (1280x720 unless the run asked for another),
-    about 50-150 KB per screenshot.
-    """
-    try:
-        # browser_use ≥0.11 uses browser_session; older versions used browser_context
-        session = getattr(agent, 'browser_session', None) or agent.browser_context
-        img_bytes = await session.take_screenshot(format="jpeg", quality=80)
-        return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()
-    except Exception as e:
-        logging.error(f"_take_screenshot failed: {type(e).__name__}: {e}")
-        return None
-
-
 def _one_line(text: object, limit: int = 300) -> str:
     return " ".join(str(text).split())[:limit]
 
@@ -694,16 +712,31 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     runs on whatever steps exist, plus the agent's final report when it finished on its
     own, and the result is written to the run file. A run is a "pass" only when the
     judge says so and the agent did not itself report that it failed.
+
+    ``viewport`` is the size the viewer's preview pane asked for; the browser gets
+    ``browser_env.fit_viewport(viewport)``. The start URL is opened before the model's
+    first turn, whatever else the goal mentions. While the agent works, ``state.run_phase``
+    says what it is doing and ``state.frame`` holds the newest picture of its page (see
+    live_preview.py); the picture loop stops as soon as the agent does.
     """
     # Deferred import: keeps the server startable even if browser_use is not installed,
     # and avoids import-time side effects (Playwright browser launch).
     from browser_use import Agent
-    from browser_env import agent_files_dir, browser_profile, cleanup_profile, track_agent_dir
+    from browser_env import agent_files_dir, browser_profile, cleanup_profile, fit_viewport, track_agent_dir
+    from live_preview import LivePreview
 
     overall_start = datetime.now()
     step_start_time: datetime = overall_start
     prev_step_end_time: datetime = overall_start
     history_seen = 0  # browser-use history items already turned into steps
+    state.set_run_phase("starting_browser")
+
+    def on_page():
+        # The browser is up and has its first tab: next comes the start URL.
+        if state.run_phase == "starting_browser":
+            state.set_run_phase("opening_site")
+
+    preview = LivePreview(on_frame=state.put_frame, on_page=on_page)
 
     async def on_step_start(agent):
         nonlocal step_start_time, prev_step_end_time
@@ -711,6 +744,12 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         # For the very first step, align the wall-clock anchor to when it actually started
         if not state.steps:
             prev_step_end_time = step_start_time
+        # browser-use reads the page and asks the model what to do next.
+        state.set_run_phase("deciding", len(state.steps) + 1)
+
+    def on_model_output(browser_state_summary, model_output, step_number):
+        # The model has chosen; browser-use now runs the actions (register_new_step_callback).
+        state.set_run_phase("acting", len(state.steps) + 1)
 
     async def on_step_end(agent):
         nonlocal prev_step_end_time, history_seen
@@ -731,14 +770,13 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             evaluation = ""
             results = _result_lines(getattr(getattr(agent, "state", None), "last_result", None))
         history_seen = _history_length(agent)
-        screenshot_b64 = await _take_screenshot(agent)
+        preview.nudge()  # a frame of what the step left on screen, without waiting for it
 
         state.steps.append(
             StepRecord(
                 step=len(state.steps) + 1,
                 description=description,
                 elapsed_ms=elapsed_ms,
-                screenshot_b64=screenshot_b64,
                 evaluation=evaluation,
                 results=results,
             )
@@ -796,12 +834,16 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         else:
             # Local Chromium: headless unless BENCHMARK_HEADLESS says otherwise, clean
             # throwaway profile, macOS keychain prompts disabled (see browser_env.py).
-            profile = browser_profile(viewport=viewport)
+            profile = browser_profile(viewport=fit_viewport(viewport))
 
         # use_judge=False: browser-use's own end-of-run judge would be a second,
         # unrequested model call; the benchmark has its own judge (run_judge.py).
         # enable_signal_handler=False: this runs inside a server, whose Ctrl-C is not
         # the agent's to pause on.
+        # initial_actions: open the start URL before the model's first turn. browser-use
+        # does that by itself only when the task text holds exactly one URL; a goal that
+        # names another address (or the same site without the trailing "/") would leave
+        # the agent on a blank tab, and its first model turn would go on opening the site.
         agent = Agent(
             task=full_goal,
             llm=agent_chat,
@@ -809,11 +851,14 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             file_system_path=agent_files_dir(profile),
             use_judge=False,
             enable_signal_handler=False,
+            initial_actions=[{"navigate": {"url": url, "new_tab": False}}],
+            register_new_step_callback=on_model_output,
         )
         if profile is not None and provider != "browserbase":
             track_agent_dir(profile, agent)  # its step screenshots go with the profile
 
         history = None
+        preview.start(agent.browser_session)  # frames from the moment the browser has a page
         try:
             history = await asyncio.wait_for(
                 agent.run(
@@ -834,6 +879,9 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             timed_out = True
             logging.info("Agent timed out after %ss", agent_timeout)
             await _record_agent_usage(state, agent)
+        finally:
+            # The agent has stopped (and closed its browser): so does the picture loop.
+            await preview.stop()
 
         # --- Agent finished or timed out — always run the judge ---
         state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
@@ -896,6 +944,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         # Still try to run judge if we have steps
         await _finish_with_error(state, overall_start, _error_message(e))
     finally:
+        await preview.stop()  # in case the run ended before the agent got going
         # Release Browserbase session to free quota
         if bb and bb_session:
             try:

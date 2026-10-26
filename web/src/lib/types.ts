@@ -8,7 +8,24 @@ export interface StepRecord {
   step: number;
   description: string;
   elapsed_ms: number;
-  screenshot_b64?: string;
+}
+
+/** What a run is doing now, in order. "judging" covers the whole "analyzing" status. */
+export type RunPhaseName = "starting_browser" | "opening_site" | "deciding" | "acting" | "judging";
+
+/** The status reply's run_phase: step is the number of the step being decided or done. */
+export interface RunPhase {
+  name: RunPhaseName;
+  step?: number;
+}
+
+/**
+ * The status reply's frame: the newest picture of the agent's page is at
+ * GET /api/benchmark/frame/<run_id>; seq grows with every new picture. null
+ * until the page has been captured (and always in demo mode: no browser).
+ */
+export interface FrameInfo {
+  seq: number;
 }
 
 export interface Phase {
@@ -24,11 +41,15 @@ export type ResultState = "pass" | "fail" | "too_slow" | "error";
 export interface StatusRunning {
   status: "running";
   steps: StepRecord[];
+  run_phase?: RunPhase | null;
+  frame?: FrameInfo | null;
 }
 
 export interface StatusAnalyzing {
   status: "analyzing";
   steps: StepRecord[];
+  run_phase?: RunPhase | null;
+  frame?: FrameInfo | null;
   total_ms: number;
   input_tokens: number;
   output_tokens: number;
@@ -42,6 +63,8 @@ export interface StatusAnalyzing {
 export interface StatusComplete {
   status: "complete";
   steps: StepRecord[];
+  /** The last picture of the agent's page, kept after the run. */
+  frame?: FrameInfo | null;
   success: boolean;
   summary: string;
   result_state: ResultState;
@@ -65,7 +88,7 @@ export interface StatusComplete {
  * rejected API key, a cancel, the judge failing) the reply also carries the
  * run's time and usage, as "analyzing" does.
  */
-export interface StatusError extends Partial<Omit<StatusAnalyzing, "status" | "steps">> {
+export interface StatusError extends Partial<Omit<StatusAnalyzing, "status" | "steps" | "run_phase">> {
   status: "error";
   message: string;
   steps?: StepRecord[];
