@@ -14,7 +14,7 @@ The headline is one task, `vhlistings_bundle_promo`, on the Shopify store vhlist
 | mean tokens | 52,856 | 272,377 |
 | mean steps | 14.1 | 28.5 |
 
-The costs are token counts priced at gpt-4o list rates ($2.50 and $10 per million input and output tokens), not billed amounts. Recomputed from the logs, Rindler cost $8.20 in total and BrowserUse $42.78. The viewer's results page shows the same figures.
+The costs are token counts priced at gpt-4o list rates ($2.50 and $10 per million input and output tokens), not billed amounts. Recomputed from the logs, Rindler cost $8.20 in total and BrowserUse $42.78. The viewer's results page (`make viewer`) shows the same figures. Its caveats panel sits under the numbers, so a screenshot of the headline carries a shorter list of six.
 
 `make analyze-march` prints exactly the headline set: all 60 BrowserUse logs and the last 60 Rindler ones, as `59/60 (98.3%)` against `1/60 (1.7%)`. Its header gives the first and last log time of that set, 2026-03-31 00:28:27 to 06:10:32. Plain `make analyze` counts all 66 Rindler `vhlistings_bundle_promo` logs, 65 of them passes, because it doesn't drop the 6 earlier runs. It also shows new arena runs, grouped by scenario, arm and agent model so they never mix with March.
 

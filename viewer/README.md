@@ -45,7 +45,7 @@ so serve `dist/` from the root of a host, not from a sub-path.
 ## The logs
 
 `public/logs/` holds 128 run logs and `manifest.json`, which lists them. They are
-unchanged since extraction, apart from the redactions listed under Provenance in the root README.
+unchanged since extraction, apart from the redactions listed in [docs/provenance.md](../docs/provenance.md#redactions).
 The manifest matches the files on disk exactly.
 
 | Arm | Logs | Notes |

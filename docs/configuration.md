@@ -49,3 +49,13 @@ This path was only tested with mocks and a build, never against a live Clerk ins
 ## OpenAI and Browserbase
 
 `LLM_PROVIDER=openai` switches every model call back to the original gpt-4o setup: run `uv sync --extra openai`, then set `OPENAI_API_KEY`. `BENCHMARK_BROWSER_PROVIDER=browserbase` runs the live benchmark's browser in a Browserbase cloud session. Both exist in the code and are covered by unit tests only.
+
+## Requirements and setup
+
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), which uses a Python 3.11 you have or fetches one, Node.js 20 or newer with npm, and `make`. `web/.nvmrc` names Node 22. Built and checked on an Apple silicon Mac, also checked on Debian 12 Linux on arm64. Windows wasn't tried.
+
+`make setup` runs once: `uv sync`, Playwright's Chromium, `npm ci` for `web/` and `viewer/`, and the [pre-commit key check](testing.md#the-pre-commit-check).
+
+`make setup` ends by starting Chromium once. On a bare Linux system that fails for missing libraries, and setup stops with the fix: `(cd server && uv run playwright install-deps chromium)` on Debian or Ubuntu (asks for sudo unless you're root), or your package manager. Then run `make setup` again. [server/SETUP.md](../server/SETUP.md#troubleshooting) has more Chromium problems and their fixes.
+
+`make dev` starts the backend on `127.0.0.1:8000` and the web UI on http://localhost:5180. Open the URL it prints. `localhost` and `127.0.0.1` both work, here and for the log viewer on port 5173.

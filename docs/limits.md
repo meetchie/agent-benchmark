@@ -20,6 +20,6 @@ The step budgets are not the same unit. A browser-use step is one model turn tha
 
 One run is an anecdote. Sampling noise on a live site is large, so use many runs before drawing a conclusion.
 
-Real runs cost money, and the default 180 s limit can be tight for a long task. Raise `BENCHMARK_TIMEOUT_S` and the web UI reads the new limit from `/health` and waits for it.
+Real runs cost money. Every arena run is real, so `make arena` prints its usage and exits 2 unless it gets both `AGENT` and `SCENARIO`. The default 180 s limit can be tight for a long task. Raise `BENCHMARK_TIMEOUT_S` and the web UI reads the new limit from `/health` and waits for it.
 
 Mappings exist for three sites: vhlistings.com and shipt.com for the arena, prose.com for the CLI. The RINDLER arm can't run anywhere else. Adding a site means writing a mapping, see [cli/README.md](../cli/README.md#adding-a-site) and [server/SETUP.md](../server/SETUP.md#adding-or-fixing-a-site-mapping).
