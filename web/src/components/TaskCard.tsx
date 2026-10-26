@@ -1,4 +1,5 @@
 import type { Task } from "../lib/types";
+import { taskSubtitle } from "../lib/utils";
 
 interface TaskCardProps {
   task: Task;
@@ -25,7 +26,7 @@ export function TaskCard({ task, selected, onSelect, disabled }: TaskCardProps) 
         {task.label}
       </p>
       <p className="mt-1 text-sm text-slate-500 line-clamp-2 leading-relaxed">
-        {task.goal.split("\n")[0]}
+        {taskSubtitle(task.goal)}
       </p>
     </button>
   );

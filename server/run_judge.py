@@ -7,14 +7,16 @@ Analyzes agent steps and produces:
 - phase groupings with failed/slow flags
 
 The judge model is ``BENCHMARK_JUDGE_MODEL`` (see ``llm.py``). It reads each step's
-description and timing, the agent's own evaluation of the step before, what each
-browser action returned (page text the agent read, cut short) and, when the agent
-finished on its own, the agent's final report (labelled as the agent's own claim). It
-never sees screenshots or the page itself. Many tasks end with "confirm the cart
-shows ...", and the agent's step labels ("Open cart", "Finish") rarely say what it
-found; the evaluations, the action results and the report usually do. Without them a
-verdict on verification depends on how wordy the step labels happen to be, so a check
-the task asks for counts only when that text shows what the agent found.
+description and timing, the agent's own evaluation of the step before, each browser
+action that ran with what browser-use returned for it (page text for an action that
+extracts or reads the page, cut short, or a short note for a click or a navigation)
+and, when the agent finished on its own, the agent's final report (labelled as the
+agent's own claim). It never sees screenshots or the page itself. Many tasks end with
+"confirm the cart shows ...", and the agent's step labels ("Open cart", "Finish")
+rarely say what it found; the evaluations, the action results and the report usually
+do. Without them a verdict on verification depends on how wordy the step labels
+happen to be, so a check the task asks for counts only when that text shows what the
+agent found.
 """
 import logging
 
@@ -61,7 +63,7 @@ RESULT STATE: {result_state}
 {result_state_note}
 
 STEPS THE AGENT TOOK (with timing):
-Under a step, "evaluation of the step before" is the agent's own verdict on the previous step, and each "result" is one browser action the step ran and what it returned (page text the agent read, cut short when long, or an error). A step's own line is often the agent's goal for it, written before it acted: an action it planned but did not get to run has no result line.
+Under a step, "evaluation of the step before" is the agent's own verdict on the previous step, and each "result" is one browser action the step ran and what browser-use returned for it: page text for an action that extracts or reads the page (cut short when long), a short note for a click or a navigation (such as 'Clicked a "View Cart"'), or an error. A step's own line is often the agent's goal for it, written before it acted: an action it planned but did not get to run has no result line.
 {steps_text}
 
 THE AGENT'S FINAL REPORT (its own claim, not checked):

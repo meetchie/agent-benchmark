@@ -3,6 +3,7 @@ import type { RunStats, StepRecord, SummaryData, ResultState } from "../lib/type
 import { formatCostUsd } from "../lib/cost";
 import { formatTimer } from "../lib/utils";
 import { DemoBanner } from "./DemoBanner";
+import { Markdown } from "./Markdown";
 import { PhaseList } from "./PhaseList";
 
 interface ResultsOverlayProps {
@@ -152,9 +153,9 @@ export function ResultsOverlay({
                     <span className="normal-case tracking-normal"> · says it succeeded</span>
                   )}
                 </div>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-slate-50 border border-slate-200 px-3 py-2">
-                  {summary.final_report}
-                </p>
+                <div className="text-sm text-slate-600 leading-relaxed break-words space-y-2 max-h-40 overflow-y-auto bg-slate-50 border border-slate-200 px-3 py-2">
+                  <Markdown text={summary.final_report} />
+                </div>
               </div>
             )}
 

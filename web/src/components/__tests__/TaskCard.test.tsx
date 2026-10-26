@@ -21,6 +21,21 @@ describe("TaskCard", () => {
     expect(screen.getByText("Find and add a product to the cart")).toBeInTheDocument();
   });
 
+  it("gives each card a different line when every goal starts on the same navigation step", () => {
+    const goals = [
+      'Go to the Products page.\nSearch for "jeans" and find the Men slim fit jeans (not the women\'s).\nSet quantity to 4 and click "Add to cart".\nClick "View Cart" and confirm 4 x slim fit jeans.',
+      "Go to the Products page. In the left sidebar, open the Women category and choose Dress.\nAdd 2 of the first sleeveless dress to the cart.\nGo to the cart and confirm 2 x the dress.",
+      "Go to the Products page.\nUnder Brands, pick Polo and find a T-shirt priced Rs. 400 or less.\nAdd 3 of it to the cart, then confirm the cart shows 3.",
+    ];
+    goals.forEach((goal, i) =>
+      render(<TaskCard task={makeTask({ id: `t${i}`, label: `Task ${i + 1}`, goal })} selected={false} onSelect={vi.fn()} />)
+    );
+    expect(screen.queryByText("Go to the Products page.")).not.toBeInTheDocument();
+    expect(screen.getByText('Search for "jeans" and find the Men slim fit jeans (not the women\'s).')).toBeInTheDocument();
+    expect(screen.getByText("In the left sidebar, open the Women category and choose Dress.")).toBeInTheDocument();
+    expect(screen.getByText("Under Brands, pick Polo and find a T-shirt priced Rs. 400 or less.")).toBeInTheDocument();
+  });
+
   it("calls onSelect when clicked", () => {
     const onSelect = vi.fn();
     render(<TaskCard task={makeTask()} selected={false} onSelect={onSelect} />);

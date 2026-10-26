@@ -53,3 +53,52 @@ export function runsRemainingLabel(remaining: number, limit?: number): string {
   if (limit !== undefined) return `of ${limit} runs remaining`;
   return `${remaining === 1 ? "run" : "runs"} remaining`;
 }
+
+// A step that only opens the site or one of its pages: "Go to the Products page.",
+// "Open the site.", "Go to Menu.", "Navigate to https://shop.example/".
+const NAV_START = String.raw`^(?:please\s+|first,?\s+|then,?\s+)?(?:go|navigate|head|return|browse|open|visit|load)(?:\s+(?:back|over))?(?:\s+(?:to|into|onto|on))?`;
+const NAV_TO_PAGE = new RegExp(
+  NAV_START +
+    String.raw`(?:\s+the)?(?:\s+[\w'’&-]+){0,4}?\s+(?:page|site|website|homepage|home\s?page|home|section|tab|menu|store|shop|storefront)\s*[.!]?$`,
+  "i"
+);
+const NAV_TO_URL = new RegExp(
+  NAV_START + String.raw`\s+(?:https?:\/\/)?(?:www\.)?[\w-]+(?:\.[\w-]+)+(?:\/\S*)?\s*[.!]?$`,
+  "i"
+);
+
+/** Where a sentence may end: ".", "!" or "?" (and a closing quote or bracket), a space, then a capital. */
+const SENTENCE_END = /[.!?]+["”’')\]]*\s+(?=["“‘'(\[]?[A-Z])/g;
+/** A full stop that ends an abbreviation or an initial ("e.g.", "Rs.", "U.S."), not a sentence. */
+const ABBREVIATION = /(?:^|[\s(])(?:e\.g|i\.e|etc|vs|approx|mr|mrs|ms|dr|st|rs)\.$/i;
+const INITIAL = /(?:^|[\s(.])[A-Z]\.$/;
+
+function goalSentences(goal: string): string[] {
+  const sentences: string[] = [];
+  for (const rawLine of goal.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/^(?:[-*•]|\d{1,3}[.)])\s+/, "");
+    let start = 0;
+    for (const m of line.matchAll(SENTENCE_END)) {
+      const end = m.index! + m[0].trimEnd().length;
+      const piece = line.slice(start, end);
+      if (ABBREVIATION.test(piece) || INITIAL.test(piece)) continue;
+      sentences.push(piece.trim());
+      start = m.index! + m[0].length;
+    }
+    const rest = line.slice(start).trim();
+    if (rest) sentences.push(rest);
+  }
+  return sentences;
+}
+
+/**
+ * The line under a task's title on its card: the goal's first sentence that says
+ * what to do, skipping steps that only open the site or a page ("Go to the Products
+ * page."), which generated tasks for one site often all start with. The goal's
+ * first line when every sentence is such a step.
+ */
+export function taskSubtitle(goal: string): string {
+  const useful = goalSentences(goal).find((s) => !NAV_TO_PAGE.test(s) && !NAV_TO_URL.test(s));
+  if (useful) return useful;
+  return goal.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "";
+}

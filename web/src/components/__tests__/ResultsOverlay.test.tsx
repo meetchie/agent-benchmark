@@ -318,6 +318,55 @@ describe("ResultsOverlay", () => {
       expect(screen.getByText(/The judge could not analyze the run: NotFoundError/)).toBeInTheDocument();
       expect(screen.getByText("Cart: 4 x Rs. 799 = Rs. 3196.")).toBeInTheDocument();
     });
+
+    it("renders the report's bold text as bold, not as asterisks", () => {
+      const summary = makeSummary({
+        final_report: '**Search:** I searched "top" and opened the first result.',
+      });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      const report = screen.getByTestId("final-report");
+      const bold = report.querySelector("strong");
+      expect(bold).not.toBeNull();
+      expect(bold).toHaveTextContent("Search:");
+      expect(report).toHaveTextContent('Search: I searched "top" and opened the first result.');
+      expect(report.textContent).not.toContain("**");
+    });
+
+    it("renders the report's bullet and numbered lists as list items", () => {
+      const summary = makeSummary({
+        final_report: [
+          "I did the task:",
+          '- **Search:** I searched "top".',
+          "- **Cart:** 2 x Blue Top, Rs. 1000.",
+          "",
+          "Then I checked:",
+          "1. the quantity",
+          "2. the total",
+        ].join("\n"),
+      });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      const report = screen.getByTestId("final-report");
+      const bullets = report.querySelectorAll("ul > li");
+      expect(Array.from(bullets, (li) => li.textContent)).toEqual([
+        'Search: I searched "top".',
+        "Cart: 2 x Blue Top, Rs. 1000.",
+      ]);
+      expect(bullets[0].querySelector("strong")).toHaveTextContent("Search:");
+      const numbered = report.querySelectorAll("ol > li");
+      expect(Array.from(numbered, (li) => li.textContent)).toEqual(["the quantity", "the total"]);
+      expect(report.textContent).not.toMatch(/(^|\s)- /);
+    });
+
+    it("shows HTML in the report as text and never runs it", () => {
+      const html = '<img src="x" onerror="window.__reportRan = 1"> and <script>window.__reportRan = 2</script>';
+      const summary = makeSummary({ final_report: `The page said: ${html}` });
+      render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
+      const report = screen.getByTestId("final-report");
+      expect(report.querySelector("img")).toBeNull();
+      expect(report.querySelector("script")).toBeNull();
+      expect(report).toHaveTextContent(`The page said: ${html}`);
+      expect((window as unknown as { __reportRan?: number }).__reportRan).toBeUndefined();
+    });
   });
 
   it("shows no steps message for error with no steps", () => {
