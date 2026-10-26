@@ -107,7 +107,7 @@ def assert_clean(params):
     assert params["messages"][-1]["role"] == "user"  # never an assistant prefill
 
 
-# -- structured outputs path (small schemas) -----------------------------------
+# Structured outputs path (small schemas)
 
 
 async def test_small_schema_uses_structured_outputs(chat_with):
@@ -181,7 +181,7 @@ async def test_structured_output_that_fails_validation_raises(chat_with):
         await chat.ainvoke(MESSAGES, Step)
 
 
-# -- tool path (large schemas) --------------------------------------------------
+# Tool path (large schemas)
 
 
 async def test_large_schema_uses_auto_tool_call(chat_with, large_schemas):
@@ -262,7 +262,7 @@ def test_schema_helpers():
     assert not fits_structured_outputs({"description": "x" * 5000})
 
 
-# -- actions called as tools (browser-use's real AgentOutput) ----------------------
+# Actions called as tools (browser-use's real AgentOutput)
 
 
 @pytest.fixture(scope="module")
@@ -289,8 +289,8 @@ def actions_of(step):
     return [a.model_dump(exclude_none=True) for a in step.action]
 
 
-# The exact inputs claude-sonnet-5-5 sent on 2026-10-24 when offered only the AgentOutput
-# tool (recorded from a live call): the action as the tool, no step fields, JSON as text.
+# The exact inputs claude-sonnet-5-5 sent when offered only the AgentOutput tool (recorded from a
+# live call): the action as the tool, no step fields, JSON as text.
 FIND_H1 = {"selector": "h1", "attributes": "[]", "max_results": "5", "include_text": "true"}
 DONE_H1 = {"text": "The page's H1 heading reads: \"Quarterly Lantern Report 7F3A\".", "success": "true",
            "files_to_display": "[]"}

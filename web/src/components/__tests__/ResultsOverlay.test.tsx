@@ -159,7 +159,6 @@ describe("ResultsOverlay", () => {
   it("shows stats when summary is provided", () => {
     const summary = makeSummary({ total_ms: 5000, total_tokens: 12000, cost_usd: 0.0423 });
     render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
-    // Stats section should show Time, Steps, Tokens, Cost
     expect(screen.getByText("Time")).toBeInTheDocument();
     expect(screen.getByText("Steps")).toBeInTheDocument();
     expect(screen.getByText("Tokens")).toBeInTheDocument();
@@ -175,8 +174,8 @@ describe("ResultsOverlay", () => {
     });
 
     it("does not recompute the cost from the token counts", () => {
-      // 10,000 input + 2,000 output tokens priced at the old hard-coded GPT-4o
-      // rates would read $0.05; the backend says $1.23 and that is what shows.
+      // The backend says $1.23 and that is what shows, not a price worked out from 10,000 input +
+      // 2,000 output tokens.
       const summary = makeSummary({ cost_usd: 1.234, agent_model: "claude-opus-5-5" });
       render(<ResultsOverlay {...defaultProps} summary={summary} steps={[makeStep(1)]} />);
       expect(screen.getByText("$1.23")).toBeInTheDocument();

@@ -17,7 +17,7 @@ from cli_helpers import make_record
 CLI = Path(__file__).resolve().parent.parent
 
 
-# -- argument parsing ----------------------------------------------------------------------
+# Argument parsing
 
 
 def test_defaults_and_any_model_id():
@@ -63,7 +63,7 @@ def test_bad_arguments_exit(argv):
         run.parse_args(argv)
 
 
-# -- information flags (no key, no browser) ----------------------------------------------
+# Information flags (no key, no browser)
 
 
 async def test_show_tools_lists_the_mapping_tools_without_a_key(monkeypatch, capsys):
@@ -90,7 +90,7 @@ async def test_unknown_site_or_task_exits_with_a_message(capsys):
     assert "unknown task id" in capsys.readouterr().err
 
 
-# -- preflight -----------------------------------------------------------------------------
+# Preflight
 
 
 @pytest.fixture
@@ -132,7 +132,7 @@ def test_preflight_names_a_chromium_that_cannot_start(ready, monkeypatch, capsys
     assert "libnspr4.so" in capsys.readouterr().err
 
 
-# -- a whole run with fake arms -----------------------------------------------------------
+# A whole run with fake arms
 
 
 class Arms:
@@ -276,7 +276,7 @@ async def test_judge_model_flag_and_env_reach_the_judge(arms, monkeypatch):
     assert {c["model"] for c in calls} == {"claude-opus-5-5"}
 
 
-# -- the retired stack stays retired -------------------------------------------------------
+# The retired stack stays retired
 
 RETIRED = ("psycopg2", "MGMT_DATABASE_URL", "RUNTIME_DATABASE_URL", "REDIS_URL", "oauth", "OAuth", "mcp.client",
            "sse_client", "packages/mcp-server", "go run", "BENCHMARK_USER_EMAIL", "get_llm_by_name", "OPENAI_API_KEY",
@@ -292,7 +292,7 @@ def test_no_trace_of_the_hosted_stack_in_the_cli_code():
     assert not (CLI / "pyproject.toml").exists() and not (CLI / "uv.lock").exists()
 
 
-# -- the shell scripts work from any directory -----------------------------------------------
+# The shell scripts work from any directory
 
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed")

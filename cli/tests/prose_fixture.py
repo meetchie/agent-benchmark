@@ -1,10 +1,10 @@
 """A small local copy of prose.com's accessories flow, served from 127.0.0.1.
 
-It follows the live site as seen on 2026-10-24 (page structure, not content): the accessories
-grid is h2 + leaf price per card, product pages have an add-to-cart button, and the cart
-page is rendered by script about a second after the page loads, with the line items in
-plain divs (no <p>). That late render and those plain divs are the two ways cli/mappings/
-prose.json and cli/extractors/prose.js drifted from the March site.
+It follows the live site's page structure, not its content: the accessories grid is h2 + leaf price
+per card, product pages have an add-to-cart button, and the cart page is rendered by script about a
+second after the page loads, with the line items in plain divs (no <p>). That late render and those
+plain divs are the two ways cli/mappings/prose.json and cli/extractors/prose.js drifted from the
+March site.
 
 ``localize(mapping, base)`` points the real prose mapping at this server, so tests run
 the shipped mapping and extractor, not a copy. Nothing leaves 127.0.0.1.
@@ -87,7 +87,7 @@ class ProseShop:
         self.server.server_close()
         self.thread.join(timeout=5)
 
-    # -- pages ---------------------------------------------------------------------
+    # Pages
 
     def page(self, title: str, body: str, script: str = "") -> bytes:
         return PAGE.format(title=html.escape(title), body=body, script=script, count=len(self.cart)).encode()

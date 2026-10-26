@@ -3,9 +3,7 @@ domain: prose.com
 base_url: https://www.prose.com
 
 tasks:
-  # --------------------------------------------------------------------------
-  # Task 1: Cart math — spend exactly $107
-  # --------------------------------------------------------------------------
+  # Task 1: Cart math, spend exactly $107
   - id: cart-exact-107
     name: Build a cart totaling exactly $107.00
     goal: |
@@ -36,9 +34,7 @@ tasks:
       - The cart was never verified
     max_steps: 35
 
-  # --------------------------------------------------------------------------
   # Task 2: Add wrong brush, correct the mistake
-  # --------------------------------------------------------------------------
   - id: fix-wrong-brush
     name: Add a brush, realize it's wrong, fix the mistake
     goal: |
@@ -75,9 +71,7 @@ tasks:
       - The agent didn't explain the hair type suitability
     max_steps: 45
 
-  # --------------------------------------------------------------------------
   # Task 3: Price per unit comparison
-  # --------------------------------------------------------------------------
   - id: best-value-accessory
     name: Determine the best value accessory by price-per-ounce
     goal: |
@@ -111,9 +105,7 @@ tasks:
       - The agent only visited 1-2 product pages
     max_steps: 30
 
-  # --------------------------------------------------------------------------
   # Task 4: Full cart then selective removal
-  # --------------------------------------------------------------------------
   - id: add-all-remove-expensive
     name: Add all accessories then remove items over $50
     goal: |
@@ -143,9 +135,7 @@ tasks:
       - The agent never viewed the cart
     max_steps: 50
 
-  # --------------------------------------------------------------------------
   # Task 5: Cross-reference FAQ with product page
-  # --------------------------------------------------------------------------
   - id: brush-faq-research
     name: Answer brush FAQ questions from the product page
     goal: |
@@ -176,9 +166,7 @@ tasks:
       - The agent confused consultation FAQs with brush FAQs
     max_steps: 25
 
-  # --------------------------------------------------------------------------
-  # Task 6: Multi-variant cart — one of each brush
-  # --------------------------------------------------------------------------
+  # Task 6: Multi-variant cart, one of each brush
   - id: all-three-brushes
     name: Add all 3 brush variants to cart
     goal: |
@@ -214,9 +202,7 @@ tasks:
       - Cart was never verified
     max_steps: 45
 
-  # --------------------------------------------------------------------------
   # Task 7: Gift card with exact amount
-  # --------------------------------------------------------------------------
   - id: gift-card-setup
     name: Set up a $75 gift card for a specific recipient
     goal: |
@@ -248,9 +234,7 @@ tasks:
       - The CTA was never clicked
     max_steps: 25
 
-  # --------------------------------------------------------------------------
   # Task 8: Navigate the entire accessories section systematically
-  # --------------------------------------------------------------------------
   - id: full-accessories-audit
     name: Complete audit of every accessory product page
     goal: |
@@ -287,9 +271,7 @@ tasks:
       - Missing fields (price, URL, etc.) for any product
     max_steps: 40
 
-  # --------------------------------------------------------------------------
   # Task 9: Maximize cart value under $200
-  # --------------------------------------------------------------------------
   - id: maximize-under-200
     name: Build the most expensive cart under $200
     goal: |
@@ -327,9 +309,7 @@ tasks:
       - Cart was never verified
     max_steps: 40
 
-  # --------------------------------------------------------------------------
   # Task 10: Compare accessory page to actual product pages
-  # --------------------------------------------------------------------------
   - id: price-consistency-check
     name: Verify prices match between accessories grid and product pages
     goal: |

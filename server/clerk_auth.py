@@ -1,8 +1,4 @@
-"""Clerk JWT verification using JWKS (no shared secret needed).
-
-Fetches Clerk's public keys from the JWKS endpoint and verifies
-JWT signatures. Keys are cached with a 1-hour TTL.
-"""
+"""Clerk JWT verification against Clerk's JWKS (no shared secret). Keys are cached for an hour."""
 
 import os
 import time
@@ -12,15 +8,12 @@ import urllib.request
 
 _jwks_cache: dict | None = None
 _jwks_cache_time: float = 0
-_JWKS_CACHE_TTL = 3600  # 1 hour
+_JWKS_CACHE_TTL = 3600
 
 
 def _get_clerk_issuer() -> str:
-    """Return the Clerk issuer URL.
-
-    Priority:
-    1. CLERK_ISSUER_URL env var (explicit override, useful when keys are stale)
-    2. Derived from CLERK_PUBLISHABLE_KEY by base64-decoding the suffix
+    """The Clerk issuer URL: CLERK_ISSUER_URL if set (an explicit override, useful when keys are
+    stale), else derived from CLERK_PUBLISHABLE_KEY by base64-decoding its suffix.
     """
     explicit = os.getenv("CLERK_ISSUER_URL", "")
     if explicit:
@@ -36,7 +29,6 @@ def _get_clerk_issuer() -> str:
 
 
 def _get_jwks_url() -> str:
-    """Derive JWKS URL from the Clerk publishable key or env var."""
     url = os.getenv("CLERK_JWKS_URL")
     if url:
         return url
@@ -44,7 +36,6 @@ def _get_jwks_url() -> str:
 
 
 def _fetch_jwks() -> dict:
-    """Fetch and cache JWKS from Clerk with TTL."""
     global _jwks_cache, _jwks_cache_time
     now = time.monotonic()
     if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
@@ -74,7 +65,7 @@ def verify_clerk_jwt(token: str) -> dict:
             break
 
     if key_data is None:
-        # Key not found — maybe keys rotated. Clear cache and retry once.
+        # Key not found: maybe the keys rotated. Clear the cache and retry once.
         global _jwks_cache, _jwks_cache_time
         _jwks_cache = None
         _jwks_cache_time = 0
@@ -90,7 +81,6 @@ def verify_clerk_jwt(token: str) -> dict:
     from jwt.algorithms import RSAAlgorithm
     public_key = RSAAlgorithm.from_jwk(key_data)
 
-    # Verify issuer matches our Clerk instance
     expected_issuer = _get_clerk_issuer()
 
     claims = jwt.decode(

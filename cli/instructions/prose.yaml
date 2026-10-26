@@ -3,9 +3,7 @@ domain: prose.com
 base_url: https://www.prose.com
 
 tasks:
-  # --------------------------------------------------------------------------
   # Task 1: Browse accessories catalog
-  # --------------------------------------------------------------------------
   - id: browse-accessories
     name: Browse the accessories catalog and report products
     goal: |
@@ -32,9 +30,7 @@ tasks:
       - Prices were not reported
     max_steps: 15
 
-  # --------------------------------------------------------------------------
   # Task 2: Add a boar bristle brush to cart
-  # --------------------------------------------------------------------------
   - id: add-boar-brush
     name: Add the Boar Bristle Brush to cart
     goal: |
@@ -61,9 +57,7 @@ tasks:
       - The cart was never verified
     max_steps: 25
 
-  # --------------------------------------------------------------------------
   # Task 3: Add detangling brush to cart
-  # --------------------------------------------------------------------------
   - id: add-detangling-brush
     name: Add the Tipped-Metal Bristle Brush to cart
     goal: |
@@ -90,9 +84,7 @@ tasks:
       - The agent never verified the cart
     max_steps: 25
 
-  # --------------------------------------------------------------------------
   # Task 4: Add hair towel wrap to cart
-  # --------------------------------------------------------------------------
   - id: add-hair-towel
     name: Add the Hair Towel Wrap to cart
     goal: |
@@ -117,9 +109,7 @@ tasks:
       - The cart was never verified
     max_steps: 20
 
-  # --------------------------------------------------------------------------
   # Task 5: Add candle to cart
-  # --------------------------------------------------------------------------
   - id: add-candle
     name: Add the Arcadia Candle to cart
     goal: |
@@ -144,9 +134,7 @@ tasks:
       - The cart was never verified
     max_steps: 20
 
-  # --------------------------------------------------------------------------
-  # Task 6: Multi-item cart — brush + towel
-  # --------------------------------------------------------------------------
+  # Task 6: Multi-item cart, brush + towel
   - id: multi-item-brush-towel
     name: Add a brush and the hair towel to cart
     goal: |
@@ -178,9 +166,7 @@ tasks:
       - The cart was never verified
     max_steps: 35
 
-  # --------------------------------------------------------------------------
   # Task 7: Compare brush variants and report differences
-  # --------------------------------------------------------------------------
   - id: compare-brushes
     name: Compare all brush variants and report differences
     goal: |
@@ -210,9 +196,7 @@ tasks:
       - The agent only viewed one variant and assumed the others
     max_steps: 25
 
-  # --------------------------------------------------------------------------
-  # Task 8: Multi-item cart — all accessories
-  # --------------------------------------------------------------------------
+  # Task 8: Multi-item cart, all accessories
   - id: full-accessories-cart
     name: Add one of every accessory type to cart
     goal: |
@@ -244,9 +228,7 @@ tasks:
       - The cart was never verified
     max_steps: 40
 
-  # --------------------------------------------------------------------------
   # Task 9: Find the cheapest accessory and add to cart
-  # --------------------------------------------------------------------------
   - id: cheapest-accessory
     name: Find and add the cheapest accessory to cart
     goal: |
@@ -274,9 +256,7 @@ tasks:
       - The cart was never verified
     max_steps: 25
 
-  # --------------------------------------------------------------------------
   # Task 10: Gift card exploration
-  # --------------------------------------------------------------------------
   - id: explore-gift-cards
     name: Explore gift card options and begin the gifting flow
     goal: |

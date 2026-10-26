@@ -11,58 +11,24 @@
     finally:
         cleanup_profile(profile)
 
-What every profile gets:
+Every profile is a local Chromium, headless unless BENCHMARK_HEADLESS is false, started with
+``--use-mock-keychain --password-store=basic`` so it never asks the macOS keychain for anything. It
+gets a fresh temp dir that ``cleanup_profile`` and an exit hook remove, along with the Agent's
+scratch dirs and any browser still running on it. One leak stays: importing browser_use makes an
+empty ``browser-use-downloads-*`` dir per process.
 
-* Local Chromium only. No cloud browser, no CDP URL.
-* Headless unless ``BENCHMARK_HEADLESS`` is false (``0``/``false``/``no``/``off``).
-* ``--use-mock-keychain`` and ``--password-store=basic``, so Chromium never asks
-  the macOS keychain for anything (no system dialogs during a run).
-* A fresh throwaway profile per call, in a new temp dir (``PROFILE_DIR_PREFIX``).
-  browser-use deletes it when it kills the browser; ``cleanup_profile(profile)`` (call
-  it in a ``finally``) and an exit hook remove any that remain. Downloads go inside it.
-  (Left to itself, browser-use 0.13 makes a ``browser-use-user-data-dir-*`` and a
-  ``browser-use-downloads-*`` dir per profile and never deletes either; the profile one
-  is about 9 MB per run.) Pass ``file_system_path=agent_files_dir(profile)`` to Agent so
-  its scratch files go away too, and call ``track_agent_dir(profile, agent)`` once the
-  Agent exists: browser-use writes every step's screenshot to the Agent's own
-  ``$TMPDIR/browser_use_agent_<id>_<ts>`` dir whatever ``file_system_path`` says, and
-  that dir is then removed with the profile. Nothing persists between runs. (One leak
-  remains that this module cannot stop: importing browser_use builds a module-level
-  default profile, which makes one empty ``browser-use-downloads-*`` dir per process.)
-* No browser outlives its run. ``cleanup_profile`` first stops, by PID, any Chromium
-  this process started on that profile and that is still running (browser-use normally
-  kills it itself, but not when the run is interrupted at the wrong moment), and the
-  exit hook does the same for every profile still in use. ``cleanup_all_profiles()``
-  is that hook; a server calls it on shutdown too.
-* browser-use's default extensions off (no uBlock / cookie-consent auto-clicker),
-  so sites show their real popups and nothing is downloaded on first launch.
+``chromium_path()`` looks for Chromium in this order:
 
-How Chromium is found (``chromium_path()``), first match wins:
+1. ``BENCHMARK_CHROMIUM_PATH``, any Chromium-based executable.
+2. Playwright's Chromium for the installed ``playwright`` package, under ``PLAYWRIGHT_BROWSERS_PATH``
+   (``uv run playwright install chromium`` from ``server/``).
+3. The newest other Playwright Chromium revision in that folder. That only suits browser-use, which
+   talks CDP to any recent revision. The Playwright API itself needs step 2.
 
-1. ``BENCHMARK_CHROMIUM_PATH``: an explicit executable (any Chromium-based browser).
-2. Playwright's Chromium for the installed ``playwright`` package, under
-   ``PLAYWRIGHT_BROWSERS_PATH`` (default ``~/Library/Caches/ms-playwright`` on macOS,
-   ``~/.cache/ms-playwright`` on Linux, ``%LOCALAPPDATA%\\ms-playwright`` on Windows).
-   Install it with ``uv run playwright install chromium`` from ``server/``.
-3. The newest other Playwright Chromium revision in that folder (browser-use talks
-   CDP, so any recent revision works; the Playwright API itself needs step 2).
-
-If none exists, ``browser_profile()`` raises ``ChromiumNotFoundError`` with the
-install command, instead of letting browser-use fall back to a system Chrome
-(which on macOS would be the user's own Google Chrome app).
-
-Before a profile is handed out, the executable is started once with ``--version``
-(``chromium_start_problem()``). A Chromium that is on disk but cannot run, typically
-on Linux without its system libraries (``libnspr4.so``, ``libnss3.so``, ...), raises
-``ChromiumNotFoundError`` naming the missing library and the fix
-(``LINUX_DEPS_HINT``), instead of browser-use failing later with "process not found".
-``chromium_problem()`` answers the same question for whatever Chromium would be used,
-and ``python browser_env.py`` (the last step of ``make setup``) prints it.
-
-One cause the start check cannot see: on Linux, Chromium aborts as it starts when
-TMPDIR is longer than 61 bytes (its socket path would not fit). ``browser_profile()``
-and the local Rindler host call ``fit_tmpdir_for_chromium()``, which then starts
-browsers with TMPDIR=/tmp.
+With none, ``browser_profile()`` raises ``ChromiumNotFoundError`` with the install command rather
+than letting browser-use fall back to the user's own Chrome. It also runs the executable once with
+``--version`` (``chromium_start_problem()``), so one that is on disk but can't start (on Linux,
+missing system libraries) fails with the fix. ``python browser_env.py`` prints the same check.
 """
 
 from __future__ import annotations
@@ -88,38 +54,34 @@ log = logging.getLogger(__name__)
 
 KEYCHAIN_ARGS: tuple[str, ...] = ("--use-mock-keychain", "--password-store=basic")
 DEFAULT_VIEWPORT: dict[str, int] = {"width": 1280, "height": 720}
-# The live benchmark sizes the browser to the viewer's preview pane (fit_viewport), but
-# never below a desktop size or outside these shapes: a short or narrow window would make
-# the agent scroll (and pay for) far more than the site needs.
+# The live preview sizes the browser to the viewer's pane, but never below a desktop size or outside
+# these shapes. A short or narrow window would make the agent scroll, and pay for, far more than the
+# site needs.
 MIN_VIEWPORT: dict[str, int] = {"width": 1024, "height": 720}
 MAX_VIEWPORT: dict[str, int] = {"width": 1920, "height": 1200}
 MIN_ASPECT = 4 / 3   # width / height: no taller than 4:3
 MAX_ASPECT = 16 / 9  # no wider than 16:9
 INSTALL_HINT = "cd server && uv run playwright install chromium"
 LINUX_DEPS_HINT = "cd server && uv run playwright install-deps chromium"
-# How long `chromium --version` may take before the start check gives up on it.
 START_CHECK_TIMEOUT_S = 15.0
-# The temp profile dir name carries two browser-use markers on purpose:
-# - "browseruse-tmp-": LocalBrowserWatchdog deletes such a dir when it kills the browser.
-# - "browser-use-user-data-dir-": BrowserProfile then skips _copy_profile(), which would
-#   otherwise copy the dir into another temp dir that nothing ever deletes.
+# The name carries two browser-use markers on purpose.
+# "browseruse-tmp-": LocalBrowserWatchdog deletes such a dir when it kills the browser.
+# "browser-use-user-data-dir-": BrowserProfile then skips _copy_profile(), which would copy the dir
+# somewhere nothing deletes.
 PROFILE_DIR_PREFIX = "browseruse-tmp-agent-benchmark-browser-use-user-data-dir-"
-# Chromium on Linux makes its single-instance socket at
-# $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket and aborts as it starts when that
-# path does not fit in a Unix socket address (107 bytes), so any TMPDIR longer than 61
-# bytes stops every launch (see fit_tmpdir_for_chromium). The profile dir's length does
-# not matter, and Chromium on macOS does not put this socket under TMPDIR.
+# On Linux Chromium puts its single-instance socket at
+# $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket and aborts if that path exceeds a Unix
+# socket address (107 bytes), so TMPDIR over 61 bytes stops every launch. The profile dir's length
+# does not matter, and macOS does not use TMPDIR for this.
 CHROMIUM_SOCKET_IN_TMPDIR = "/.org.chromium.Chromium.XXXXXX/SingletonSocket"
 UNIX_SOCKET_PATH_MAX = 107
 SHORT_TMPDIR = "/tmp"
 
 AGENT_FILES_PREFIX = "agent-benchmark-agent-files-"
-# browser-use's own name for an Agent's dir under the temp dir (see track_agent_dir)
 BROWSER_USE_AGENT_DIR_PREFIX = "browser_use_agent_"
-# How long a browser gets to exit after SIGTERM before it is killed
 BROWSER_STOP_TIMEOUT_S = 3.0
 
-# profile dir -> extra dirs to delete with it (agent_files_dir)
+# profile dir -> extra dirs to delete with it
 _created_profile_dirs: dict[str, list[str]] = {}
 
 
@@ -134,8 +96,8 @@ def new_profile_dir() -> str:
 def agent_files_dir(profile: Any) -> str:
     """A temp dir for the Agent's own files (``Agent(file_system_path=...)``).
 
-    Left unset, browser-use creates ``$TMPDIR/browser_use_agent_<id>_<ts>`` per Agent and
-    never deletes it. This one is removed by ``cleanup_profile(profile)``.
+    Left unset, browser-use makes one per Agent and never deletes it. ``cleanup_profile`` removes
+    this one.
     """
     path = str(Path(tempfile.mkdtemp(prefix=AGENT_FILES_PREFIX)).resolve())
     _created_profile_dirs.setdefault(str(getattr(profile, "user_data_dir", "") or ""), []).append(path)
@@ -145,10 +107,9 @@ def agent_files_dir(profile: Any) -> str:
 def track_agent_dir(profile: Any, agent: Any) -> None:
     """Remove the browser-use Agent's own temp dir together with ``profile``.
 
-    browser-use 0.13 gives every Agent a ``$TMPDIR/browser_use_agent_<id>_<ts>`` dir and
-    its screenshot service writes each step's screenshot there, even when
-    ``file_system_path`` points elsewhere, so screenshots of every site visited would
-    pile up. Only a dir with browser-use's name, directly in the temp dir, is taken.
+    browser-use 0.13 writes every step's screenshot to ``$TMPDIR/browser_use_agent_<id>_<ts>`` even
+    when ``file_system_path`` points elsewhere, so screenshots of every site visited would pile up.
+    Only a dir with that name, directly in the temp dir, is taken.
     """
     path = getattr(agent, "agent_directory", None)
     if not path:
@@ -162,10 +123,9 @@ def track_agent_dir(profile: Any, agent: Any) -> None:
 
 
 def _launched_with(proc: Any, user_data_dir: str) -> bool:
-    """Whether ``proc`` is a browser started with ``--user-data-dir=<user_data_dir>``."""
     try:
         args = proc.cmdline()
-    except Exception:  # gone, or not ours to read
+    except Exception:
         return False
     for arg in args:
         if arg.startswith("--user-data-dir="):
@@ -174,11 +134,11 @@ def _launched_with(proc: Any, user_data_dir: str) -> bool:
 
 
 def browser_processes(user_data_dir: str) -> list:
-    """The processes this process started on ``user_data_dir``: the browser and its helpers.
+    """The browser and its helpers this process started on ``user_data_dir``, as psutil.Process
+    objects.
 
-    Only descendants of this process are looked at, and only one whose command line
-    names this exact profile dir counts, so another program's browser is never picked.
-    Returns psutil.Process objects (an empty list without psutil).
+    Only descendants of this process whose command line names this exact profile dir count, so
+    another program's browser is never picked. Empty without psutil.
     """
     if not user_data_dir:
         return []
@@ -206,8 +166,8 @@ def browser_processes(user_data_dir: str) -> list:
 def stop_browser(user_data_dir: str, timeout: float = BROWSER_STOP_TIMEOUT_S) -> list[int]:
     """Stop any browser this process still runs on ``user_data_dir``; returns the PIDs stopped.
 
-    SIGTERM first, SIGKILL for what is still alive after ``timeout`` seconds. Blocks for
-    at most about ``timeout`` + 1 s, and returns at once when nothing is running.
+    SIGTERM first, SIGKILL for what is still alive after ``timeout`` seconds. Blocks for at most
+    about ``timeout`` + 1 s, so call it off the event loop.
     """
     procs = browser_processes(user_data_dir)
     if not procs:
@@ -234,9 +194,7 @@ def stop_browser(user_data_dir: str, timeout: float = BROWSER_STOP_TIMEOUT_S) ->
 def cleanup_profile(profile: Any) -> None:
     """Stop the profile's browser if it still runs, then delete the temp dirs made for it.
 
-    The dirs are the ones browser_profile(), agent_files_dir() and track_agent_dir()
-    made or took for ``profile``. Never touches a user_data_dir the caller supplied.
-    Safe to call twice.
+    Never touches a user_data_dir the caller supplied. Safe to call twice.
     """
     path = str(getattr(profile, "user_data_dir", "") or "")
     extras = _created_profile_dirs.pop(path, None)
@@ -246,7 +204,7 @@ def cleanup_profile(profile: Any) -> None:
 
 
 def _remove(path: str, extras: list[str]) -> None:
-    stop_browser(path)  # before its profile dir goes: a running browser keeps writing to it
+    stop_browser(path)  # a running browser keeps writing to the profile dir
     for extra in extras:
         shutil.rmtree(extra, ignore_errors=True)
     if Path(path).name.startswith(PROFILE_DIR_PREFIX):  # only dirs new_profile_dir() made
@@ -255,9 +213,9 @@ def _remove(path: str, extras: list[str]) -> None:
 
 @atexit.register
 def cleanup_all_profiles() -> None:
-    """Stop every browser this process started that is still running, and delete every
-    temp dir it created that still exists. Runs at exit; a server also calls it when it
-    shuts down, in case the process does not get as far as the exit hooks."""
+    """Stop every browser this process started and delete every temp dir it created. Runs at exit; a
+    server also calls it on shutdown in case the process never reaches the exit hooks.
+    """
     for path in list(_created_profile_dirs):
         extras = _created_profile_dirs.pop(path, None)
         if extras is not None:
@@ -281,11 +239,9 @@ def headless() -> bool:
 def fit_viewport(requested: dict[str, Any] | None) -> dict[str, int]:
     """The viewport for a live run asked for ``requested`` (the viewer's preview pane).
 
-    The shape is first held between 4:3 and 16:9 (by changing the height), then the size
-    is scaled, shape kept, until it is within MIN_VIEWPORT..MAX_VIEWPORT. A pane of
-    1339x460 gives 1339x753, a 3840x2160 screen 1920x1080, a phone's 358x380 1024x768.
-    Nothing asked (or nothing usable) gives the default 1280x720. The preview scales the
-    frame to fit its pane, so any of these shows whole.
+    The shape is held between 4:3 and 16:9 by changing the height, then the size is scaled, shape
+    kept, into MIN_VIEWPORT..MAX_VIEWPORT. A 1339x460 pane gives 1339x753, a 3840x2160 screen
+    1920x1080, a phone's 358x380 1024x768. Nothing usable gives 1280x720.
     """
     def number(key: str) -> float | None:
         value = (requested or {}).get(key)
@@ -321,11 +277,10 @@ def chromium_args(extra: list[str] | tuple[str, ...] | None = None) -> list[str]
 def fit_tmpdir_for_chromium() -> bool:
     """On Linux, make TMPDIR short enough for the Chromium this process starts; True if changed.
 
-    When TMPDIR leaves no room for Chromium's socket path (``CHROMIUM_SOCKET_IN_TMPDIR``),
-    this process keeps its own temp files where TMPDIR says, and the processes it starts
-    from now on, Chromium among them, get TMPDIR=/tmp. (browser-use starts Chromium with
-    this process's environment and no way to pass another.) Does nothing on other systems,
-    or when /tmp cannot be written to.
+    When TMPDIR leaves no room for Chromium's socket path (``CHROMIUM_SOCKET_IN_TMPDIR``), this
+    process keeps its own temp files where TMPDIR says and the processes it starts from now on get
+    TMPDIR=/tmp. browser-use gives Chromium this process's environment and no way to pass another.
+    Does nothing elsewhere, or when /tmp is not writable.
     """
     if platform.system() != "Linux":
         return False
@@ -440,10 +395,9 @@ _MISSING_LIBRARY = re.compile(r"error while loading shared libraries: ([^:\s]+)"
 def chromium_start_problem(executable: str) -> str | None:
     """Why ``executable`` cannot start, with the fix, or None when it can.
 
-    Runs ``<executable> --version`` (with the keychain args, like every launch). A
-    success is remembered for the life of the process; a failure is checked again next
-    time, so installing the missing libraries needs no restart. Not run on Windows,
-    where ``chrome.exe --version`` opens a browser window instead of printing.
+    Runs ``<executable> --version`` with the keychain args. A success is remembered for the process,
+    a failure is checked again next time so installing the libraries needs no restart. Skipped on
+    Windows, where ``chrome.exe --version`` opens a window.
     """
     if executable in _started:
         return None
@@ -500,12 +454,11 @@ def browser_profile(
     extra_args: list[str] | None = None,
     **overrides: Any,
 ):
-    """Return the browser-use BrowserProfile every caller should use.
+    """The browser-use BrowserProfile every caller should use.
 
-    ``viewport`` defaults to 1280x720. ``headless`` defaults to BENCHMARK_HEADLESS.
-    ``extra_args`` (or an ``args`` keyword) are appended after the keychain args,
-    which are always kept. Any other BrowserProfile field can be overridden by
-    keyword, except ``cdp_url`` (local browser only).
+    ``viewport`` defaults to 1280x720, ``headless`` to BENCHMARK_HEADLESS. ``extra_args`` (or an
+    ``args`` keyword) go after the keychain args, which are always kept. Any other BrowserProfile
+    field can be overridden by keyword except ``cdp_url``.
     """
     if overrides.get("cdp_url"):
         raise ValueError("browser_env.browser_profile() is for a local browser; cdp_url is not allowed")
@@ -532,6 +485,8 @@ def browser_profile(
         "keep_alive": False,
         "permissions": [],
         "viewport": size,
+        # No uBlock or cookie auto-clicker: the agent must face the site's real popups, and nothing
+        # downloads on first launch.
         "enable_default_extensions": False,
     }
     if not use_headless:
@@ -539,13 +494,13 @@ def browser_profile(
     settings.update(overrides)
     if settings["user_data_dir"] is None:
         settings["user_data_dir"] = new_profile_dir()
-        # Downloads inside the profile dir, so one cleanup removes both (browser-use's
-        # default is another browser-use-downloads-* temp dir that is never deleted).
+        # Downloads go inside the profile dir so one cleanup removes both. browser-use's default is
+        # a separate temp dir that is never deleted.
         settings.setdefault("downloads_path", str(Path(settings["user_data_dir"]) / "downloads"))
     return BrowserProfile(**settings)
 
 
-# Module-level alias so browser_profile(headless=...) can shadow the function name.
+# So browser_profile(headless=...) can shadow the function name.
 _headless_default = headless
 
 

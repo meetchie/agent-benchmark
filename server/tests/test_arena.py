@@ -218,7 +218,6 @@ def test_march_headline_prints_59_of_60_against_1_of_60(tmp_path, capsys):
     assert "Headline (judge pass): BROWSERUSE 1/60 (1.7%) vs RINDLER 59/60 (98.3%)" in out
     assert "120 runs" in out and "Warning" not in out
     # The header gives the first and last log of the selected set, not the filter's bounds.
-    # (Rindler's last log is 03:24:05; the last BrowserUse one, 06:10:32, ends the set.)
     assert "logs from 2026-03-31 00:28:27 to 06:10:32, 60 runs per agent expected" in out
     assert "23:59:59" not in out
 
@@ -274,6 +273,7 @@ def test_arena_cli_lists_and_validates(capsys):
     assert asyncio.run(arena.main(["--list-agents"])) == 0
     out = capsys.readouterr().out
     assert "BROWSERUSE" in out and "RINDLER" in out and "STEEL" not in out
+    assert "No description" not in out
     with pytest.raises(SystemExit):
         asyncio.run(arena.main(["--agent", "STEEL", "--scenario", "google_search"]))
     args = arena.build_parser().parse_args(["--agent", "rindler", "--scenario", "x"])
@@ -281,9 +281,7 @@ def test_arena_cli_lists_and_validates(capsys):
     assert arena.build_parser().parse_args(["--llm", "claude-haiku-5-5"]).model == "claude-haiku-5-5"
 
 
-# ---------------------------------------------------------------------------
 # BrowserUse arm with a fake browser-use Agent
-# ---------------------------------------------------------------------------
 
 
 class FakeSummary:
@@ -418,7 +416,7 @@ async def test_browseruse_steps_reach_the_judge_with_what_they_did(no_browser):
         [bu.history_item([bu.action(input={"index": 4, "text": "belt", "clear": True}), bu.action(click={"index": 9})],
                          ran("Typed 'belt'", "Clicked a"),
                          elements=[bu.element(" Search\n "), bu.element("Bullet Studded Belt")])],
-        [],  # a step browser-use kept no history item for (it timed out inside the agent, say)
+        [],  # a step browser-use kept no history item for, e.g. it timed out inside the agent
         [bu.history_item([bu.action(done={"text": "Cart: Bullet Studded Belt, $30.00 " + "x" * 300, "success": True})],
                          [bu.ActionResult(is_done=True, success=True, extracted_content="Cart: Bullet Studded Belt")])],
     ]

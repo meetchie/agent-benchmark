@@ -1,4 +1,3 @@
-# tests/test_run_judge.py
 """Tests for the run judge."""
 import json
 import re

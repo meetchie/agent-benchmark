@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""
-Arena - head-to-head runner for the two browser-agent arms.
+"""Head-to-head runner for the two browser-agent arms.
 
     BROWSERUSE  browser-use on a local headless Chromium, no site knowledge.
     RINDLER     a tool-calling model driving the site through its Rindler site mapping
                 (server/mappings/*.json), run in-process by rindler_local.
 
-Both arms use the same model (BENCHMARK_AGENT_MODEL, default claude-sonnet-5-5) and the
-same step budget (--max-steps, default 30). An LLM judge (BENCHMARK_JUDGE_MODEL) grades
-every run against the scenario's success criteria, and the run log is written to
-arena_runs/ (gitignored) in the same format as the archived March logs in arena_logs/.
+Both arms use the same model (BENCHMARK_AGENT_MODEL) and step budget (--max-steps, default 30). An
+LLM judge (BENCHMARK_JUDGE_MODEL) grades each run against the scenario's success criteria. The log
+goes to arena_runs/ (gitignored) in the same format as the archived March logs in arena_logs/.
 
 Usage:
     uv run python arena.py --agent RINDLER --scenario vhlistings_product_attribute_search
@@ -41,10 +39,6 @@ SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RUNS_DIR = os.path.join(SERVER_DIR, "arena_runs")
 ARCHIVE_DIR = os.path.join(SERVER_DIR, "arena_logs")
 
-
-# =============================================================================
-# LLM JUDGE
-# =============================================================================
 
 JUDGE_SYSTEM_PROMPT = """You are a strict evaluator for browser automation agents. Your job is to determine if an agent successfully completed its assigned task.
 
@@ -98,8 +92,8 @@ VERDICT_SCHEMA = {
     "required": ["verdict", "reason", "details"],
 }
 
-# Map agent-specific action names to common vocabulary for the judge.
-# Anything not in this map passes through as-is.
+# Agent-specific action names mapped to a common vocabulary for the judge. Anything not listed
+# passes through.
 ACTION_NORMALIZE = {
     "llm_call": "browser_action",
     "act": "browser_action",
@@ -115,9 +109,9 @@ ACTION_ERROR_LIMIT = 80
 
 
 def describe_call(name: Optional[str], args: Any = None, element: Optional[str] = None) -> str:
-    """One action as the judge reads it: search_products(query="belt"),
-    navigation(url="https://vhlistings.com/search?q=belt", new_tab=false), click(index=9) on "Add to cart".
-    An action logged without arguments (the March logs) is its name alone."""
+    """One action as the judge reads it, e.g. search_products(query="belt") or click(index=9) on
+    "Add to cart". An action logged without arguments (the March logs) is its name alone.
+    """
     name = ACTION_NORMALIZE.get(name, name) or "?"
     text = name
     if isinstance(args, dict):
@@ -129,10 +123,10 @@ def describe_call(name: Optional[str], args: Any = None, element: Optional[str] 
 
 
 def describe_ran_action(action: Dict[str, Any]) -> str:
-    """One action a browser-use step ran: click(index=9) on "Add to cart". One that failed has
-    its error after it (click(index=9) -> error: Failed to click element 9: ...), and one
-    browser-use answered without acting, its element gone from the page, says so
-    (click(index=9) -> not run: element 9 was not available)."""
+    """One action a browser-use step ran, e.g. click(index=9) on "Add to cart". A failed one gets
+    " -> error: ..." after it, and one browser-use answered without acting because its element
+    was gone gets " -> not run: element 9 was not available".
+    """
     text = describe_call(action.get("action"), action.get("params"), action.get("element"))
     not_run = " ".join(str(action.get("not_run") or "").split())
     error = " ".join(str(action.get("error") or "").split())
@@ -218,9 +212,8 @@ def run_judge(scenario: Scenario, result: Dict[str, Any], telemetry_events: list
               model: Optional[str] = None) -> Dict[str, Any]:
     """Grade one run. Returns {verdict, reason, details, judge_model, judge_cost_usd, judge_usage}.
 
-    The judge reads only the agent's own report and its steps' actions with their
-    arguments; it never looks at the site. verdict is PASS or FAIL, or ERROR when the
-    judge call itself failed.
+    The judge reads only the agent's own report and its steps' actions with their arguments, never
+    the site. verdict is PASS or FAIL, or ERROR when the judge call itself failed.
     """
     model = (model or "").strip() or llm.model_for("judge")
     prompt = build_judge_prompt(scenario, result, telemetry_events)
@@ -246,13 +239,9 @@ def run_judge(scenario: Scenario, result: Dict[str, Any], telemetry_events: list
     return out
 
 
-# =============================================================================
-# RUN HELPERS
-# =============================================================================
-
 
 def get_company_from_scenario(scenario_name: str) -> str:
-    """Extract company/site name from scenario name (first part before underscore)."""
+    """Site name from a scenario name: the part before the first underscore."""
     return scenario_name.split("_")[0]
 
 
@@ -295,7 +284,6 @@ def print_banner(agent_name: str, scenario: Scenario, run_id: str, model: str, m
 
 def print_summary(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
                   scenario: Scenario, judge_result: Optional[Dict[str, Any]] = None):
-    """Print the final run summary."""
     totals = calculate_totals(agent.telemetry_events)
 
     print()
@@ -408,7 +396,6 @@ def save_log(agent: BaseAgent, result: Dict[str, Any], elapsed: float,
 
 
 async def run_agent(agent: BaseAgent, scenario: Scenario) -> Dict[str, Any]:
-    """Run an agent on a scenario."""
     return await agent.run(start_url=scenario.start_url)
 
 

@@ -1,9 +1,9 @@
 """The judge: one LLM call per run, graded against the task's success criteria.
 
-Like the March judge it reads only the agent's own report and its step trace, never the
-site, so it can reject a claim the trace contradicts but cannot confirm a price on the
-page. Unlike March it also sees the agent's final report (the tasks ask the agent to
-"report" names, prices and cart contents, and that report is the evidence).
+Like the March judge it works from the agent's step trace, never the site, so it can reject a claim
+the trace contradicts but cannot confirm a price on the page. Unlike March it also sees the agent's
+final report, since the tasks ask the agent to "report" names, prices and cart contents and that
+report is the evidence.
 
 The model is BENCHMARK_JUDGE_MODEL / --judge-model (default claude-sonnet-5-5), called
 through llm.acomplete_json with a JSON schema, so the verdict always parses.

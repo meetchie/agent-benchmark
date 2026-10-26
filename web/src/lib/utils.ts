@@ -92,10 +92,9 @@ function goalSentences(goal: string): string[] {
 }
 
 /**
- * The line under a task's title on its card: the goal's first sentence that says
- * what to do, skipping steps that only open the site or a page ("Go to the Products
- * page."), which generated tasks for one site often all start with. The goal's
- * first line when every sentence is such a step.
+ * The line under a task's title on its card: the goal's first sentence that says what to do,
+ * skipping steps that only open the site or a page ("Go to the Products page."), which generated
+ * tasks often all start with. The goal's first line when every sentence is such a step.
  */
 export function taskSubtitle(goal: string): string {
   const useful = goalSentences(goal).find((s) => !NAV_TO_PAGE.test(s) && !NAV_TO_URL.test(s));

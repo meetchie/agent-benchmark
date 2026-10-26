@@ -66,7 +66,6 @@ export function ResultsOverlay({
 
       <div className="relative w-full max-w-[520px] max-h-[90vh] border-2 border-slate-200 bg-white m-4 shadow-2xl flex flex-col">
         {demoMode && <DemoBanner />}
-        {/* Close button row */}
         <div className="shrink-0 flex justify-end p-4 pb-0 bg-white">
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

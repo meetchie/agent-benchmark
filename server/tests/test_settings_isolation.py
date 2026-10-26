@@ -1,11 +1,9 @@
 """The suite never reads a developer's .env, whenever and wherever it is loaded.
 
-conftest.py unsets the settings before each test, but that alone was not enough:
-browser-use calls ``load_dotenv()`` when its modules are first imported, often inside a
-test, and that put the settings back from the repo's .env. With
-BENCHMARK_AGENT_MODEL=claude-haiku-5-5 in .env, a test that asserted the default agent
-model failed, and with INTERNAL_API_KEY or DEMO_MODE set there most of the server tests
-did.
+conftest.py unsets the settings before each test, but that is not enough: browser-use calls
+``load_dotenv()`` when its modules are first imported, often inside a test, which puts the settings
+back from the repo's .env. A test asserting a default (BENCHMARK_AGENT_MODEL) would then fail, and
+so would most of the server tests with INTERNAL_API_KEY or DEMO_MODE set.
 """
 
 import os

@@ -10,11 +10,11 @@ interface StepLogProps {
   startingLabel?: string | null;
 }
 
-/* Layout: 16px left padding, then the line at 16px, dots centered on 16px, text starts at 32px */
+// The line sits 16px in, dots are centered on it, and the text starts at 32px.
 const LINE_LEFT = 16; // px from left edge to line center
 const DOT_SIZE = 10;  // px (completed dots)
 const ACTIVE_DOT_SIZE = 10; // px (active dots)
-const DOT_OFFSET = LINE_LEFT - DOT_SIZE / 2; // 10px — centers dot on line
+const DOT_OFFSET = LINE_LEFT - DOT_SIZE / 2; // centers the dot on the line
 const LINE_PAD = 8;   // px of gradient fade before first dot / after last dot
 
 export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogProps) {
@@ -39,7 +39,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
     }
   }, []);
 
-  // Re-measure when steps change or running state changes
   useEffect(() => {
     measureHeight();
   }, [steps.length, isRunning, measureHeight]);
@@ -57,7 +56,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
     setPrevStepCount(steps.length);
   }, [steps.length]);
 
-  // Smooth auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -69,7 +67,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
       <div className="px-3 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Steps
@@ -79,14 +76,11 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
         </span>
       </div>
 
-      {/* Timeline */}
       <div className="relative flex-1 overflow-hidden">
-        {/* Bottom fade */}
         <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
 
         <div ref={scrollRef} className="h-full overflow-y-auto py-4">
         <div ref={contentRef} className="relative" style={{ paddingLeft: 32 }}>
-          {/* Vertical line — from above first dot to last dot center */}
           {lineHeight > 0 && (
             <div
               className="absolute"
@@ -101,7 +95,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
             />
           )}
 
-          {/* Starting state */}
           {steps.length === 0 && isRunning && (
             <div className="relative pb-4 step-enter leading-4">
               <div
@@ -113,7 +106,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
             </div>
           )}
 
-          {/* Completed steps */}
           {completedSteps.map((step) => (
             <div
               key={step.step}
@@ -134,7 +126,6 @@ export function StepLog({ steps, isRunning, totalMs, startingLabel }: StepLogPro
             </div>
           ))}
 
-          {/* Current step */}
           {currentStep && (
             <div
               key={`current-${currentStep.step}`}

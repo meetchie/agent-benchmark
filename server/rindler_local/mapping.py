@@ -14,9 +14,8 @@ A mapping is the JSON document that describes one site for the Rindler arm:
       "defaults"?: {name: value}               # fallback values for {{name}} placeholders
     }
 
-The format is the one the March 2026 Rindler seeds used (server/mappings/*.sql), plus two
-optional keys added for the local interpreter: ``defaults`` and an action's
-``sets_context`` (see ``Mapping.sets_context``).
+The format is the one the March 2026 seeds used (server/mappings/*.sql), plus two optional keys for
+the local interpreter: ``defaults`` and an action's ``sets_context`` (see ``Mapping.sets_context``).
 """
 
 from __future__ import annotations

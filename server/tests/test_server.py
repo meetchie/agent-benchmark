@@ -88,7 +88,6 @@ def test_health():
 
 
 def test_start_returns_run_id():
-    """Authenticated start returns a run_id."""
     async def fake_run(state, url, goal, viewport=None):
         state.status = "complete"
         state.success = True
@@ -179,7 +178,6 @@ def test_start_accepts_a_public_url():
 
 
 def test_status_running():
-    """Status of a just-started run should be 'running' before background task completes."""
     from benchmark_runner import RunState
 
     run_id = "test-running-id"
@@ -217,16 +215,12 @@ def test_generate_tasks_site_unreachable():
     assert "detail" in resp.json()
 
 
-# --- Clerk auth tests ---
-
 def test_benchmark_start_no_token(clerk_mode):
-    """In clerk mode, requests without a Bearer token get 401."""
     resp = client.post("/benchmark/start", json={"url": "https://example.com", "goal": "Test"})
     assert resp.status_code == 401
 
 
 def test_benchmark_start_invalid_token(clerk_mode):
-    """In clerk mode, requests with an invalid JWT get 401."""
     resp = client.post(
         "/benchmark/start",
         json={"url": "https://example.com", "goal": "Test"},
@@ -237,7 +231,6 @@ def test_benchmark_start_invalid_token(clerk_mode):
 
 @patch("server.verify_clerk_jwt", return_value={"sub": "test-user-id"})
 def test_start_with_mocked_clerk_jwt(mock_verify, clerk_mode):
-    """Mocking verify_clerk_jwt directly allows auth to pass."""
     async def fake_run(state, url, goal, viewport=None):
         state.status = "complete"
         state.success = True
@@ -255,10 +248,7 @@ def test_start_with_mocked_clerk_jwt(mock_verify, clerk_mode):
     mock_verify.assert_called_once_with("fake-token")
 
 
-# --- Security tests ---
-
 def test_internal_key_rejects_wrong_key():
-    """When INTERNAL_API_KEY is set, requests with wrong key get 403."""
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     with patch.object(server_module, "_INTERNAL_API_KEY", "correct-key"):
         resp = client.post(
@@ -270,7 +260,6 @@ def test_internal_key_rejects_wrong_key():
 
 
 def test_internal_key_rejects_missing_key():
-    """When INTERNAL_API_KEY is set, requests without key get 403."""
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     with patch.object(server_module, "_INTERNAL_API_KEY", "correct-key"):
         resp = client.post(
@@ -281,7 +270,6 @@ def test_internal_key_rejects_missing_key():
 
 
 def test_internal_key_skipped_when_not_set():
-    """When INTERNAL_API_KEY is empty, requests pass through."""
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     with patch.object(server_module, "_INTERNAL_API_KEY", ""):
         async def fake_run(state, url, goal, viewport=None):
@@ -295,7 +283,6 @@ def test_internal_key_skipped_when_not_set():
 
 
 def test_concurrency_limit():
-    """User exceeding max concurrent runs gets 429."""
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     server_module._active_runs["test-user-id"] = 2  # At the default limit
     try:
@@ -309,10 +296,8 @@ def test_concurrency_limit():
 
 
 def test_generate_tasks_rate_limit():
-    """Exceeding task generation rate limit gets 429."""
     import time
     now = time.time()
-    # Simulate 5 recent requests from same IP
     server_module._task_gen_requests["testclient"] = [now] * 5
     try:
         with patch("server.fetch_and_generate", new_callable=AsyncMock, return_value=[]):
@@ -323,7 +308,6 @@ def test_generate_tasks_rate_limit():
 
 
 def test_generate_tasks_error_no_internal_details():
-    """Error responses from generate-tasks must not leak internal details."""
     with patch("server.fetch_and_generate", new_callable=AsyncMock,
                side_effect=Exception("Internal error: DB connection to 10.0.0.5 failed")):
         resp = client.post("/benchmark/generate-tasks", json={"url": "https://example.com"})
@@ -334,7 +318,6 @@ def test_generate_tasks_error_no_internal_details():
 
 
 def test_status_not_found_no_id_leak():
-    """Status 404 must not echo back the run_id."""
     resp = client.get("/benchmark/status/secret-run-id-12345")
     assert resp.status_code == 404
     body = resp.json()
@@ -342,9 +325,7 @@ def test_status_not_found_no_id_leak():
 
 
 def test_run_eviction():
-    """Completed runs should be evicted when store exceeds limit."""
     from benchmark_runner import RunState
-    # Fill with completed runs
     for i in range(210):
         state = RunState(run_id=f"run-{i}", status="complete")
         server_module._runs[f"run-{i}"] = state
@@ -353,9 +334,7 @@ def test_run_eviction():
     assert len(server_module._runs) < 210
 
 
-# ---------------------------------------------------------------------------
-# Helpers for the tests below
-# ---------------------------------------------------------------------------
+# Helpers
 
 START = {"url": "https://books.toscrape.com", "goal": "Add any book to the basket.", "label": "Add a book"}
 
@@ -396,9 +375,7 @@ def instant_sleep(monkeypatch):
     monkeypatch.setattr(asyncio, "sleep", quick)
 
 
-# ---------------------------------------------------------------------------
 # AUTH_MODE
-# ---------------------------------------------------------------------------
 
 
 def test_auth_none_is_the_default_and_needs_no_token():
@@ -471,9 +448,7 @@ def test_there_is_no_admin_bypass(mock_verify, clerk_mode, monkeypatch):
         assert client.post("/benchmark/start", json=START, headers=headers).status_code == 429
 
 
-# ---------------------------------------------------------------------------
 # DAILY_RUN_QUOTA and MAX_CONCURRENT_RUNS
-# ---------------------------------------------------------------------------
 
 
 def test_quota_defaults_to_unlimited_without_sign_in():
@@ -611,9 +586,7 @@ def test_a_crashed_run_frees_its_slot_and_ends_as_an_error(live, monkeypatch):
     assert server_module._active_runs.get("local", 0) == 0
 
 
-# ---------------------------------------------------------------------------
 # Startup: fail fast on a bad setup
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -797,9 +770,7 @@ def test_a_chromium_that_cannot_start_is_named_at_startup(configured, monkeypatc
     assert "playwright install-deps chromium" in caplog.text
 
 
-# ---------------------------------------------------------------------------
 # Logging starts with the server
-# ---------------------------------------------------------------------------
 
 
 def test_the_first_task_generation_cost_line_reaches_the_server_log():
@@ -854,9 +825,7 @@ def test_the_startup_runs_configure_logging(configured, monkeypatch):
     assert called == [True]
 
 
-# ---------------------------------------------------------------------------
 # /health
-# ---------------------------------------------------------------------------
 
 
 def test_health_reports_provider_and_models(monkeypatch):
@@ -917,9 +886,7 @@ def test_health_never_shows_keys(monkeypatch):
     assert "key" not in text.lower().replace("browser_provider", "")
 
 
-# ---------------------------------------------------------------------------
 # Status: cost_usd and agent_model, over HTTP
-# ---------------------------------------------------------------------------
 
 
 def test_status_of_a_finished_run_has_cost_usd_and_agent_model(live):
@@ -959,9 +926,7 @@ def test_status_cost_is_null_for_an_unpriced_agent_model(live, monkeypatch):
     assert body["total_tokens"] == 15
 
 
-# ---------------------------------------------------------------------------
 # Local persistence through the API
-# ---------------------------------------------------------------------------
 
 
 def test_start_creates_the_run_file_for_the_local_user(live, tmp_path):
@@ -1021,9 +986,7 @@ def test_start_passes_the_viewport_to_the_runner(live):
     assert seen["viewport"] == {"width": 390, "height": 844}
 
 
-# ---------------------------------------------------------------------------
 # Live preview: the frame endpoint
-# ---------------------------------------------------------------------------
 
 
 def test_the_frame_endpoint_serves_the_newest_picture_of_the_page(live):
@@ -1095,9 +1058,7 @@ def test_a_demo_run_says_what_it_is_doing(no_keys, monkeypatch, instant_sleep):
     assert body["frame"] is None  # a demo run has no browser, so no picture
 
 
-# ---------------------------------------------------------------------------
 # Cancel
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("stuck_status", ["running", "analyzing"])
@@ -1118,9 +1079,7 @@ def test_cancel_ends_a_run_in_either_phase(live, stuck_status):
     assert server_module._active_runs.get("local", 0) == 0
 
 
-# ---------------------------------------------------------------------------
 # Server shutdown and restart
-# ---------------------------------------------------------------------------
 
 
 def test_stopping_the_server_ends_the_runs_in_progress_and_saves_them(configured, monkeypatch):
@@ -1224,9 +1183,7 @@ def test_cancel_leaves_a_finished_run_alone(live):
         assert live.get(f"/benchmark/status/{run_id}").json()["status"] == "complete"
 
 
-# ---------------------------------------------------------------------------
 # generate-tasks: model failures map to HTTP answers
-# ---------------------------------------------------------------------------
 
 SITE = {"url": "https://www.dominos.com"}  # a known shop, so no page is fetched
 
@@ -1291,9 +1248,7 @@ def test_generate_tasks_truncated_reply_is_500(monkeypatch):
     assert resp.json()["detail"] == "Task generation failed"
 
 
-# ---------------------------------------------------------------------------
 # DEMO_MODE: the whole loop with no keys, no browser, no model
-# ---------------------------------------------------------------------------
 
 
 def test_demo_mode_runs_the_whole_loop_without_any_key(no_keys, monkeypatch, instant_sleep, tmp_path):
@@ -1385,9 +1340,7 @@ def test_every_canned_task_is_covered_by_the_canned_steps(no_keys, monkeypatch, 
         assert "cart" in lines[-1].lower()  # the check at the end is about the cart, which the steps do reach
 
 
-# ---------------------------------------------------------------------------
 # Deleted hosting
-# ---------------------------------------------------------------------------
 
 
 def test_railway_hosting_files_are_gone():

@@ -1,37 +1,13 @@
-"""Local run persistence: one JSON file per benchmark run.
+"""Local run persistence: one JSON file per run at ``RUNS_DIR/<run_id>.json``, so results survive a
+restart.
 
-Every finished (or failed) live-benchmark run is written to ``RUNS_DIR/<run_id>.json``
-so results survive a server restart. The hosted version posted the same data to a
-separate Go service backed by Postgres; that service is retired, so the files are the
-whole database.
+``RUNS_DIR`` defaults to ``server/runs/`` (gitignored). A relative path is resolved against
+``server/``. ``persist_run_start`` creates the record and returns its id, the other functions update
+it. None of them raise. A disk problem is logged and the run carries on.
 
-Configuration
-    ``RUNS_DIR``  directory for the files. Default ``server/runs/`` (gitignored). A
-                  relative path is resolved against the ``server/`` directory, so the
-                  result does not depend on where the server was started from.
-
-The function names and signatures are the ones the Go client had: ``persist_run_start``
-creates the record and returns its id, the others update it. They never raise: a disk
-problem is logged and the benchmark carries on, exactly as an unreachable Go server did.
-
-Record layout (all keys always present once ``persist_run_start`` has run)::
-
-    {"id", "user_id", "created_at", "updated_at", "site_domain", "start_url",
-     "task_label", "task_goal", "agent_type", "agent_model",
-     "status", "result_state", "success", "summary", "total_ms",
-     "input_tokens", "output_tokens", "total_tokens",
-     "cache_read_tokens", "cache_write_tokens", "estimated_cost_usd",
-     "final_report", "agent_reported_success",
-     "steps": [{"step_number", "description", "elapsed_ms"}],
-     "phases": [{"name", "step_numbers", "total_ms", "failed", "slow"}]}
-
-A finished run may also have ``message`` (why it is an error).
-
-Screenshots are not stored. ``input_tokens`` includes cache reads (browser-use's
-convention); ``cache_read_tokens`` and ``cache_write_tokens`` say how many of the
-priced tokens were cached. ``final_report`` is the agent's closing report as the judge
-read it and ``agent_reported_success`` the success flag the agent set with it, both null
-when the agent did not finish on its own.
+``persist_run_start`` shows the record's keys. A finished run that errored also has ``message``, and
+screenshots are not stored. ``input_tokens`` includes cache reads, as browser-use counts them.
+``final_report`` and ``agent_reported_success`` are null when the agent did not finish on its own.
 """
 
 import json
@@ -57,7 +33,6 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
 def runs_dir() -> Path:
-    """The directory run files are written to (``RUNS_DIR``, default ``server/runs``)."""
     raw = os.getenv("RUNS_DIR", "").strip()
     if not raw:
         return DEFAULT_RUNS_DIR
@@ -141,9 +116,8 @@ async def persist_run_start(
 ) -> str | None:
     """Create the run's record. Returns the persisted run id, or None when it could not be written.
 
-    ``clerk_user_id`` is the signed-in user's id in Clerk mode and ``local`` otherwise;
-    the name is kept from the hosted version. ``agent_model`` is the model id the agent
-    runs on (the caller knows it; it is not guessed here).
+    ``clerk_user_id`` is the signed-in user's id in Clerk mode and ``local`` otherwise. The name is
+    left over from the hosted version. ``agent_model`` is the model id the agent runs on.
     """
     created = _now()
     record = {
@@ -210,8 +184,8 @@ async def persist_run_completion(
 ) -> None:
     """Store the run's final result. ``estimated_cost_usd`` is None for an unpriced model.
 
-    ``final_report`` is the agent's closing report and ``agent_reported_success`` the
-    success flag it set (both None when it did not finish on its own).
+    ``final_report`` and ``agent_reported_success`` are both None when the agent did not finish on
+    its own.
     """
     if not run_id:
         return
@@ -259,10 +233,9 @@ _UNFINISHED = ("running", "analyzing")
 def mark_unfinished_runs(message: str) -> int:
     """Mark every run file still ``running`` or ``analyzing`` as an ``error`` with ``message``.
 
-    A server marks the files an earlier server left behind when it starts: a run whose
-    server was killed outright never wrote its end. Its usage stays as recorded (the
-    file has none if the run was cut off before the agent stopped). Returns how many
-    files were changed.
+    A server calls this at startup for the files an earlier server left behind, since a run whose
+    server was killed never wrote its end. Usage stays as recorded (none if the run was cut off
+    before the agent stopped). Returns how many files were changed.
     """
     try:
         paths = sorted(runs_dir().glob("*.json"))

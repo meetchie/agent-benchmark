@@ -13,8 +13,6 @@ vi.mock("../StepLog", () => ({
   StepLog: () => <div data-testid="step-log-mock" />,
 }));
 
-// RunningHeader is simple enough to render for real — no mocking needed.
-
 const makeStep = (step: number, description = "Click button", elapsed_ms = 200): StepRecord => ({
   step,
   description,
@@ -49,13 +47,11 @@ const defaultProps = {
 describe("RunningView", () => {
   it("renders without crashing", () => {
     render(<RunningView {...defaultProps} />);
-    // The running view should mount with no errors
     expect(document.body).toBeTruthy();
   });
 
   it("shows a spinner when no screenshot is available", () => {
     render(<RunningView {...defaultProps} screenshot={null} />);
-    // SVG spinners are present; check there is at least one spin animation element
     const spinners = document.querySelectorAll(".animate-spin");
     expect(spinners.length).toBeGreaterThan(0);
   });
@@ -294,7 +290,8 @@ describe("RunningView", () => {
     });
 
     it("does not recompute the cost from the token counts", () => {
-      // 8,000 input + 2,000 output tokens at the old GPT-4o rates would be $0.04.
+      // The backend's price is what shows: 8,000 input + 2,000 output tokens would come to $0.04
+      // if the UI priced them itself.
       finished({ cost_usd: 2.5 });
       expect(screen.getAllByText("$2.50").length).toBeGreaterThan(0);
       expect(screen.queryByText("$0.04")).not.toBeInTheDocument();

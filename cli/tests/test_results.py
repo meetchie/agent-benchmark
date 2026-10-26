@@ -170,7 +170,8 @@ def test_the_comparison_chart_scores_both_arms_not_only_rindler():
 
 def test_the_token_chart_legend_keys_the_shades_of_both_arms():
     """A plain legend takes its colours from the first bar of each series, which is BrowserUse's, so
-    Rindler's two shades had no key. Every shade drawn on the chart has one now."""
+    Rindler's shades would have no key. Every shade drawn on the chart needs one.
+    """
     from visualize import token_usage_figure  # sets the non-interactive backend before pyplot loads
     import matplotlib.pyplot as plt
 

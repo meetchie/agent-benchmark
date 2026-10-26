@@ -23,14 +23,11 @@ function LiveStats({
   agentModel?: string | null;
   demoMode?: boolean;
 }) {
-  // Snap to real server time when done, otherwise show shared live counter
   const displayMs = finalMs ?? elapsedMs;
 
-  // Tokens are whatever the backend counted, the same total_tokens the results
-  // card shows. Adding input_tokens and output_tokens here would leave out the
-  // cache writes, which are billed. Until the agent finishes there is no honest
-  // number (an estimate from the step count read about 7x low on current
-  // models), so the cell shows "—" just like Cost does.
+  // Tokens are the backend's total_tokens, the same figure the results card shows. Summing
+  // input_tokens and output_tokens would leave out the cache writes, which are billed. A step-count
+  // estimate read far too low, so the cell shows "—", like Cost, until the agent finishes.
   const totalTokens = finalTotalTokens ?? null;
   const hasRealTokens = totalTokens !== null;
 
@@ -50,7 +47,6 @@ function LiveStats({
 
   return (
     <>
-      {/* Mobile: horizontal stats bar */}
       <div className="md:hidden w-full bg-white border-t-[3px] border-t-[#3c49ad]">
         <div className="px-4 py-3 border-b border-slate-100">
           <p className="text-sm font-semibold text-[#3c49ad]">{domain}</p>
@@ -72,9 +68,7 @@ function LiveStats({
         )}
       </div>
 
-      {/* Desktop: vertical sidebar */}
       <div className="hidden md:flex w-[300px] shrink-0 flex-col gap-4">
-        {/* Stats card */}
         <div className="bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden flex flex-col" style={{ height: "55vh" }}>
           <div className="px-4 py-4 border-b border-slate-100">
             <p className="text-base font-semibold text-[#3c49ad]">{domain}</p>
@@ -94,10 +88,9 @@ function LiveStats({
 }
 
 /**
- * What the screenshot pane shows when there is no picture: a spinner while the
- * agent is still working (with what it is doing, when the backend says), and a
- * calm note once the run is over (a canned demo run, for one, never has a
- * screenshot, so a spinner there would wait forever).
+ * What the screenshot pane shows when there is no picture: a spinner while the agent works (with
+ * what it is doing, when the backend says), and a short note once the run is over. A canned demo
+ * run never has a screenshot, so a spinner there would wait forever.
  */
 function ScreenshotPlaceholder({ finished, label }: { finished: boolean; label: string | null }) {
   return (
@@ -194,7 +187,6 @@ export function RunningView({
   const [elapsedMs, setElapsedMs] = useState(0);
   const ticking = isRunning && (steps.length > 0 || runPhase !== null) && finalMs === undefined;
 
-  // Reset on each new run
   useEffect(() => {
     if (isRunning) setElapsedMs(0);
   }, [isRunning]);
@@ -218,7 +210,6 @@ export function RunningView({
     setShowOverlay(true);
   };
 
-  // Reset banner when a new run starts
   useEffect(() => {
     if (!showOverlayTrigger) setBannerDismissed(false);
   }, [showOverlayTrigger]);
@@ -241,7 +232,6 @@ export function RunningView({
         demoMode={demoMode}
       />
 
-      {/* Desktop layout */}
       <div className="hidden md:flex flex-1 p-4 gap-4 overflow-hidden">
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div data-preview className={`relative overflow-hidden ${screenshot ? "bg-slate-100" : "bg-white"}`} style={{ height: "55vh", flexShrink: 0 }}>
@@ -283,9 +273,7 @@ export function RunningView({
         />
       </div>
 
-      {/* Mobile layout */}
       <div className="md:hidden flex-1 flex flex-col p-4 gap-4 overflow-auto">
-        {/* Screenshot */}
         <div data-preview className={`relative overflow-hidden ${screenshot ? "bg-slate-100" : "bg-white"}`} style={{ height: "55vh", flexShrink: 0 }}>
           {screenshot ? (
             <LivePicture src={screenshot} label={phaseLabel} />
@@ -313,15 +301,12 @@ export function RunningView({
             </div>
           )}
         </div>
-        {/* Horizontal stats bar */}
         <LiveStats url={url} taskLabel={taskLabel} steps={steps} elapsedMs={elapsedMs} finalMs={finalMs} finalTotalTokens={finalTotalTokens} finalCostUsd={finalCostUsd} agentModel={agentModel} demoMode={demoMode} />
-        {/* Steps */}
         <div className="h-[200px] min-h-0 bg-white border-t-[3px] border-t-[#3c49ad] overflow-hidden">
           <StepLog steps={steps} isRunning={isRunning} totalMs={finalMs ?? elapsedMs} startingLabel={phaseLabel} />
         </div>
       </div>
 
-      {/* Results overlay */}
       {showOverlayTrigger && showOverlay && (
         <ResultsOverlay
           url={url} taskLabel={taskLabel} summary={summary} errorMsg={errorMsg}

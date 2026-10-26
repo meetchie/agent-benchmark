@@ -28,9 +28,7 @@ from rindler_local.mapping import MAPPINGS_DIR, domain_matches, slugify
 from tests.fixture_shop import MAPPING_PATH, FixtureShop
 
 
-# ---------------------------------------------------------------------------
 # mapping basics
-# ---------------------------------------------------------------------------
 
 
 def test_interpolate_replaces_known_and_keeps_unknown():
@@ -95,9 +93,7 @@ def test_page_extractor_override_from_file(tmp_path):
     assert mapping.page_extractor == "() => ({ok: true})"
 
 
-# ---------------------------------------------------------------------------
 # tool schemas
-# ---------------------------------------------------------------------------
 
 
 def test_tools_are_exactly_the_mapping_actions_plus_session_tools():
@@ -106,7 +102,7 @@ def test_tools_are_exactly_the_mapping_actions_plus_session_tools():
     names = [t["name"] for t in tools]
     assert names[0] == "start_session" and names[-1] == "close_session"
     assert sorted(names[1:-1]) == sorted(mapping.actions)
-    # Tools the March server always listed but vhlistings never defined do not appear.
+    # Tools the hosted server listed that vhlistings never defined do not appear.
     for absent in ("update_address", "select_store", "place_order", "summarize_page", "book_demo"):
         assert absent not in names
 
@@ -134,9 +130,7 @@ def test_tools_fall_back_to_default_descriptions_and_optional_params():
     assert fixture["flaky_action"]["description"] == "Run the 'flaky_action' action of the 127.0.0.1 site mapping."
 
 
-# ---------------------------------------------------------------------------
 # screens and extraction
-# ---------------------------------------------------------------------------
 
 
 def test_screen_matcher_tries_longest_pattern_first():
@@ -220,9 +214,7 @@ def test_extract_cart_items():
     assert extract_cart_items("") == [] and extract_products("") == []
 
 
-# ---------------------------------------------------------------------------
 # the interpreter on a real browser
-# ---------------------------------------------------------------------------
 
 
 def _no_chromium_reason() -> str | None:

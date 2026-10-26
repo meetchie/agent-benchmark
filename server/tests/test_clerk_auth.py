@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta
 from clerk_auth import verify_clerk_jwt
 
 
-# Generate a test RSA key pair for testing
 from jwt.algorithms import RSAAlgorithm
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
@@ -74,7 +73,6 @@ def test_reject_unknown_kid(mock_jwks):
 @patch("clerk_auth._get_clerk_issuer", return_value="https://test.clerk.accounts.dev")
 @patch("clerk_auth._fetch_jwks", return_value=_test_jwks)
 def test_reject_wrong_issuer(mock_jwks, mock_issuer):
-    """Tokens from a different Clerk instance must be rejected."""
     token = _make_token({
         "sub": "user_abc123",
         "iss": "https://evil-app.clerk.accounts.dev",
@@ -88,7 +86,6 @@ def test_reject_wrong_issuer(mock_jwks, mock_issuer):
 @patch("clerk_auth._get_clerk_issuer", return_value="https://test.clerk.accounts.dev")
 @patch("clerk_auth._fetch_jwks", return_value=_test_jwks)
 def test_reject_missing_issuer(mock_jwks, mock_issuer):
-    """Tokens without an iss claim must be rejected."""
     token = _make_token({
         "sub": "user_abc123",
         "exp": datetime.now(timezone.utc) + timedelta(hours=1),
@@ -99,16 +96,15 @@ def test_reject_missing_issuer(mock_jwks, mock_issuer):
 
 
 def test_reject_garbage_token():
-    """Completely invalid token strings must be rejected."""
     with pytest.raises(Exception):
         verify_clerk_jwt("not-a-jwt-at-all")
 
 
 def test_jwks_cache_ttl():
-    """JWKS cache should expire after TTL."""
     import clerk_auth
     clerk_auth._jwks_cache = {"keys": []}
     clerk_auth._jwks_cache_time = 0  # Expired long ago
-    # After TTL, _fetch_jwks should re-fetch (will fail without network, but proves cache was invalidated)
+    # After the TTL, _fetch_jwks re-fetches. That fails without a network, which shows the cache was
+    # invalidated.
     import time
     assert (time.monotonic() - clerk_auth._jwks_cache_time) > clerk_auth._JWKS_CACHE_TTL

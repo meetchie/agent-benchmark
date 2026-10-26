@@ -1,7 +1,5 @@
-"""Telemetry logging for arena agents.
-
-Provides TelemetryEvent (immutable step records) and TelemetricWrapper
-(stateful logger that tracks step start times for duration computation).
+"""Telemetry logging for arena agents: TelemetryEvent (immutable step records) and TelemetricWrapper
+(tracks step start times to compute durations).
 """
 
 import hashlib
@@ -13,7 +11,6 @@ from typing import Any, Dict, Optional
 
 @dataclass
 class TelemetryEvent:
-    """A single telemetry event from an agent step."""
     trace_id: str
     run_id: str
     lane: str
@@ -30,8 +27,6 @@ class TelemetryEvent:
 
 
 class TelemetricWrapper:
-    """Stateful telemetry logger that tracks step timings and computes hashes."""
-
     def __init__(self, trace_id: str, run_id: str, lane: str):
         self.trace_id = trace_id
         self.run_id = run_id
@@ -61,13 +56,11 @@ class TelemetricWrapper:
         """Record the end of a step. Computes duration from step_start and observation hash."""
         now = datetime.now()
 
-        # Compute duration from corresponding step_start
         duration_ms = None
         start_time = self._step_start_times.get(step_index)
         if start_time is not None:
             duration_ms = (now - start_time).total_seconds() * 1000
 
-        # Compute observation hash
         obs_hash = None
         if observation is not None:
             serialized = json.dumps(observation, sort_keys=True, default=str)

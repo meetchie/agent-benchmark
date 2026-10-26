@@ -1,13 +1,4 @@
-"""
-task_generator.py — Generates benchmark tasks for browser automation agents.
-
-Functions:
-  extract_metadata(html, url) -> dict
-  validate_url(url) -> bool           (blocking DNS lookup)
-  check_url(url) -> None              (async; raises ValueError saying why a URL is refused)
-  generate_tasks(metadata) -> list[dict]
-  fetch_and_generate(url) -> list[dict]
-"""
+"""Benchmark task generation: page metadata, the URL safety checks and the model call."""
 
 import asyncio
 import re
@@ -144,29 +135,25 @@ URL: {url}"""
 
 
 def extract_metadata(html: str, url: str) -> dict:
-    """Extract title, meta description, and visible text from raw HTML.
+    """Title, meta description and visible text from raw HTML.
 
-    Returns a dict with keys: title, description, visible_text, url.
-    Strips script/style/noscript tags. Limits visible_text to 1000 chars.
+    Returns title, description, visible_text (script, style and noscript stripped, at most 1000
+    chars) and url.
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    # Extract title
     title_tag = soup.find("title")
     title = title_tag.get_text(strip=True) if title_tag else ""
 
-    # Extract meta description
     description = ""
     meta_desc = soup.find("meta", attrs={"name": "description"})
     if meta_desc and meta_desc.get("content"):
         description = meta_desc["content"].strip()
 
-    # Remove non-visible tags before extracting text
     for tag in soup.find_all(["script", "style", "noscript"]):
         tag.decompose()
 
     visible_text = soup.get_text(separator=" ", strip=True)
-    # Collapse whitespace
     visible_text = re.sub(r"\s+", " ", visible_text).strip()
     visible_text = visible_text[:1000]
 
@@ -193,9 +180,8 @@ _PRIVATE_NETWORKS = [
 
 
 def _url_host(url: str) -> str | None:
-    """The host of an http(s) URL that is worth resolving, or None if the URL is not allowed.
-
-    Rejects other schemes, a missing host, and the host names that are internal by name.
+    """The host of an http(s) URL worth resolving, or None if the URL is not allowed (other scheme,
+    no host, or a host that is internal by name).
     """
     try:
         parsed = urlparse(url)
@@ -206,7 +192,6 @@ def _url_host(url: str) -> str | None:
     hostname = parsed.hostname
     if not hostname:
         return None
-    # Block obviously dangerous hostnames
     if hostname in ("localhost", "metadata.google.internal"):
         return None
     return hostname
@@ -215,11 +200,11 @@ def _url_host(url: str) -> str | None:
 def _is_internal(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Whether ``ip`` is anything but a public unicast address.
 
-    An IPv6 address that carries an IPv4 one (``::ffff:127.0.0.1``, 6to4, Teredo) is
-    judged by that IPv4 address too, because that is where a connection to it ends up.
-    An IPv4-mapped one is judged by its IPv4 address alone, because some Python versions
-    (Debian 12's 3.11.2, for one) count all of ``::ffff:0:0/96`` as reserved, which
-    would refuse every public host that resolves to such an address.
+    An IPv6 address that carries an IPv4 one (``::ffff:127.0.0.1``, 6to4, Teredo) is judged by that
+    IPv4 address too, because that is where a connection to it ends up. An IPv4-mapped one is judged
+    by its IPv4 address alone: some Python versions (Debian 12's 3.11.2) count all of
+    ``::ffff:0:0/96`` as reserved, which would refuse every public host that resolves to such an
+    address.
     """
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         return _is_internal(ip.ipv4_mapped)
@@ -249,28 +234,26 @@ def _resolves_to_public_addresses(addrinfo) -> bool:
 
 
 def validate_url(url: str) -> bool:
-    """Validate URL scheme and block private/internal IPs (including via DNS resolution).
+    """Validate the URL scheme and block private or internal IPs, including via DNS resolution.
 
     Blocking: the DNS lookup runs on the calling thread. Async code uses ``check_url``.
     """
     hostname = _url_host(url)
     if hostname is None:
         return False
-    # Resolve hostname to IPs and check all of them
     try:
         addrinfo = socket.getaddrinfo(hostname, None)
     except (socket.gaierror, UnicodeError):
-        return False  # Can't resolve — reject
+        return False  # Can't resolve: reject.
     return _resolves_to_public_addresses(addrinfo)
 
 
 async def check_url(url: str) -> None:
     """Raise ValueError unless ``url`` is an http(s) URL on a public host.
 
-    The same rules as ``validate_url``, with the DNS lookup off the event loop and a
-    message that says why: "Could not resolve this host: ..." when the host name has no
-    address (a typo or a dead domain), "Invalid or disallowed URL: ..." for everything
-    the SSRF guard blocks.
+    Same rules as ``validate_url``, with the DNS lookup off the event loop and a message saying why:
+    "Could not resolve this host: ..." for a host name with no address, "Invalid or disallowed URL:
+    ..." for anything the SSRF guard blocks.
     """
     hostname = _url_host(url)
     if hostname is None:
@@ -372,7 +355,6 @@ def _check_commerce_site(metadata: dict) -> None:
     """Raise ValueError if the site doesn't look like a commerce site."""
     domain = _get_domain(metadata.get("url", ""))
 
-    # Block known non-commerce domains
     if domain in _NON_COMMERCE_DOMAINS:
         raise ValueError(
             "This website is not a commerce site. The benchmark is designed for "
@@ -432,7 +414,6 @@ def generate_tasks(metadata: dict) -> list[dict]:
         getattr(data, "model", "?"), "n/a" if cost is None else f"${cost:.4f}",
     )
 
-    # The model may reject non-commerce sites
     if data.get("error"):
         logger.info("task generation: the model rejected %s: %s", safe_url, str(data["error"])[:200])
         raise ValueError(str(data["error"]))
@@ -442,7 +423,6 @@ def generate_tasks(metadata: dict) -> list[dict]:
         logger.warning("task generation: the model returned no tasks for %s: %s", safe_url, str(dict(data))[:200])
         raise ValueError("Could not generate benchmark tasks for this website. Try a different URL.")
 
-    # Truncate to 3 tasks and add sequential IDs
     tasks = []
     for i, task in enumerate(tasks_raw[:3]):
         tasks.append({
@@ -457,25 +437,20 @@ def generate_tasks(metadata: dict) -> list[dict]:
 async def fetch_and_generate(url: str) -> list[dict]:
     """Fetch a URL, extract metadata, and generate benchmark tasks.
 
-    For known commerce domains, skips the HTTP fetch (they block server-side
-    requests from data center IPs) and generates tasks from domain knowledge alone.
+    Known commerce domains skip the HTTP fetch, since they block server-side requests from data
+    center IPs, and get tasks from domain knowledge alone. Other domains are fetched with aiohttp
+    (15 s timeout, Content-Type must be text/html), then their metadata goes to generate_tasks.
 
-    For unknown domains, fetches HTML via aiohttp with 15s timeout, checks
-    Content-Type is text/html, extracts metadata, and calls generate_tasks.
-
-    Raises:
-        ValueError: for an invalid or disallowed URL, a host name that does not resolve,
-            or non-HTML content type.
-        ConnectionError: for fetch failures (network errors, bad status codes).
+    Raises ValueError for an invalid or disallowed URL, a host that does not resolve, or a non-HTML
+    content type, and ConnectionError for fetch failures (network errors, bad status codes).
     """
     await check_url(url)
 
     domain = _get_domain(url)
 
-    # Known commerce sites block server-side fetches from data center IPs.
-    # Skip the HTML fetch and generate tasks from the model's domain knowledge.
-    # The model call is blocking, so it runs in a thread and the event loop (status
-    # polls, other runs, the client-disconnect check) stays responsive.
+    # Known commerce sites block server-side fetches from data center IPs, so skip the HTML fetch
+    # and use the model's domain knowledge. The model call blocks, so it runs in a thread to keep
+    # the event loop (status polls, other runs, the client-disconnect check) responsive.
     if domain in _KNOWN_COMMERCE_DOMAINS:
         metadata = {"title": "", "description": "", "visible_text": "", "url": url}
         return await asyncio.to_thread(generate_tasks, metadata)

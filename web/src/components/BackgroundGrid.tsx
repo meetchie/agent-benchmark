@@ -112,7 +112,6 @@ export function BackgroundGrid() {
 
       const fadeZone = 0;
 
-      // Vertical grid lines
       const segLen = 4 * dpr;
       for (let col = 0; col < cols; col++) {
         const x = offsetX + col * spacing;
@@ -136,7 +135,6 @@ export function BackgroundGrid() {
         }
       }
 
-      // Horizontal grid lines
       for (let row = 0; row < rows; row++) {
         const y = offsetY + row * spacing;
         const fadeMul = y < fadeZone ? y / fadeZone
@@ -159,7 +157,6 @@ export function BackgroundGrid() {
         }
       }
 
-      // Twinkling dots at intersections
       const dotR = 2 * dpr;
       for (const tw of twinklesRef.current) {
         const x = offsetX + tw.col * spacing;

@@ -1,14 +1,13 @@
 """Phase 2: a tool-calling model working a site through its Rindler mapping.
 
-The tools are the mapping's own actions, served in-process by rindler_local's
-LocalRindlerHost (headless Chromium + Playwright running the mapping's steps), plus a
-synthetic ``done``. The model never sees HTML or selectors, only the JSON envelope each
-tool returns, and it never sees a tool the mapping does not define. One tool call per
-model turn; the step budget is the same as the BrowserUse arm's.
+The tools are the mapping's own actions, served in-process by rindler_local's LocalRindlerHost, plus
+a synthetic ``done``. The model never sees HTML or selectors, only the JSON envelope each tool
+returns, and never a tool the mapping does not define. One tool call per model turn, with the same
+step budget as the BrowserUse arm.
 
-SYSTEM_PROMPT describes the envelope the host actually returns (the shape is documented
-at the top of rindler_local/host.py). tests/test_rindler_arm.py checks every field the host
-returns is named in it.
+SYSTEM_PROMPT describes the envelope the host actually returns (documented at the top of
+rindler_local/host.py). tests/test_rindler_arm.py checks that every field the host returns is named
+in it.
 """
 
 from __future__ import annotations

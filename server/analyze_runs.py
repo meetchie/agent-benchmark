@@ -1,15 +1,13 @@
-"""Arena log analysis script.
+"""Arena log analysis: parses plaintext arena logs into a markdown comparison table for RINDLER vs
+BROWSERUSE (or any agents).
 
-Parses plaintext arena log files and produces a markdown comparison table
-for A/B testing RINDLER vs BROWSERUSE (or any agents).
+By default it reads both the archived March 2026 logs (arena_logs/) and new runs (arena_runs/). Rows
+are grouped by scenario, agent and agent model, so March runs (whose logs do not record the model,
+shown as "-") never mix with new ones.
 
-By default it reads both the archived March 2026 logs (arena_logs/) and new runs
-(arena_runs/). Rows are grouped by scenario, agent and agent model, so March runs
-(whose logs do not record the model; shown as "-") never mix with new ones.
-
-Counts come with percentages ("59/60 (98.3%)"). "Judge Pass" is the judge's verdict
-(runs it passed / runs it scored PASS or FAIL). "Reported" is only what the agent said
-about itself ("Agent Reported Success"), so it can read 100% for an agent the judge fails.
+Counts come with percentages ("59/60 (98.3%)"). "Judge Pass" is the judge's verdict (runs it passed
+/ runs it scored PASS or FAIL). "Reported" is only what the agent said about itself ("Agent Reported
+Success"), so it can read 100% for an agent the judge fails.
 
 Usage:
     python analyze_runs.py
@@ -20,9 +18,9 @@ Usage:
     python analyze_runs.py --since 2026-03-10
     python analyze_runs.py --since "2026-03-31 00:28:27" --until 2026-03-31
 
---since and --until take a date (YYYY-MM-DD) or a date and time (YYYY-MM-DD HH:MM[:SS], a "T"
-works too). Both limits are inclusive. A bare --until date covers that whole day. The time
-is the one in the log file name, which is the local time of the machine that ran the arena.
+--since and --until take a date (YYYY-MM-DD) or a date and time (YYYY-MM-DD HH:MM[:SS], a "T" works
+too). Both are inclusive, and a bare --until date covers that whole day. The time is the one in the
+log file name, the local time of the machine that ran the arena.
 """
 
 import argparse
@@ -33,10 +31,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# The March 2026 headline (README: Rindler 59/60 judge passes vs BrowserUse 1/60) is one task
-# on one night: every BrowserUse log of vhlistings_bundle_promo plus the last 60 Rindler ones.
-# Rindler logged four earlier runs that night (00:11 to 00:24) and two on 03-27, all before the
-# final mapping version, so the cut is the first log of the final version.
+# The March headline (README: Rindler 59/60 judge passes vs BrowserUse 1/60) is one task: every
+# BrowserUse log of vhlistings_bundle_promo plus the last 60 Rindler ones. The cut is the first
+# Rindler log of the final mapping version; earlier Rindler runs used older versions.
 MARCH_HEADLINE = {
     "scenario": "vhlistings_bundle_promo",
     "agents": "BROWSERUSE,RINDLER",
@@ -79,10 +76,7 @@ def _until_arg(text: str) -> datetime:
 
 
 def parse_timestamp_from_filename(filename) -> Optional[datetime]:
-    """Extract timestamp from arena log filename.
-
-    Pattern: arena_<agent>_<company>_YYYYMMDD_HHMMSS.log
-    """
+    """Timestamp from an arena_<agent>_<company>_YYYYMMDD_HHMMSS.log file name."""
     name = Path(filename).stem
     match = re.search(r"(\d{8})_(\d{6})$", name)
     if not match:
@@ -91,7 +85,6 @@ def parse_timestamp_from_filename(filename) -> Optional[datetime]:
 
 
 def parse_log_file(path: Path) -> dict:
-    """Parse a single arena log file into a structured dict."""
     text = path.read_text()
     lines = text.split("\n")
 
@@ -161,7 +154,6 @@ def parse_log_file(path: Path) -> dict:
 
 
 def aggregate_runs(runs: list[dict]) -> list[dict]:
-    """Group runs by (scenario, agent, model) and compute aggregates."""
     groups = defaultdict(list)
     for run in runs:
         key = (run["scenario"], run["agent"], run.get("model") or "-")

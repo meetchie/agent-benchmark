@@ -1,9 +1,8 @@
 """The live preview with a real headless Chromium, on the local fixture shop.
 
-The model API here accepts the agent's request and never answers, so the agent sits in
-its first model turn: exactly when the preview used to be empty. Nothing leaves
-127.0.0.1 and no model is billed. Every browser the test saw is killed by PID at the end
-whatever happens.
+The model API here accepts the agent's request and never answers, so the agent sits in its first
+model turn. Nothing leaves 127.0.0.1 and no model is billed. Every browser the test saw is killed by
+PID at the end whatever happens.
 """
 
 from __future__ import annotations

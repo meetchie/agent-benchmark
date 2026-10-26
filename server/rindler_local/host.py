@@ -1,8 +1,7 @@
 """LocalRindlerHost: the Rindler arm's tools, served in-process from a mapping.
 
-It stands in for the retired Rindler stack (MCP server, job queue, databases, OAuth):
-a headless Chromium driven by Playwright runs the mapping's steps, and every tool call
-returns the same JSON envelope the Rindler server returned:
+A headless Chromium driven by Playwright runs the mapping's steps, and every tool call returns the
+same JSON envelope the hosted Rindler server returned:
 
     {
       "screen": "search_results",
@@ -15,7 +14,7 @@ returns the same JSON envelope the Rindler server returned:
 Failures come back as ``{"error": {"code", "message"}, "screen", "context",
 "available_actions", "global_actions"}`` with ``isError: true``.
 
-Interface (MCP-shaped, so agent loops written against an MCP client need few changes):
+The interface is MCP-shaped, so agent loops written against an MCP client need few changes:
 
     host = LocalRindlerHost(load_mapping("vhlistings"))
     tools = await host.list_tools()                 # [{"name", "description", "inputSchema"}]
@@ -157,8 +156,6 @@ class LocalRindlerHost:
         self._context = None
         self._page = None
 
-    # -- lifecycle -----------------------------------------------------------------
-
     async def __aenter__(self) -> "LocalRindlerHost":
         return self
 
@@ -217,8 +214,6 @@ class LocalRindlerHost:
                 pass
         self._pw = None
 
-    # -- MCP-shaped interface -------------------------------------------------------
-
     async def list_tools(self) -> list[dict[str, Any]]:
         return build_tools(self.mapping)
 
@@ -239,8 +234,6 @@ class LocalRindlerHost:
     async def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """call_tool, returning the parsed envelope."""
         return parse_result(await self.call_tool(name, arguments))
-
-    # -- envelope helpers -------------------------------------------------------------
 
     def available_actions(self, screen: str | None = None) -> list[str]:
         screen = screen or self.screen
@@ -273,8 +266,6 @@ class LocalRindlerHost:
         if self.screen not in self.mapping.screens:
             return True
         return name in self.available_actions()
-
-    # -- dispatch -------------------------------------------------------------------
 
     async def _dispatch(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name == "start_session":

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CaveatsPanel } from "./CaveatsPanel";
 
-// ─── Benchmark Data ────────────────────────────────────────────────────────────
+// Benchmark data
 
 const RINDLER = {
   runs: 60,
@@ -25,7 +25,7 @@ const BROWSERUSE = {
   avgTokens: 272377,
 };
 
-// ─── Funnel Data ───────────────────────────────────────────────────────────────
+// Funnel data
 
 interface FunnelStage {
   stage: string;
@@ -74,7 +74,7 @@ const FUNNEL: FunnelStage[] = [
   { stage: "Full pass", count: 1, dropCount: 0 },
 ];
 
-// ─── Component Props ───────────────────────────────────────────────────────────
+// Component props
 
 interface Props {
   logSelectorUI: React.ReactNode;
@@ -87,7 +87,7 @@ interface Props {
   onDrop: (e: React.DragEvent) => void;
 }
 
-// ─── Hero Section ──────────────────────────────────────────────────────────────
+// Hero section
 
 function HeroSection() {
   return (
@@ -122,7 +122,7 @@ function HeroSection() {
   );
 }
 
-// ─── Scenario Section ──────────────────────────────────────────────────────────
+// Scenario section
 
 const SCENARIO_STEPS = [
   {
@@ -172,7 +172,7 @@ function ScenarioSection() {
   );
 }
 
-// ─── Funnel Section ────────────────────────────────────────────────────────────
+// Funnel section
 
 function FunnelSection() {
   const [animated, setAnimated] = useState(false);
@@ -212,7 +212,6 @@ function FunnelSection() {
 
             return (
               <div key={stage.stage} className="funnel-item">
-                {/* Stage row — label | bar (with inline drop icon) | count */}
                 <div
                   className={`funnel-row${hasDrop ? " has-drop" : ""}${isExpanded ? " is-expanded" : ""}`}
                   onClick={() => hasDrop && setExpandedDrop(isExpanded ? null : i)}
@@ -234,7 +233,6 @@ function FunnelSection() {
                         animationDelay: `${0.05 + i * 0.1}s`,
                       }}
                     />
-                    {/* Drop indicator — floats in the empty zone of the bar */}
                     {hasDrop && (
                       <div className={`funnel-drop-icon${stage.isDarkPattern ? " dark-pattern" : ""}`}>
                         <span className="fdi-icon">{stage.isDarkPattern ? "⚠" : "↓"}</span>
@@ -245,7 +243,6 @@ function FunnelSection() {
                   <div className="funnel-row-count">{stage.count}</div>
                 </div>
 
-                {/* Expand panel — single card below the row */}
                 {hasDrop && isExpanded && (
                   <div className={`funnel-expand${stage.isDarkPattern ? " dark-pattern" : ""}`}>
                     <div className="fex-reason">
@@ -273,7 +270,7 @@ function FunnelSection() {
   );
 }
 
-// ─── Metrics Section ───────────────────────────────────────────────────────────
+// Metrics section
 
 function MetricsSection() {
 
@@ -288,7 +285,6 @@ function MetricsSection() {
         </div>
 
         <div className="metrics-grid">
-          {/* Card 1: Cost per run */}
           <div className="metric-card">
             <div className="metric-card-label">Cost per run</div>
             <div className="metric-rows">
@@ -308,7 +304,6 @@ function MetricsSection() {
             <div className="metric-delta">5.2x cheaper</div>
           </div>
 
-          {/* Card 2: Cost per success (featured) */}
           <div className="metric-card featured">
             <div className="metric-card-label">Cost per success</div>
             <div className="metric-rows">
@@ -328,7 +323,6 @@ function MetricsSection() {
             <div className="metric-delta">306x cheaper per success</div>
           </div>
 
-          {/* Card 3: Speed */}
           <div className="metric-card">
             <div className="metric-card-label">Avg completion time</div>
             <div className="metric-rows">
@@ -348,7 +342,6 @@ function MetricsSection() {
             <div className="metric-delta">4.4x faster</div>
           </div>
 
-          {/* Card 4: Tokens */}
           <div className="metric-card">
             <div className="metric-card-label">Avg tokens per run</div>
             <div className="metric-rows">
@@ -373,7 +366,7 @@ function MetricsSection() {
   );
 }
 
-// ─── Log Section ───────────────────────────────────────────────────────────────
+// Log section
 
 interface LogSectionProps {
   logSelectorUI: React.ReactNode;
@@ -435,7 +428,7 @@ function LogSection({
   );
 }
 
-// ─── Results Page ──────────────────────────────────────────────────────────────
+// Results page
 
 export function ResultsPage({
   logSelectorUI,

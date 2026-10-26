@@ -32,7 +32,6 @@ export function SummaryCards({ log }: Props) {
 
   return (
     <div className="summary-cards">
-      {/* Status */}
       <div className={`card card-status ${verdictClass}`}>
         <div className="card-label">Status</div>
         <div className={`card-value verdict-${verdictClass}`}>{verdictLabel}</div>
@@ -41,7 +40,6 @@ export function SummaryCards({ log }: Props) {
         </div>
       </div>
 
-      {/* Duration */}
       <div className="card">
         <div className="card-label">Duration</div>
         <div className="card-value">{formatDuration(log.durationSeconds)}</div>
@@ -50,7 +48,6 @@ export function SummaryCards({ log }: Props) {
         </div>
       </div>
 
-      {/* Cost */}
       <div className="card">
         <div className="card-label">Total Cost</div>
         <div className="card-value">{formatCost(log.costUsd)}</div>
@@ -60,7 +57,6 @@ export function SummaryCards({ log }: Props) {
         </div>
       </div>
 
-      {/* Steps */}
       <div className="card">
         <div className="card-label">Steps</div>
         <div className="card-value">{log.steps.length}</div>

@@ -1,11 +1,9 @@
 """The tests that drive a real Chromium are skipped, saying why, when it cannot start.
 
-A Chromium can be installed and still unable to start (on Linux without its system
-libraries it exits at once). A test module that only asked whether one is installed
-then waited for a browser that never came and failed, so ``make test`` failed on such a
-machine where it should have said what is missing. This runs those modules against a
-Chromium that cannot start and checks that each one skips its browser tests and fails
-none.
+A Chromium can be installed and still unable to start (on Linux without its system libraries it
+exits at once). This runs those modules against a Chromium that cannot start and checks that each
+skips its browser tests and fails none, so the whole suite on such a machine says what is missing
+instead of failing.
 """
 
 from __future__ import annotations

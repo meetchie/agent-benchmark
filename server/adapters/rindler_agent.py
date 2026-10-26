@@ -1,11 +1,10 @@
 """
 Rindler arm: a tool-calling model drives a site through its Rindler site mapping.
 
-The tools are the mapping's actions, served in-process by rindler_local.LocalRindlerHost
-(headless Chromium + Playwright running the mapping's steps). The model never sees HTML
-or selectors, only the JSON envelope each tool returns. The loop is the March one: one
-tool call per model turn, a synthetic ``done`` tool to finish, tool results truncated
-to MAX_RESULT_CHARS, the same step telemetry.
+The tools are the mapping's actions, served in-process by rindler_local.LocalRindlerHost. The model
+never sees HTML or selectors, only the JSON envelope each tool returns. The loop is the March one:
+one tool call per model turn, a synthetic ``done`` tool to finish, tool results truncated to
+MAX_RESULT_CHARS and the same step telemetry.
 
 Model: ``model`` argument, else BENCHMARK_AGENT_MODEL, else claude-sonnet-5-5 (llm.py).
 """
@@ -76,8 +75,7 @@ NUDGE = "Continue: call one of the tools, or call done if you have finished or c
 
 MAX_RESULT_CHARS = 12000
 
-# Maps semantic tool names to categories for cost analysis.
-# Downstream scripts group by category to compare agents.
+# Semantic tool names mapped to categories for cost analysis. Downstream scripts group by category.
 ACTION_CATEGORIES = {
     "start_session": "session",
     "close_session": "session",
@@ -140,9 +138,7 @@ def prompt_tokens(usage: Dict[str, Any]) -> int:
 
 
 class RindlerTelemetricAgent(BaseAgent):
-    """
-    Tool-calling model driving a site through a Rindler site mapping (in-process host).
-    """
+    """Tool-calling model driving a site through its Rindler site mapping."""
 
     def __init__(self, run_id: str, goal: str, lane: str = "RINDLER", **kwargs):
         super().__init__(run_id=run_id, goal=goal, lane=lane)
@@ -156,8 +152,6 @@ class RindlerTelemetricAgent(BaseAgent):
         self.usage = llm.Usage()
         self.llm_calls = 0
         self.mapping_name: Optional[str] = None
-
-    # -- helpers --------------------------------------------------------------------
 
     def _resolve_mapping(self, start_url: Optional[str]):
         if self.mapping_source:
@@ -223,8 +217,6 @@ class RindlerTelemetricAgent(BaseAgent):
             event["served_by"] = served_by
         return event
 
-    # -- context log (optional, --context-log) ----------------------------------------
-
     def _init_context_log(self, start_url: str):
         if not self._context_log_enabled:
             return
@@ -278,8 +270,6 @@ class RindlerTelemetricAgent(BaseAgent):
         if parsed.get("error"):
             err = parsed["error"]
             print(f"    ⚠️  [{err.get('code', 'error')}] {str(err.get('message', ''))[:300]}")
-
-    # -- the loop -------------------------------------------------------------------
 
     async def run(self, start_url=None, **kwargs):
         self.print_run_header(start_url)
@@ -366,8 +356,8 @@ class RindlerTelemetricAgent(BaseAgent):
                 return self._build_result(done_args, step_num, errors)
 
             if not calls:
-                # A turn with no tool call: keep it, nudge the model, and count the turn's
-                # tokens as a step so the cost is not lost.
+                # A turn with no tool call: keep it, nudge the model, and count its tokens as a step
+                # so the cost is not lost.
                 text = (turn.get("text") or "").strip()
                 print(f"  → [no tool call] {text[:200]}")
                 self.log_step_start(action_type="no_tool_call", action_data={"text": text[:500]})

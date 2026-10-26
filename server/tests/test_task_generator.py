@@ -1,5 +1,3 @@
-"""Tests for task_generator.py"""
-
 import asyncio
 import ipaddress
 import json
@@ -21,9 +19,7 @@ from task_generator import (
 )
 from tests.fakes import install_fake_anthropic, refusal_response, text_response
 
-# ---------------------------------------------------------------------------
 # extract_metadata
-# ---------------------------------------------------------------------------
 
 SAMPLE_HTML = """
 <!DOCTYPE html>
@@ -50,12 +46,10 @@ def test_extract_metadata_from_html():
     assert result["description"] == "Shop the best deals online."
     assert result["url"] == "https://acme.com"
 
-    # Visible text should NOT contain script/style/noscript content
     assert "console.log" not in result["visible_text"]
     assert "color: red" not in result["visible_text"]
     assert "Please enable JavaScript" not in result["visible_text"]
 
-    # Should contain real page text
     assert "Welcome to Acme" in result["visible_text"]
     assert "Find great products here" in result["visible_text"]
 
@@ -71,7 +65,6 @@ def test_extract_metadata_missing_tags():
 
 
 def test_extract_metadata_visible_text_truncated():
-    # Build an HTML body with >1000 chars of text
     long_text = "word " * 300  # 1500 chars
     html = f"<html><body><p>{long_text}</p></body></html>"
     result = extract_metadata(html, "https://example.com")
@@ -79,9 +72,7 @@ def test_extract_metadata_visible_text_truncated():
     assert len(result["visible_text"]) <= 1000
 
 
-# ---------------------------------------------------------------------------
 # validate_url
-# ---------------------------------------------------------------------------
 
 
 def test_validate_url_accepts_https():
@@ -117,23 +108,19 @@ def test_validate_url_rejects_zero_network():
 
 
 def test_validate_url_rejects_ipv6_loopback():
-    """IPv6 loopback ::1 must be blocked."""
     assert validate_url("http://[::1]") is False
 
 
 def test_validate_url_rejects_localhost_hostname():
-    """The hostname 'localhost' must be blocked."""
     assert validate_url("http://localhost") is False
     assert validate_url("http://localhost:8080") is False
 
 
 def test_validate_url_rejects_metadata_endpoint():
-    """Cloud metadata endpoints must be blocked."""
     assert validate_url("http://metadata.google.internal") is False
 
 
 def test_validate_url_resolves_dns():
-    """Hostnames that resolve to private IPs must be blocked."""
     import socket
     with patch("task_generator.socket.getaddrinfo",
                return_value=[(socket.AF_INET, None, None, None, ("127.0.0.1", 0))]):
@@ -293,9 +280,7 @@ def test_validate_url_rejects_empty():
     assert validate_url("not-a-url") is False
 
 
-# ---------------------------------------------------------------------------
 # generate_tasks
-# ---------------------------------------------------------------------------
 
 
 METADATA = {
@@ -331,7 +316,6 @@ def test_generate_tasks_returns_three_tasks(monkeypatch):
 
 
 def test_generate_tasks_truncates_to_three(monkeypatch):
-    """If the model returns more than 3 tasks, only the first 3 are kept."""
     raw_tasks = [
         {"label": f"Task {i}", "goal": f"Do thing {i}."}
         for i in range(5)
@@ -344,7 +328,6 @@ def test_generate_tasks_truncates_to_three(monkeypatch):
 
 
 def test_generate_tasks_strips_markdown_fences(monkeypatch):
-    """generate_tasks should handle responses wrapped in markdown code fences."""
     raw_tasks = [
         {"label": "Task A", "goal": "Do A."},
         {"label": "Task B", "goal": "Do B."},
@@ -438,14 +421,11 @@ def test_generate_tasks_known_commerce_domain_adds_the_note(monkeypatch):
     assert "confirmed commerce/transactional website" in calls[0]["messages"][0]["content"]
 
 
-# ---------------------------------------------------------------------------
 # fetch_and_generate
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_fetch_and_generate_full_flow(monkeypatch):
-    """Mock both aiohttp and the model API; verify the full pipeline."""
     raw_tasks = [
         {"label": "Task A", "goal": "Do A."},
         {"label": "Task B", "goal": "Do B."},
@@ -453,7 +433,6 @@ async def test_fetch_and_generate_full_flow(monkeypatch):
     ]
     calls = install_fake_anthropic(monkeypatch, text_response(_tasks_payload(raw_tasks)))
 
-    # Build a mock aiohttp response
     mock_http_response = AsyncMock()
     mock_http_response.status = 200
     mock_http_response.headers = {"Content-Type": "text/html; charset=utf-8"}
@@ -475,7 +454,6 @@ async def test_fetch_and_generate_full_flow(monkeypatch):
     assert len(tasks) == 3
     assert tasks[0]["label"] == "Task A"
     assert tasks[0]["id"] == 1
-    # The page's own title and text reached the prompt.
     assert "Title: Acme Store" in calls[0]["messages"][0]["content"]
 
 

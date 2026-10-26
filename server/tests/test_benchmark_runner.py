@@ -80,10 +80,6 @@ def test_complete_response_with_failure():
     assert "Agent did not complete" in resp["summary"]
 
 
-# ---------------------------------------------------------------------------
-# Status payload: cost_usd and agent_model
-# ---------------------------------------------------------------------------
-
 import asyncio
 from types import SimpleNamespace
 
@@ -247,10 +243,6 @@ def test_to_response_is_the_same_as_to_dict():
     assert state.to_response() == state.to_dict()
 
 
-# ---------------------------------------------------------------------------
-# BENCHMARK_TIMEOUT_S
-# ---------------------------------------------------------------------------
-
 
 def test_timeout_defaults_to_180_seconds():
     assert get_agent_timeout() == 180
@@ -268,10 +260,6 @@ def test_bad_timeout_is_rejected(monkeypatch, raw):
     with pytest.raises(ValueError, match="BENCHMARK_TIMEOUT_S"):
         get_agent_timeout()
 
-
-# ---------------------------------------------------------------------------
-# Step descriptions: the model's goal, or the actions in plain words
-# ---------------------------------------------------------------------------
 
 _ACTION_MODEL = None
 
@@ -431,10 +419,6 @@ def test_a_step_without_anything_to_describe_says_processing():
     assert _format_action(object()) == "Processing..."
 
 
-# ---------------------------------------------------------------------------
-# run_benchmark with a fake browser-use Agent (no browser, no network)
-# ---------------------------------------------------------------------------
-
 VERDICT_PASS = {
     "success": True,
     "summary": "Added the book to the basket.",
@@ -458,10 +442,8 @@ def action_result(text=None, error=None, is_done=False):
 
 
 class FakeHistory:
-    """A browser-use history.
-
-    ``initial`` puts the item browser-use adds before the first model step in front: the
-    navigation to the URL it found in the task, recorded as step 0 with no error.
+    """A browser-use history. ``initial`` puts browser-use's step 0 in front: the navigation to the
+    task's URL, recorded with no error.
     """
 
     def __init__(self, items, errors=None, done=True, usage=None, final=None, successful=None, initial=False):
@@ -496,10 +478,10 @@ class FakeHistory:
 class FakeAgent:
     """Stands in for browser_use.Agent. Class attributes script the run.
 
-    Its browser (a FakeBrowserSession) opens a blank tab when the run starts, then the
-    start URL from ``initial_actions``, and every step leaves a new picture on the page.
-    ``probe(tag)``, when set, is called at each of those moments (``blank-tab``,
-    ``deciding-<n>``, ``acting-<n>``, ...) so a test can look at the run state mid-run.
+    Its browser (a FakeBrowserSession) opens a blank tab, then the start URL from
+    ``initial_actions``, and every step leaves a new picture on the page. ``probe(tag)``, when set,
+    is called at each of those moments (``blank-tab``, ``deciding-<n>``, ``acting-<n>``) so a test
+    can look at the run state mid-run.
     """
 
     goals = ["Open the site", "Search for a book", "Click add to basket"]
@@ -800,7 +782,6 @@ async def test_the_status_says_what_the_run_is_doing_at_each_moment(fake_run, mo
 
 
 async def test_the_preview_shows_the_site_while_the_model_decides_the_first_step(fake_run, monkeypatch):
-    """The complaint: the preview stayed empty until the first step was done."""
     install_fake_anthropic(monkeypatch, text_response(VERDICT_PASS))
     state = make_state()
     seen, frames = {}, []
@@ -1260,9 +1241,8 @@ async def test_chromium_missing_gives_the_install_hint(fake_run, monkeypatch):
 
 
 async def test_a_chromium_that_cannot_start_says_why_and_how_to_fix_it(fake_run, monkeypatch, tmp_path):
-    # Installed but unable to run (Linux without its system libraries). Without the start
-    # check browser-use failed later with "process not found" and the run said only
-    # "The run encountered an error."
+    # Installed but unable to run (Linux without its system libraries). The start check catches it;
+    # otherwise browser-use fails later with "process not found".
     chrome = tmp_path / "chrome"
     chrome.write_text('#!/bin/sh\necho "$0: error while loading shared libraries: libnspr4.so: '
                       'cannot open shared object file: No such file or directory" >&2\nexit 127\n')
@@ -1286,10 +1266,10 @@ CHROMIUM_EXITED = (
 
 @pytest.mark.parametrize("dies", ["exit 133", "sleep 1; exit 133"], ids=["at-once", "after-a-moment"])
 async def test_a_chromium_that_exits_as_it_starts_is_named_in_the_message(monkeypatch, tmp_path, dies):
-    # The real Agent and launch path, with a Chromium that passes the start check (--version)
-    # and exits on a real launch. browser-use then raises "Browser process ... exited before
-    # CDP became available" (or psutil.NoSuchProcess when the process was reaped before it
-    # looked), and the run used to say no more than "The run encountered an error."
+    # The real Agent and launch path, with a Chromium that passes the start check (--version) and
+    # exits on a real launch. browser-use then raises "Browser process ... exited before CDP became
+    # available" (or psutil.NoSuchProcess if the process was reaped first), and the run must say
+    # more than "The run encountered an error."
     chrome = tmp_path / "chrome"
     chrome.write_text('#!/bin/sh\nfor a in "$@"; do [ "$a" = --version ] && { echo "Chromium 1.0"; exit 0; }; done\n'
                       + dies + "\n")

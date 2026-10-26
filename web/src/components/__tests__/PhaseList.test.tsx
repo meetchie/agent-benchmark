@@ -50,10 +50,8 @@ describe("PhaseList", () => {
     const phases = [makePhase({ name: "Setup", steps: [1] })];
     render(<PhaseList phases={phases} steps={steps} />);
 
-    // Step should not be visible before expanding
     expect(screen.queryByText("Navigate to URL")).not.toBeInTheDocument();
 
-    // Click the phase button to expand
     fireEvent.click(screen.getByText("Setup"));
     expect(screen.getByText("Navigate to URL")).toBeInTheDocument();
   });

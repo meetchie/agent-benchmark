@@ -7,9 +7,8 @@ export default defineConfig(({ mode }) => {
   // .env at the repository root (also read by the backend) plus the shell.
   const env = loadEnv(mode, repoRoot, ENV_PREFIXES);
 
-  // The browser calls /api/benchmark/*; Vite forwards them to the Python
-  // backend (BENCHMARK_API_URL), exactly as the Cloudflare functions did in
-  // the hosted setup. Same for `vite preview`.
+  // The browser calls /api/benchmark/*; Vite forwards them to the Python backend
+  // (BENCHMARK_API_URL). The same applies to `vite preview`.
   //
   // Both http://127.0.0.1:<port> and http://localhost:<port> (which can mean
   // ::1) answer; see config/loopback.ts. The server is never exposed beyond

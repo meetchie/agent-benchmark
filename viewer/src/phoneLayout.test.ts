@@ -4,10 +4,9 @@ import { describe, expect, it } from "vitest";
 // Read from disk: vitest hands CSS imports to tests as empty strings, ?raw included.
 const css = readFileSync(new URL("./App.css", import.meta.url), "utf8");
 
-// The phone rules live in the 768 px media query of App.css. Without them both pages
-// scrolled sideways on a 360-390 px screen and the step timeline's Action column
-// came out 0 px wide. Checked in a browser at 360 and 390 px when they were written;
-// these tests keep the rules that made it fit.
+// The phone rules live in the 768 px media query of App.css. Without them both pages scroll
+// sideways on a 360-390 px screen and the step timeline's Action column collapses to 0 px, so
+// these tests pin the rules that make it fit.
 
 function mediaBlock(source: string, query: string): string {
   const start = source.indexOf(`@media ${query} {`);

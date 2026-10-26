@@ -1,4 +1,4 @@
-/* ─── Layout ──────────────────────────────────────────────────────────────── */
+/* Layout */
 
 .app {
   min-height: 100dvh;
@@ -7,7 +7,7 @@
   background: var(--color-bg);
 }
 
-/* ─── Header ──────────────────────────────────────────────────────────────── */
+/* Header */
 
 .app-header {
   display: flex;
@@ -88,7 +88,7 @@
   color: var(--color-text);
 }
 
-/* ─── Log Controls (header right side) ───────────────────────────────────── */
+/* Log Controls (header right side) */
 
 .header-controls {
   display: flex;
@@ -197,7 +197,7 @@
   background: var(--color-bg);
 }
 
-/* ─── Agent / Verdict Tags ────────────────────────────────────────────────── */
+/* Agent / Verdict Tags */
 
 .agent-tag {
   font-size: 0.65rem;
@@ -273,7 +273,7 @@
   color: var(--color-red);
 }
 
-/* ─── Upload ──────────────────────────────────────────────────────────────── */
+/* Upload */
 
 .or-divider {
   font-size: 0.75rem;
@@ -296,7 +296,7 @@
   color: #fff;
 }
 
-/* ─── Main Content ────────────────────────────────────────────────────────── */
+/* Main Content */
 
 .app-main {
   flex: 1;
@@ -311,7 +311,7 @@
   outline-offset: -8px;
 }
 
-/* ─── States ──────────────────────────────────────────────────────────────── */
+/* States */
 
 .loading-overlay {
   display: flex;
@@ -374,7 +374,7 @@
   font-size: 0.85rem;
 }
 
-/* ─── Dashboard (log viewer layout) ──────────────────────────────────────── */
+/* Dashboard (log viewer layout) */
 
 .dashboard {
   display: flex;
@@ -395,7 +395,7 @@
   gap: 1.25rem;
 }
 
-/* ─── Panel (base card) ───────────────────────────────────────────────────── */
+/* Panel (base card) */
 
 .panel {
   background: var(--color-surface);
@@ -413,7 +413,7 @@
   letter-spacing: 0.05em;
 }
 
-/* ─── Summary Cards ───────────────────────────────────────────────────────── */
+/* Summary Cards */
 
 .summary-cards {
   display: grid;
@@ -466,7 +466,7 @@
   color: var(--color-red);
 }
 
-/* ─── Goal Panel ──────────────────────────────────────────────────────────── */
+/* Goal Panel */
 
 .prompt-header {
   display: flex;
@@ -567,7 +567,7 @@
   background: var(--color-surface);
 }
 
-/* ─── Friction Panel ──────────────────────────────────────────────────────── */
+/* Friction Panel */
 
 .friction-list {
   display: flex;
@@ -647,7 +647,7 @@
   color: var(--color-text-muted);
 }
 
-/* ─── Judge Block ─────────────────────────────────────────────────────────── */
+/* Judge Block */
 
 .judge-block {
   padding: 0.75rem;
@@ -723,13 +723,13 @@
   color: var(--color-amber);
 }
 
-/* ─── Cost Chart ──────────────────────────────────────────────────────────── */
+/* Cost Chart */
 
 .cost-panel .chart-container {
   margin-top: 0.5rem;
 }
 
-/* ─── Step Timeline ───────────────────────────────────────────────────────── */
+/* Step Timeline */
 
 .timeline-panel .timeline-header-row {
   display: grid;
@@ -880,7 +880,7 @@
   font-size: 0.75rem;
 }
 
-/* ─── Artifact Panel ──────────────────────────────────────────────────────── */
+/* Artifact Panel */
 
 .artifact-panel {
   padding: 1rem 1.5rem;
@@ -897,14 +897,14 @@
   font-size: 0.8rem;
 }
 
-/* ─── Results Page (main benchmark view) ──────────────────────────────────── */
+/* Results Page (main benchmark view) */
 
 .results-page {
   display: flex;
   flex-direction: column;
 }
 
-/* ─── Hero Section ────────────────────────────────────────────────────────── */
+/* Hero Section */
 
 .hero-section {
   background: var(--color-surface);
@@ -1046,7 +1046,7 @@
   font-weight: 700;
 }
 
-/* ─── Scenario Section ────────────────────────────────────────────────────── */
+/* Scenario Section */
 
 .scenario-section {
   background: var(--color-bg);
@@ -1135,7 +1135,7 @@
   line-height: 1.3;
 }
 
-/* ─── Funnel Section ──────────────────────────────────────────────────────── */
+/* Funnel Section */
 
 .funnel-section {
   background: var(--color-surface);
@@ -1162,14 +1162,14 @@
   margin-bottom: 2rem;
 }
 
-/* ─── Funnel track ─────────────────────────────────────────────────────────── */
+/* Funnel track */
 
 .funnel-track {
   display: flex;
   flex-direction: column;
 }
 
-/* Stage row: 3-column grid — label | bar | count */
+/* Stage row: 3-column grid (label, bar, count) */
 .funnel-row {
   display: grid;
   grid-template-columns: 200px 1fr 48px;
@@ -1231,7 +1231,6 @@
   }
 }
 
-/* Rindler reference line */
 .funnel-bar-rindler-line {
   position: absolute;
   top: 0;
@@ -1262,7 +1261,6 @@
   line-height: 1;
 }
 
-/* Clickable row styling */
 .funnel-row.has-drop {
   cursor: pointer;
 }
@@ -1271,7 +1269,7 @@
   opacity: 0.9;
 }
 
-/* Drop indicator — pill button in the bar's empty zone */
+/* Drop indicator: pill button in the bar's empty zone */
 .funnel-drop-icon {
   position: absolute;
   right: 10px;
@@ -1327,7 +1325,7 @@
   opacity: 0.8;
 }
 
-/* Expand panel — below the stage row, offset to align with bar column */
+/* Expand panel: below the stage row, offset to align with the bar column */
 .funnel-expand {
   display: grid;
   grid-template-columns: 200px 1fr 48px;
@@ -1399,13 +1397,12 @@
   color: var(--color-text-muted);
 }
 
-/* Subtle hint text in subtitle */
 .funnel-hint {
   font-style: italic;
   opacity: 0.6;
 }
 
-/* ─── Metrics Section ─────────────────────────────────────────────────────── */
+/* Metrics Section */
 
 .metrics-section {
   padding: 3rem 1.5rem;
@@ -1504,7 +1501,7 @@
   margin-top: 0.25rem;
 }
 
-/* ─── Log Section (de-emphasized) ────────────────────────────────────────── */
+/* Log Section (de-emphasized) */
 
 .log-section {
   padding: 3rem 1.5rem;
@@ -1545,7 +1542,7 @@
   min-width: 320px;
 }
 
-/* ─── Log Viewer Page ─────────────────────────────────────────────────────── */
+/* Log Viewer Page */
 
 .log-viewer-page {
   flex: 1;
@@ -1557,7 +1554,7 @@
   max-width: 1200px;
 }
 
-/* ─── Responsive ──────────────────────────────────────────────────────────── */
+/* Responsive */
 
 @media (max-width: 768px) {
   .hero-stats {

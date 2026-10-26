@@ -1,10 +1,8 @@
 """Local Rindler: an in-process interpreter of Rindler site mappings.
 
-The March 2026 Rindler arm reached sites through a Go MCP server backed by Postgres,
-Redis and OAuth. This package replaces that stack with Playwright running the same
-mapping JSON in-process, behind an MCP-shaped interface (``list_tools`` /
-``call_tool``). The arena (server/adapters/rindler_agent.py) and the comparison CLI
-both use it.
+Playwright runs the mapping JSON in-process behind an MCP-shaped interface (``list_tools`` /
+``call_tool``), in place of the hosted Rindler stack. The arena (server/adapters/rindler_agent.py)
+and the comparison CLI both use it.
 
     from rindler_local import LocalRindlerHost, load_mapping, find_mapping_for_url
 

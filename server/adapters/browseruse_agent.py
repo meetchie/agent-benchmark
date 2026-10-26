@@ -1,13 +1,11 @@
 """
 BrowserUse arm: browser-use driving a local headless Chromium on its own (no site mapping).
 
-The browser comes from browser_env.browser_profile() (local, headless by default, the
-macOS keychain flags always on) and the model from llm.agent_llm(): BENCHMARK_AGENT_MODEL,
-else claude-sonnet-5-5. Per-step tokens are read from browser-use's own token counter at
-the end of every step, so each step_end carries its real token count and cost. Each
-step_start carries the actions the step ran, with their arguments and, for one that failed,
-its error (action_data), which the judge reads, as it reads a Rindler tool call's input.
-Actions the model planned that browser-use then skipped are left out, and one browser-use
+The browser comes from browser_env.browser_profile() and the model from llm.agent_llm(). Per-step
+tokens are read from browser-use's own token counter at the end of every step, so each step_end
+carries its real token count and cost. Each step_start carries the actions the step ran with their
+arguments and, for one that failed, its error (action_data), which the judge reads like a Rindler
+tool call's input. Actions the model planned that browser-use skipped are left out, and one it
 answered without acting because its element was gone is marked (see browser_use_actions).
 """
 
@@ -54,9 +52,7 @@ def _history_items(agent) -> list:
 
 
 class BrowserUseTelemetricAgent(BaseAgent):
-    """
-    Browser automation agent using the browser-use library on a local headless browser.
-    """
+    """browser-use driving a local headless Chromium with no site map."""
 
     def __init__(self, run_id: str, goal: str, lane: str = "BROWSERUSE", **kwargs):
         super().__init__(run_id=run_id, goal=goal, lane=lane)
@@ -77,11 +73,10 @@ class BrowserUseTelemetricAgent(BaseAgent):
             initial_actions=initial_actions,
             use_judge=False,  # the arena has its own judge
             calculate_cost=False,  # cost comes from constants.COST_RATES, no pricing download
-            # browser-use's own Ctrl-C handler pauses on the first SIGINT and calls
-            # os._exit() on the second, which skips every cleanup and leaves Chromium
-            # running. One Ctrl-C under `uv run` is two SIGINTs (the terminal's and the
-            # copy uv forwards), so the command line entry point handles it instead
-            # (entrypoint.run_cli): the run is cancelled and the browser closed.
+            # browser-use's Ctrl-C handler pauses on the first SIGINT and calls os._exit() on the
+            # second, which skips cleanup and leaves Chromium running. One Ctrl-C under `uv run` is
+            # two SIGINTs, so entrypoint.run_cli handles it instead: the run is cancelled and the
+            # browser closed.
             enable_signal_handler=False,
         )
         if self._agent_factory is not None:
@@ -126,8 +121,8 @@ class BrowserUseTelemetricAgent(BaseAgent):
                 observation = None
                 actions = []
                 try:
-                    # Only the history item(s) this step added: a step that failed inside
-                    # browser-use adds none, and must not be labelled with the step before it.
+                    # Only the history item(s) this step added. A step that failed inside
+                    # browser-use adds none and must not take the previous step's label.
                     added = _history_items(agent)[recorded:]
                     actions = ran_actions(added)
                     extracted = [r.extracted_content for item in added for r in (item.result or [])
@@ -147,10 +142,9 @@ class BrowserUseTelemetricAgent(BaseAgent):
                     observation=observation,
                 )
                 if action_type:
-                    # browser-use only knows a step's actions once the step is over. Both
-                    # halves of the step get the name of the last one that ran; step_start,
-                    # the event the judge reads, also gets every action that ran, with its
-                    # arguments and any error or not-run mark.
+                    # browser-use only knows a step's actions once the step is over. Both events get
+                    # the name of the last action that ran; step_start, which the judge reads, also
+                    # gets every action that ran with its arguments and any error or not-run mark.
                     event["action_type"] = action_type
                     for earlier in reversed(self.telemetry_events):
                         if earlier.get("event_type") == "step_start" and earlier.get("step_index") == event["step_index"]:
@@ -240,5 +234,5 @@ class BrowserUseTelemetricAgent(BaseAgent):
             result["errors_detected"].append(f"Reached max_steps ({self.max_steps}) without calling done")
 
 
-# Backwards compatibility alias
+# Old name.
 TelemetricAgent = BrowserUseTelemetricAgent

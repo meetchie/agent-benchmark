@@ -1,22 +1,10 @@
-# run_judge.py
-"""LLM judge for benchmark runs.
+"""LLM judge for benchmark runs: a pass/fail verdict, a summary and phases with failed/slow flags.
 
-Analyzes agent steps and produces:
-- pass/fail judgment
-- human-readable summary
-- phase groupings with failed/slow flags
-
-The judge model is ``BENCHMARK_JUDGE_MODEL`` (see ``llm.py``). It reads each step's
-description and timing, the agent's own evaluation of the step before, each browser
-action that ran with what browser-use returned for it (page text for an action that
-extracts or reads the page, cut short, or a short note for a click or a navigation)
-and, when the agent finished on its own, the agent's final report (labelled as the
-agent's own claim). It never sees screenshots or the page itself. Many tasks end with
-"confirm the cart shows ...", and the agent's step labels ("Open cart", "Finish")
-rarely say what it found; the evaluations, the action results and the report usually
-do. Without them a verdict on verification depends on how wordy the step labels
-happen to be, so a check the task asks for counts only when that text shows what the
-agent found.
+The model is ``BENCHMARK_JUDGE_MODEL`` (see ``llm.py``). It reads each step's description and timing,
+the agent's evaluation of the previous step, what each browser action returned (page text, cut
+short, or a short note) and, if the agent finished on its own, its final report, labelled as the
+agent's claim. It never sees screenshots or the page. Step labels like "Open cart" rarely say what
+the agent found, so a check the task asks for counts only when that text shows it.
 """
 import logging
 
@@ -49,7 +37,7 @@ JUDGE_SCHEMA = {
     "required": ["success", "summary", "phases"],
 }
 
-# A judge call is a few hundred output tokens; this is generous headroom.
+# Generous headroom: a judge call is a few hundred output tokens.
 _JUDGE_MAX_TOKENS = 8000
 # The agent's final report is a few sentences; a longer one is cut to keep the prompt small.
 _MAX_REPORT_CHARS = 4000
@@ -114,8 +102,8 @@ FAILED FLAG — only where the run went wrong:
 
 Respond with ONLY the JSON object. No markdown, no explanation."""
 
-# What the judge is told about the run's state. A run that ended on its own has no
-# verdict yet (the judge gives it), so it is described as finished, not as unknown.
+# What the judge is told about the run's state. A run that ended on its own has no verdict yet, so
+# it is described as finished, not as unknown.
 _STATE_NOTE = (
     '(If "too_slow", the agent hit the timeout and did not finish. '
     'If "fail" or "pass", the agent ran to completion.)'
@@ -159,14 +147,10 @@ def _format_report_for_prompt(report: str | None, reported_success: bool | None)
 
 
 def validate_phases(phases: list[dict], steps: list[dict]) -> list[dict] | None:
-    """Validate the judge's phase groupings against actual steps.
+    """Validate the judge's phase groupings against the actual steps.
 
-    Returns enriched phases (with total_ms computed) if valid, None if invalid.
-    Validation rules:
-    - phases must be non-empty
-    - steps must be non-empty
-    - every step number must exist in the actual step list
-    - every step must appear in exactly one phase (no gaps, no overlaps)
+    Returns the phases with total_ms computed, or None if invalid. Phases and steps must be
+    non-empty, every step number must exist, and every step must appear in exactly one phase.
     """
     if not phases or not steps:
         return None
@@ -197,7 +181,6 @@ def validate_phases(phases: list[dict], steps: list[dict]) -> list[dict] | None:
             "slow": bool(phase.get("slow", False)),
         })
 
-    # Check all steps are covered
     if seen != all_step_nums:
         return None
 
@@ -228,28 +211,16 @@ def judge_run(
     final_report: str | None = None,
     agent_reported_success: bool | None = None,
 ) -> dict:
-    """Ask the judge model to judge a benchmark run.
+    """Ask the judge model to judge a run.
 
-    Args:
-        goal: The task goal the agent was given.
-        steps: List of step dicts with keys: step, description, elapsed_ms, and
-            optionally evaluation (the agent's verdict on the step before) and results
-            (what the step's browser actions returned).
-        result_state: One of "completed" (the agent finished on its own and the judge
-            decides pass or fail), "pass", "fail", "too_slow", "error", or "unknown".
-            Tells the judge whether the agent timed out so it can avoid
-            marking phases as failed on timeout runs.
-        final_report: The text of the agent's closing "done" action, or None when it
-            never finished on its own. Shown to the judge as the agent's claim.
-        agent_reported_success: The success flag the agent set when it finished, or
-            None when it set none.
+    ``steps`` are dicts with step, description, elapsed_ms and optionally evaluation and results.
+    ``result_state`` ("completed", "pass", "fail", "too_slow", "error", "unknown") keeps the judge
+    from marking phases failed on a timeout. ``final_report`` and ``agent_reported_success`` come
+    from the agent's "done" action and are shown as its claim.
 
-    Returns:
-        Dict with keys: success, summary, phases.
-        On any model failure (API error, refusal, truncated or unparseable reply)
-        returns a safe fallback with success False and empty phases, plus
-        ``judge_error``: why there is no verdict, in words for the user. A run with a
-        judge_error was not judged, so it is neither a pass nor a fail.
+    Returns success, summary and phases. If the model fails (API error, refusal, bad reply) it
+    returns success False, no phases and a ``judge_error`` message. That run was not judged,
+    so it is neither a pass nor a fail.
     """
     if not steps:
         return {

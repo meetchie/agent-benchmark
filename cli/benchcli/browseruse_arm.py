@@ -1,12 +1,11 @@
 """Phase 1: browser-use on a local headless Chromium, with no knowledge of the site.
 
-The agent gets the task's goal text verbatim and the same step budget as the Rindler arm.
-The browser is the repo's one local profile (browser_env: headless, macOS keychain flags
-on, a throwaway user-data dir) and the model is llm.agent_llm(model), so it runs on the
-Anthropic key alone. Every step's tokens are the real difference of browser-use's own
-token counter, so the per-step costs add up to the run's cost. Each step records only the
-actions browser-use ran (server/browser_use_actions.py, which the arena's BrowserUse arm
-uses too), so the judge never reads an action the model planned and browser-use skipped.
+The agent gets the task's goal text verbatim and the same step budget as the Rindler arm. The
+browser is the repo's one local profile (browser_env) and the model is llm.agent_llm(model), so it
+runs on the Anthropic key alone. A step's tokens are the real difference of browser-use's own token
+counter, so per-step costs add up to the run's cost. A step records only the actions browser-use ran
+(server/browser_use_actions.py), so the judge never reads an action the model planned and
+browser-use skipped.
 """
 
 from __future__ import annotations
@@ -51,13 +50,11 @@ def _history_items(history: Any) -> list:
 def _step_fields(items: list) -> dict[str, Any]:
     """The step-log fields of one step, from the history items browser-use added for it.
 
-    ``actions`` lists only the actions browser-use ran (see browser_use_actions.ran_actions:
-    the model can plan several in one step, and browser-use skips the rest after a failed
-    action, a navigation, a page change or a done that is not the step's only action), with
-    the name of the element each one targeted, a failed one's error, and a not_run mark on
-    one whose element was gone from the page. ``action`` and ``action_args`` are the last of
-    them. ``observation`` is the last text this step's results returned, never an earlier
-    step's, and ``error`` an error with no action behind it (the step's model call failed).
+    ``actions`` lists only the actions browser-use ran (see browser_use_actions.ran_actions), with
+    the name of the element each one targeted, a failed one's error, and a not_run mark on one whose
+    element was gone from the page. ``action`` and ``action_args`` are the last of them.
+    ``observation`` is the last text this step's results returned, never an earlier step's, and
+    ``error`` an error with no action behind it (the step's model call failed).
     """
     actions = ran_actions(items)
     last = actions[-1] if actions else None

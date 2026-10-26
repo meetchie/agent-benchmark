@@ -1,14 +1,7 @@
-"""
-Benchmark Runner - Runs BrowserUse agent with live step tracking and a live preview.
+"""Runs the BrowserUse agent for one benchmark run and keeps the run's live state.
 
-Manages in-memory run state: the steps with their descriptions, what the run is doing
-right now (``run_phase``) and the newest frame of the agent's page (see live_preview.py).
-
-Configuration (environment, see ``llm.py`` and ``browser_env.py`` for the rest):
-  BENCHMARK_TIMEOUT_S         hard limit for the agent, in seconds (default 180)
-  BENCHMARK_AGENT_MODEL       model the agent runs on (default claude-sonnet-5-5)
-  BENCHMARK_HEADLESS          run Chromium headless (default true)
-  BENCHMARK_BROWSER_PROVIDER  "local" (default) or "browserbase"
+Env: BENCHMARK_TIMEOUT_S (default 180), BENCHMARK_AGENT_MODEL, BENCHMARK_HEADLESS (default true),
+BENCHMARK_BROWSER_PROVIDER ("local" or "browserbase"). llm.py and browser_env.py read the rest.
 """
 
 import runtime_env  # noqa: F401  (first: loads .env and turns browser-use telemetry off)
@@ -25,14 +18,13 @@ import llm
 DEFAULT_TIMEOUT_S = 180.0
 # The judge is one short model call; a hung connection must not leave the run "analyzing".
 _JUDGE_TIMEOUT_S = 120.0
-# Reading the token counters of a stopped agent is local bookkeeping; this only guards a hang.
+# Reading token counters off a stopped agent is local, so this timeout only guards a hang.
 _USAGE_READ_TIMEOUT_S = 5.0
 
 
 def get_agent_timeout() -> float:
-    """BENCHMARK_TIMEOUT_S: the agent's hard time limit in seconds (default 180).
-
-    Raises ValueError for anything that is not a positive number.
+    """BENCHMARK_TIMEOUT_S: the agent's time limit in seconds (default 180). Raises ValueError
+    unless it is a positive number.
     """
     raw = os.getenv("BENCHMARK_TIMEOUT_S", "").strip()
     if not raw:
@@ -50,10 +42,7 @@ _VALID_PROVIDERS = {"local", "browserbase"}
 
 
 def _get_browser_provider() -> str:
-    """Return the configured browser provider ('local' or 'browserbase').
-
-    Reads BENCHMARK_BROWSER_PROVIDER env var. Defaults to 'local'.
-    """
+    """BENCHMARK_BROWSER_PROVIDER: 'local' (default) or 'browserbase'."""
     provider = os.getenv("BENCHMARK_BROWSER_PROVIDER", "local").lower().strip()
     if provider not in _VALID_PROVIDERS:
         logging.warning(
@@ -65,10 +54,7 @@ def _get_browser_provider() -> str:
 
 
 def _validate_browser_config() -> None:
-    """Validate that required env vars are set for the configured provider.
-
-    Raises ValueError if Browserbase is selected but keys are missing.
-    """
+    """Raises ValueError if Browserbase is selected but its keys are missing."""
     provider = _get_browser_provider()
     if provider == "browserbase":
         if not os.getenv("BROWSERBASE_API_KEY"):
@@ -86,8 +72,8 @@ class StepRecord:
     step: int
     description: str
     elapsed_ms: int
-    # For the judge only (not in the status payload): the agent's verdict on the step
-    # before this one, and what each of this step's browser actions returned.
+    # Judge only, not in the status payload: the agent's verdict on the previous step and what each
+    # action returned.
     evaluation: str = ""
     results: list[str] = field(default_factory=list)
 
@@ -99,8 +85,8 @@ class StepRecord:
         }
 
 
-# What a running run is doing, in order (RunState.run_phase). "judging" is reported for
-# the whole "analyzing" status.
+# Phases of a running run, in order (RunState.run_phase). The whole "analyzing" status reports
+# "judging".
 RUN_PHASES = ("starting_browser", "opening_site", "deciding", "acting", "judging")
 
 
@@ -115,28 +101,26 @@ class RunState:
     result_state: str = ""  # "pass" | "fail" | "too_slow" | "error"
     total_ms: int = 0
     message: str = ""
-    # Token counts of the agent run. input_tokens is browser-use's prompt total (cache
-    # reads included, cache writes not), output_tokens its completion total, and
-    # total_tokens everything billed: input_tokens + cache_write_tokens + output_tokens.
+    # input_tokens is browser-use's prompt total, which includes cache reads but not cache writes.
+    # total_tokens is everything billed: input + cache_write + output.
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
     phases: list[dict] = field(default_factory=list)
-    goal: str = ""  # Stored so the judge can access it
+    goal: str = ""
     persisted_run_id: str | None = None  # Id of the saved run file, None if it could not be written
-    agent_model: str = field(default_factory=lambda: _default_agent_model())  # Model the agent runs on
+    agent_model: str = field(default_factory=lambda: _default_agent_model())
     cost_usd: float | None = None  # Agent tokens at agent_model's rates; None when unknown
-    cache_read_tokens: int = 0  # Part of input_tokens that came from the prompt cache
+    cache_read_tokens: int = 0
     cache_write_tokens: int = 0  # Tokens written to the prompt cache (billed on top of input_tokens)
     final_report: str | None = None  # The agent's closing report, None unless it finished on its own
     agent_reported_success: bool | None = None  # The success flag the agent set when it finished
     stopped_at: datetime | None = None  # When a cancel was asked for (the run's time ends there)
-    # What the run is doing now (one of RUN_PHASES) and, while deciding or acting, the
-    # number of the step that will be added next.
+    # Current phase (one of RUN_PHASES), plus the next step's number while deciding or acting.
     run_phase: str = "starting_browser"
     run_phase_step: int | None = None
-    # The newest JPEG of the agent's page (served by GET /benchmark/frame/<run_id>) and how
-    # many frames there have been; only the newest is kept.
+    # Newest JPEG of the agent's page (GET /benchmark/frame/<run_id>) and how many frames there have
+    # been. Only the newest is kept.
     frame: bytes | None = field(default=None, repr=False)
     frame_seq: int = 0
 
@@ -159,14 +143,10 @@ class RunState:
         return payload
 
     def record_usage(self, summary) -> None:
-        """Take the agent's token usage from a browser-use UsageSummary.
+        """Take token usage from a browser-use UsageSummary.
 
-        ``input_tokens`` keeps browser-use's meaning (all prompt tokens, cache reads
-        included, cache writes not) and ``output_tokens`` is its completion total.
-        ``total_tokens`` counts every token that was billed: ``input_tokens`` plus the
-        cache writes plus ``output_tokens`` (browser-use's own ``total_tokens`` leaves the
-        cache writes out). ``cost_usd`` prices the cached parts at the cache rates and is
-        None when ``agent_model`` has no known price or there is no usage to price.
+        total_tokens adds the cache writes, which browser-use leaves out of its own total. cost_usd
+        is None when agent_model has no known price or there is no usage.
         """
         if summary is None:
             return
@@ -179,27 +159,11 @@ class RunState:
         self.cost_usd = usage.cost_usd(self.agent_model)
 
     def to_dict(self) -> dict:
-        """Serialize for the status API.
+        """Status payload for the API, shaped by the status.
 
-        Every reply carries ``frame``: ``{"seq": n}`` once the agent's page has been
-        captured (fetch the picture from GET /benchmark/frame/<run_id>; ``seq`` grows with
-        every new frame), else null. No picture is ever inside the reply, so polling it
-        stays cheap. While the run is going (``running`` and ``analyzing``) it also
-        carries ``run_phase``: ``{"name": ..., "step": n}`` with a name from RUN_PHASES
-        (``step`` only while deciding or acting).
-
-        Once the agent has finished (``analyzing`` and ``complete``) the payload carries
-        the token counts plus ``cost_usd`` (US dollars for the agent's tokens at
-        ``agent_model``'s rates, null when unknown) and ``agent_model`` (model id). An
-        ``error`` payload carries the same fields when the agent had already used tokens
-        (a cancelled run), and none when it had not.
-
-        A run that ended as an error after some steps is still judged, so it is
-        ``complete`` with ``result_state`` "error"; its payload also carries ``message``,
-        the reason it is an error (the model refused, the run crashed). A ``complete``
-        payload also carries the agent's closing report and the success flag it set with
-        it (``final_report`` and ``agent_reported_success``, both null when the agent did
-        not finish on its own), so the user can read what the judge read.
+        An error after some steps is still judged, so it reports as complete with result_state
+        "error" and a ``message``. ``frame`` is only ``{"seq": n}``, never the picture, so polling
+        stays cheap.
         """
         steps_data = [step.to_dict() for step in self.steps]
         frame = {"seq": self.frame_seq} if self.frame is not None else None
@@ -248,8 +212,7 @@ class RunState:
                 "frame": frame,
             }
             if self.total_tokens or self.cost_usd is not None:
-                # The agent ran (and was billed) before the run ended, for example a
-                # cancelled run: report what it used.
+                # The agent ran and was billed before the run ended, e.g. a cancel: report its usage.
                 payload.update(
                     total_ms=self.total_ms,
                     input_tokens=self.input_tokens,
@@ -260,12 +223,12 @@ class RunState:
                 )
             return payload
 
-    # Older name for to_dict(), kept for callers that still use it.
+    # Old name for to_dict().
     to_response = to_dict
 
 
 def _default_agent_model() -> str:
-    """The agent model from the environment (BENCHMARK_AGENT_MODEL or the provider default)."""
+    """BENCHMARK_AGENT_MODEL or the provider default."""
     try:
         return llm.model_for("agent")
     except llm.LLMError:  # bad LLM_PROVIDER; startup validation reports it properly
@@ -304,7 +267,7 @@ def _field_name(index, element) -> str:
 
 
 def _describe_action(name: str, params, element=None) -> str:
-    """One browser-use action in plain words, for a step whose model gave no goal text."""
+    """One browser-use action as a short sentence, for a step whose model gave no goal text."""
     p = params if isinstance(params, dict) else {}
     index = p.get("index")
     if name == "navigate":
@@ -377,13 +340,10 @@ def _describe_action(name: str, params, element=None) -> str:
 
 
 def _step_actions(history_item) -> list[tuple[str, object, object, object]]:
-    """(action name, parameters, touched element, result) for each action one history step ran.
+    """(name, params, element, result) for each action one history step ran.
 
-    The model can plan several actions in one step, and browser-use runs them in order but
-    stops early: after an action that fails, after a navigation, or once the page changes.
-    Each action it ran left one result, in the same order, so pairing the planned actions
-    with the results (as browser-use's own AgentHistoryList.action_history() does) keeps
-    the ones that ran and leaves out the ones it skipped.
+    browser-use stops a step early after a failed action, a navigation or a page change, so actions
+    are paired with results in order and the skipped ones drop out.
     """
     mo = getattr(history_item, "model_output", None)
     actions = list(getattr(mo, "action", None) or [])
@@ -401,12 +361,10 @@ def _step_actions(history_item) -> list[tuple[str, object, object, object]]:
 
 
 def _format_action(agent) -> str:
-    """Describe the step the agent just finished, in a few plain words.
+    """A short description of the step the agent just finished.
 
-    The agent's own 'next_goal' ("Click on the Menu link") is the best description. Some
-    steps have none (the model left it empty and only chose actions); those are described
-    from the actions that ran instead, for example "Run a script on the page" or
-    "Type 'top' into the search box", with "(failed)" after one that failed.
+    Its own next_goal when it has one, else the actions that ran ("Type 'top' into the search box",
+    with "(failed)" after one that failed).
     """
     try:
         if agent.history.history:
@@ -426,24 +384,18 @@ def _format_action(agent) -> str:
     return "Processing..."
 
 
-# What the judge gets besides each step's description: enough to see what the agent
-# read on the page (a cart row, a price) without sending it whole pages.
+# What the judge gets besides each step's description: enough to see what the agent read (a cart
+# row, a price) without sending whole pages.
 _MAX_EVALUATION_CHARS = 300
 _MAX_RESULT_CHARS = 600
 _MAX_ERROR_CHARS = 300
 
 
 def _step_evidence(agent) -> tuple[str, list[str]]:
-    """The agent's evaluation and the actions it ran, with their results, for the step it just finished.
+    """The agent's evaluation and the actions it ran, with results, for the step it just finished.
 
-    ``evaluation`` is the model's own verdict on the step before ("Success - the cart
-    shows ..."); ``results`` has one line per browser action the step ran, in plain words
-    and with what it returned: page text the agent read, a short note such as "Clicked
-    button 'View Cart'", or an error. The step's description is often the model's goal,
-    written before it acted, so these lines are what says which actions ran: one it
-    planned and browser-use skipped has none. The done action's text is left out here, it
-    is the run's final report. A result without an action (the model call failed, say)
-    is listed on its own.
+    ``results`` has one line per action. The step description is often the goal, written before
+    acting, so these lines say what actually ran. The done action is left out, it is the final report.
     """
     try:
         item = agent.history.history[-1]
@@ -493,11 +445,8 @@ def _one_line(text: object, limit: int = 300) -> str:
 
 
 def _is_initial_actions(history_item) -> bool:
-    """Whether a history item is browser-use's step 0: the actions it runs before the model.
-
-    browser-use opens the URL it finds in the task itself (``directly_open_url``) and
-    records that as step number 0. It succeeds without any model call, so it says
-    nothing about whether the model works.
+    """Whether a history item is browser-use's step 0: it opens the task's URL without a model call,
+    so it says nothing about whether the model works.
     """
     metadata = getattr(history_item, "metadata", None)
     return getattr(metadata, "step_number", None) == 0
@@ -506,17 +455,11 @@ def _is_initial_actions(history_item) -> bool:
 def _agent_failure(history) -> tuple[str, bool] | None:
     """Why a finished agent run counts as an error rather than a pass/fail, if it does.
 
-    browser-use swallows model and browser errors as failed steps, so a run that never
-    got going (bad API key, model unavailable) or one the model refused part-way comes
-    back as a normal history. Returns ``(message, judge)`` for the two cases that are
-    reported as errors, or None. ``judge`` says whether the steps taken so far are
-    worth sending to the judge:
-
-    * the model declined to continue (``stop_reason=refusal``) and the task is not
-      done: the steps before the refusal are real, so they are judged;
-    * every step the model drove failed (for example an invalid API key): there is
-      nothing to judge, and the first error is shown. browser-use's own opening
-      navigation (step 0) is not one of the model's steps.
+    browser-use swallows model and browser errors as failed steps, so a run that never got going
+    (bad API key) or was refused part-way looks like a normal history. Returns ``(message, judge)``
+    for those two cases, else None. ``judge`` is True for a refusal before the task was done (the
+    earlier steps are real) and False when every model-driven step failed (nothing to judge, the
+    first error is shown). Step 0 is not one of the model's steps.
     """
     try:
         errors = list(history.errors())
@@ -543,11 +486,10 @@ def _agent_failure(history) -> tuple[str, bool] | None:
 
 
 def _final_report(history) -> tuple[str | None, bool | None]:
-    """The agent's closing report and the success flag it set, if it finished on its own.
+    """The agent's closing report and success flag, if it finished on its own.
 
-    browser-use's ``final_result()`` is the output of the last action, which is the
-    agent's report only when that action was ``done``. A run that stopped any other
-    way (out of steps, say) may end on page text it extracted, which is no report.
+    final_result() is the last action's output, which is the report only when that action was
+    ``done``.
     """
     try:
         if history is None or not history.is_done():
@@ -621,8 +563,8 @@ async def _finish_with_error(
 def _error_message(exc: BaseException) -> str:
     """What to tell the user about an exception that ended the run.
 
-    Our own configuration errors carry a message written for the user (for example
-    where to install Chromium); anything else stays generic and goes to the log.
+    Our own configuration errors carry a user-facing message; anything else stays generic and goes
+    to the log.
     """
     from browser_env import ChromiumNotFoundError
 
@@ -637,10 +579,8 @@ def _error_message(exc: BaseException) -> str:
 
 
 def _browser_exited_at_start(exc: BaseException) -> bool:
-    """Whether browser-use failed because the Chromium it launched was gone before it connected.
-
-    browser-use says "... exited before CDP became available", or, when the process is gone
-    before it even looks at it (it was already reaped), lets psutil.NoSuchProcess through.
+    """Whether the Chromium browser-use launched was gone before it connected ("exited before CDP
+    became available", or psutil.NoSuchProcess if it was already reaped).
     """
     if "exited before CDP became available" in str(exc):
         return True
@@ -654,10 +594,7 @@ def _browser_exited_at_start(exc: BaseException) -> bool:
 async def _record_agent_usage(state: "RunState", agent, shielded: bool = False) -> None:
     """Put the agent's token usage so far on the run state (after a timeout or a cancel).
 
-    The usage comes from the agent's token cost service, which counts every model call
-    the agent has made, finished or not. ``shielded`` keeps the read going when the
-    surrounding task is being cancelled. Never raises: a run without usage is better
-    than a run that cannot be saved.
+    ``shielded`` keeps the read going while the surrounding task is being cancelled. Never raises.
     """
     try:
         read = agent.token_cost_service.get_usage_summary()
@@ -702,25 +639,16 @@ async def _persist_result(state: "RunState") -> None:
 
 
 async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | None = None) -> None:
-    """
-    Run a BrowserUse agent for the benchmark and update state with each step.
+    """Run a BrowserUse agent for the benchmark and update ``state`` with each step.
 
-    The agent runs on ``llm.agent_llm()`` (BENCHMARK_AGENT_MODEL, claude-sonnet-5-5 by
-    default) in a throwaway local headless Chromium, or in a Browserbase session when
-    BENCHMARK_BROWSER_PROVIDER=browserbase. It is stopped after BENCHMARK_TIMEOUT_S
-    seconds (default 180); the run is then reported as "too_slow". The judge always
-    runs on whatever steps exist, plus the agent's final report when it finished on its
-    own, and the result is written to the run file. A run is a "pass" only when the
-    judge says so and the agent did not itself report that it failed.
-
-    ``viewport`` is the size the viewer's preview pane asked for; the browser gets
-    ``browser_env.fit_viewport(viewport)``. The start URL is opened before the model's
-    first turn, whatever else the goal mentions. While the agent works, ``state.run_phase``
-    says what it is doing and ``state.frame`` holds the newest picture of its page (see
-    live_preview.py); the picture loop stops as soon as the agent does.
+    The agent runs on ``llm.agent_llm()`` in a throwaway headless Chromium (or a Browserbase
+    session) and is stopped after BENCHMARK_TIMEOUT_S, reported as "too_slow". The judge always runs
+    on whatever steps exist, and the result is written to the run file. A run is a "pass" only when
+    the judge says so and the agent did not report failure. ``viewport`` is the size the preview
+    pane asked for.
     """
-    # Deferred import: keeps the server startable even if browser_use is not installed,
-    # and avoids import-time side effects (Playwright browser launch).
+    # Deferred so the server starts without browser_use installed and without import-time side
+    # effects.
     from browser_use import Agent
     from browser_env import agent_files_dir, browser_profile, cleanup_profile, fit_viewport, track_agent_dir
     from live_preview import LivePreview
@@ -732,7 +660,6 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     state.set_run_phase("starting_browser")
 
     def on_page():
-        # The browser is up and has its first tab: next comes the start URL.
         if state.run_phase == "starting_browser":
             state.set_run_phase("opening_site")
 
@@ -741,36 +668,31 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
     async def on_step_start(agent):
         nonlocal step_start_time, prev_step_end_time
         step_start_time = datetime.now()
-        # For the very first step, align the wall-clock anchor to when it actually started
+        # The first step starts the wall clock.
         if not state.steps:
             prev_step_end_time = step_start_time
-        # browser-use reads the page and asks the model what to do next.
         state.set_run_phase("deciding", len(state.steps) + 1)
 
     def on_model_output(browser_state_summary, model_output, step_number):
-        # The model has chosen; browser-use now runs the actions (register_new_step_callback).
         state.set_run_phase("acting", len(state.steps) + 1)
 
     async def on_step_end(agent):
         nonlocal prev_step_end_time, history_seen
         now = datetime.now()
-        # Step-to-step wall-clock time: includes LLM reasoning + action execution.
-        # For step 1 this equals the action time; for subsequent steps it also
-        # captures the inter-step thinking so that sum(elapsed_ms) ≈ total_ms.
+        # Step-to-step wall-clock time, so sum(elapsed_ms) is roughly total_ms.
         elapsed_ms = int((now - prev_step_end_time).total_seconds() * 1000)
         prev_step_end_time = now
         if _history_length(agent) > history_seen:
             description = _format_action(agent)
             evaluation, results = _step_evidence(agent)
         else:
-            # browser-use stored no history item for this step (it timed out inside the
-            # agent, say). The newest item is the previous step's, so it describes nothing
-            # here; what went wrong is in the agent's last result.
+            # browser-use stored no history item for this step, e.g. it timed out inside the agent.
+            # The newest item belongs to the previous step, so use the agent's last result instead.
             description = "Step did not complete"
             evaluation = ""
             results = _result_lines(getattr(getattr(agent, "state", None), "last_result", None))
         history_seen = _history_length(agent)
-        preview.nudge()  # a frame of what the step left on screen, without waiting for it
+        preview.nudge()
 
         state.steps.append(
             StepRecord(
@@ -792,7 +714,6 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         agent_chat = llm.agent_llm(state.agent_model or None)
         logging.info("Run %s: agent=%s timeout=%ss url=%s", state.run_id, state.agent_model, agent_timeout, url)
 
-        # Prepend the target URL to the goal so the agent navigates there first
         full_goal = f"Go to {url}\n\n{goal}"
 
         provider = _get_browser_provider()
@@ -811,7 +732,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                     browser_settings={"record_session": True},
                 )
             except RateLimitError:
-                # Hit concurrent session limit — release stale sessions and retry
+                # Concurrent session limit: release stale sessions and retry.
                 logging.warning("Browserbase concurrent session limit hit, releasing stale sessions")
                 try:
                     for s in bb.sessions.list():
@@ -826,24 +747,21 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
 
             logging.info("Browserbase session: %s", bb_session.id)
 
-            # Connect via CDP directly — avoids triggering the local browser watchdog
+            # CDP directly, to avoid the local browser watchdog.
             from browser_use.browser.profile import BrowserProfile
             api_key = os.getenv("BROWSERBASE_API_KEY")
             cdp_url = f"wss://connect.browserbase.com?apiKey={api_key}&sessionId={bb_session.id}"
             profile = BrowserProfile(cdp_url=cdp_url)
         else:
-            # Local Chromium: headless unless BENCHMARK_HEADLESS says otherwise, clean
-            # throwaway profile, macOS keychain prompts disabled (see browser_env.py).
+            # Headless unless BENCHMARK_HEADLESS says otherwise, throwaway profile, no keychain
+            # prompts (see browser_env.py).
             profile = browser_profile(viewport=fit_viewport(viewport))
 
-        # use_judge=False: browser-use's own end-of-run judge would be a second,
-        # unrequested model call; the benchmark has its own judge (run_judge.py).
-        # enable_signal_handler=False: this runs inside a server, whose Ctrl-C is not
-        # the agent's to pause on.
-        # initial_actions: open the start URL before the model's first turn. browser-use
-        # does that by itself only when the task text holds exactly one URL; a goal that
-        # names another address (or the same site without the trailing "/") would leave
-        # the agent on a blank tab, and its first model turn would go on opening the site.
+        # use_judge=False: browser-use's own end-of-run judge would be a second model call, and the
+        # benchmark has its own (run_judge.py).
+        # enable_signal_handler=False: Ctrl-C belongs to the server, not the agent.
+        # initial_actions: browser-use opens the start URL itself only when the task text holds
+        # exactly one URL. A goal naming another address would leave the agent on a blank tab.
         agent = Agent(
             task=full_goal,
             llm=agent_chat,
@@ -868,7 +786,6 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
                 timeout=agent_timeout,
             )
 
-            # Extract token usage from completed run
             try:
                 state.record_usage(history.usage)
             except Exception as e:
@@ -880,10 +797,8 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             logging.info("Agent timed out after %ss", agent_timeout)
             await _record_agent_usage(state, agent)
         finally:
-            # The agent has stopped (and closed its browser): so does the picture loop.
             await preview.stop()
 
-        # --- Agent finished or timed out — always run the judge ---
         state.total_ms = int((datetime.now() - overall_start).total_seconds() * 1000)
 
         failure = None if timed_out else _agent_failure(history)
@@ -893,7 +808,6 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
 
         state.status = "analyzing"
 
-        # Pass result_state hint so judge knows whether agent timed out
         rs_hint = "too_slow" if timed_out else "completed"
         judgment = await _judge(state, rs_hint)
 
@@ -906,15 +820,15 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
             state.result_state = "too_slow"
             state.summary = judgment["summary"] or "The agent ran out of time before completing the task."
         elif judgment.get("judge_error"):
-            # No verdict: the agent may well have done the task, so this is no fail.
+            # No verdict. The agent may have done the task, so don't call it a fail.
             state.success = False
             state.message = judgment["judge_error"]
             state.status = "error"
             state.result_state = "error"
             return
         elif judgment["success"] and state.agent_reported_success is False:
-            # The agent itself said it did not do the task (a product that does not
-            # exist, say). However its steps read, that is not "completed as written".
+            # The agent said it did not do the task, e.g. the product does not exist, so this is
+            # not "completed as written" however the steps read.
             state.result_state = "fail"
             state.success = False
             state.summary = f"{_AGENT_SAID_NO} {judgment['summary']}"
@@ -928,24 +842,21 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         state.status = "error"
         state.message = state.message or "Run cancelled by user."
         state.result_state = "error"
-        # The agent's calls so far were billed, so the run keeps its time and usage. The
-        # agent has stopped by now; reading its counters must not be cut short by the
-        # cancellation that brought us here. The time is up to the cancel, not up to now:
-        # closing the browser in between is not part of the run.
+        # The calls so far were billed, so the run keeps its time and usage. Time stops at the
+        # cancel, not at the end of browser shutdown. The usage read is shielded from the
+        # cancellation.
         state.total_ms = int(((state.stopped_at or datetime.now()) - overall_start).total_seconds() * 1000)
         if agent is not None:
             await _record_agent_usage(state, agent, shielded=True)
         raise
     except Exception as e:
         logging.error("Benchmark run failed: %s: %s", type(e).__name__, e, exc_info=True)
-        # The model calls made before the error were billed: keep their usage.
+        # The calls made before the error were billed.
         if agent is not None:
             await _record_agent_usage(state, agent)
-        # Still try to run judge if we have steps
         await _finish_with_error(state, overall_start, _error_message(e))
     finally:
         await preview.stop()  # in case the run ended before the agent got going
-        # Release Browserbase session to free quota
         if bb and bb_session:
             try:
                 bb.sessions.update(
@@ -962,8 +873,7 @@ async def run_benchmark(state: RunState, url: str, goal: str, viewport: dict | N
         )
         # Saved first: it has no await inside, so nothing can cut it short.
         await _persist_result(state)
-        # Stop the run's Chromium if it is somehow still running (by PID, off the event
-        # loop: it may wait a few seconds for the browser to exit), then remove the
-        # profile, agent-files and screenshot dirs this run created.
+        # Stop the run's Chromium if it is still running (by PID, off the event loop), then remove
+        # the profile, agent-files and screenshot dirs.
         if profile is not None:
             await asyncio.to_thread(cleanup_profile, profile)

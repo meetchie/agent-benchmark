@@ -1,13 +1,4 @@
-"""
-Scenario Definitions - Predefined test scenarios for browser automation.
-
-Each scenario contains:
-- name: Unique identifier for the scenario
-- description: Brief description of what the scenario tests
-- goal: The full prompt/instructions for the agent
-- start_url: Optional URL to navigate to before starting
-- tags: Optional tags for categorization (e.g., "e-commerce", "auth", "search")
-"""
+"""Predefined test scenarios for browser automation, registered by name."""
 
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List
@@ -29,22 +20,15 @@ class Scenario:
         return f"{self.name}: {self.description}"
 
 
-# =============================================================================
-# SCENARIO DEFINITIONS
-# =============================================================================
-
 SCENARIOS: Dict[str, Scenario] = {}
 
 
 def register_scenario(scenario: Scenario) -> Scenario:
-    """Register a scenario in the global registry."""
     SCENARIOS[scenario.name] = scenario
     return scenario
 
 
-# -----------------------------------------------------------------------------
-# E-Commerce Scenarios
-# -----------------------------------------------------------------------------
+# E-commerce
 
 register_scenario(Scenario(
     name="shipt_add_to_cart",
@@ -115,9 +99,7 @@ The task FAILS if:
     verification_hint="Look for cart contents showing exactly 3 unique products: Granny Smith Apples (6 count or ~3 lbs), whole non-organic milk (gallon), and Advil ibuprofen tablets/caplets. Check that milk is explicitly NOT organic."
 ))
 
-# -----------------------------------------------------------------------------
-# VHListings Scenarios
-# -----------------------------------------------------------------------------
+# VHListings
 
 register_scenario(Scenario(
     name="vhlistings_add_to_cart",
@@ -377,9 +359,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Food Delivery Scenarios
-# -----------------------------------------------------------------------------
+# Food delivery
 
 register_scenario(Scenario(
     name="doordash_add_to_cart",
@@ -579,9 +559,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Authentication / Forms Scenarios
-# -----------------------------------------------------------------------------
+# Auth and forms
 
 register_scenario(Scenario(
     name="github_explore",
@@ -647,9 +625,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Travel / Booking Scenarios
-# -----------------------------------------------------------------------------
+# Travel and booking
 
 register_scenario(Scenario(
     name="kayak_flight_search",
@@ -720,9 +696,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Simple / Quick Scenarios (good for testing)
-# -----------------------------------------------------------------------------
+# Simple and quick (good for testing)
 
 register_scenario(Scenario(
     name="google_search",
@@ -798,9 +772,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Multi-Step Form / Modal Scenarios
-# -----------------------------------------------------------------------------
+# Multi-step forms and modals
 
 register_scenario(Scenario(
     name="costco_add_to_cart",
@@ -900,9 +872,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Quantity / Size Selection Scenarios
-# -----------------------------------------------------------------------------
+# Quantity and size selection
 
 register_scenario(Scenario(
     name="nike_add_to_cart",
@@ -976,9 +946,7 @@ The task FAILS if:
 ))
 
 
-# -----------------------------------------------------------------------------
-# Multi-Step Navigation Scenarios
-# -----------------------------------------------------------------------------
+# Multi-step navigation
 
 register_scenario(Scenario(
     name="home_depot_store_pickup",
@@ -1080,30 +1048,13 @@ The task FAILS if:
 ))
 
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
-
 def get_scenario(name: str) -> Scenario:
-    """
-    Get a scenario by name.
-    
-    Args:
-        name: Scenario name (case-insensitive)
-        
-    Returns:
-        The Scenario object
-        
-    Raises:
-        KeyError: If scenario not found
-    """
+    """Get a scenario by name, case-insensitive. Raises KeyError if there is none."""
     name_lower = name.lower()
     
-    # Try exact match first
     if name_lower in SCENARIOS:
         return SCENARIOS[name_lower]
     
-    # Try case-insensitive match
     for key, scenario in SCENARIOS.items():
         if key.lower() == name_lower:
             return scenario
@@ -1112,15 +1063,7 @@ def get_scenario(name: str) -> Scenario:
 
 
 def list_scenarios(tag: Optional[str] = None) -> List[Scenario]:
-    """
-    List all available scenarios, optionally filtered by tag.
-    
-    Args:
-        tag: Optional tag to filter by
-        
-    Returns:
-        List of Scenario objects
-    """
+    """All scenarios, optionally filtered by tag."""
     scenarios = list(SCENARIOS.values())
     
     if tag:
@@ -1132,17 +1075,7 @@ def list_scenarios(tag: Optional[str] = None) -> List[Scenario]:
 
 def create_custom_scenario(goal: str, start_url: Optional[str] = None, 
                           name: str = "custom") -> Scenario:
-    """
-    Create a custom scenario from a goal string.
-    
-    Args:
-        goal: The goal/prompt for the agent
-        start_url: Optional starting URL
-        name: Optional name for the scenario
-        
-    Returns:
-        A new Scenario object (not registered globally)
-    """
+    """A new Scenario from a goal string. It is not registered globally."""
     return Scenario(
         name=name,
         description="Custom scenario",

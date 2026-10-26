@@ -1,9 +1,8 @@
 """Tool definitions generated from a mapping.
 
-One tool per mapping action, plus ``start_session`` and ``close_session``. Nothing else:
-a tool exists only if the mapping defines the action, so the model never sees a tool
-the site cannot run. Tools come back MCP-style (``inputSchema``); ``to_anthropic`` turns
-them into the Messages API shape (``input_schema``).
+One tool per mapping action, plus ``start_session`` and ``close_session``, and nothing else, so the
+model never sees a tool the site cannot run. Tools come back MCP-style (``inputSchema``);
+``to_anthropic`` turns them into the Messages API shape (``input_schema``).
 """
 
 from __future__ import annotations
@@ -75,8 +74,7 @@ def _param_schema(name: str, spec: Any) -> dict[str, Any]:
 
 
 def _is_required(spec: Any) -> bool:
-    # The March seeds rarely say "required"; a param is required unless it says
-    # otherwise or has a default.
+    # Mappings rarely say "required": a param is required unless it says otherwise or has a default.
     spec = spec if isinstance(spec, dict) else {}
     if "default" in spec:
         return False

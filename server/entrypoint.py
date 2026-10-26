@@ -2,24 +2,19 @@
 
     sys.exit(entrypoint.run_cli(main()))
 
-used by arena.py and cli/run.py in place of ``asyncio.run(main())``.
+arena.py and cli/run.py use it in place of ``asyncio.run(main())``. The first SIGINT or SIGTERM
+cancels ``main``. The cancellation unwinds through the agent (which closes its browser) and each
+``finally`` (``browser_env.cleanup_profile`` stops any browser left, by PID, and removes the temp
+dirs), then the program exits with status 130.
 
-The first Ctrl-C (SIGINT) or SIGTERM cancels ``main``. The cancellation unwinds through
-the agent, which closes its browser, and through each ``finally``, where
-``browser_env.cleanup_profile`` stops any browser still left by PID and removes the
-temp dirs. Then the program exits with status 130.
+Signals within ``DUPLICATE_WINDOW_S`` of the first are ignored: under ``uv run`` one Ctrl-C arrives
+twice, once from the terminal and once as uv's forwarded copy, and the second would interrupt the
+cleanup. A later Ctrl-C means "quit now": browsers this process started are stopped by PID and the
+program exits at once.
 
-Signals that arrive within ``DUPLICATE_WINDOW_S`` of the first are ignored: under
-``uv run`` one Ctrl-C reaches the program twice, once from the terminal and once as the
-copy uv forwards, and Python's default handling would turn the second into a
-KeyboardInterrupt in the middle of that cleanup. A later Ctrl-C means "quit now": the
-browsers this process started are stopped by PID and the program exits at once.
-
-An interrupted program ends with ``os._exit`` once its cleanup is done, after stopping
-any browser left and flushing its output, with SIGINT and SIGTERM ignored from then on.
-A normal interpreter exit would put the default signal handling back while it shuts
-down, so the forwarded copy of the Ctrl-C, arriving late after a quick cleanup, could
-still kill the process; and it would wait for any worker thread still blocked on a
+An interrupted program ends with ``os._exit`` after cleanup, with SIGINT and SIGTERM ignored from
+then on. A normal interpreter exit restores default signal handling while it shuts down, so a late
+forwarded Ctrl-C could still kill the process, and it would wait for worker threads blocked on a
 network call.
 """
 
@@ -57,8 +52,8 @@ def run_cli(main: Coroutine[Any, Any, int]) -> int:
         print("\nQuitting now.", file=sys.stderr, flush=True)
         _exit_now(INTERRUPTED)
 
-    # A plain signal handler rather than loop.add_signal_handler: it stays in place after
-    # the loop is closed, so there is no moment in which a late duplicate is unhandled.
+    # A plain signal handler rather than loop.add_signal_handler: it stays in place after the loop
+    # is closed, so a late duplicate is never unhandled.
     previous = {}
     try:
         for signum in _SIGNALS:

@@ -1,18 +1,16 @@
 """The shipped prose mapping and page extractor against tests/prose_fixture.py.
 
-The fixture follows prose.com as it was on 2026-10-24. Against that site the March
-mapping and extractor had drifted, each way pinned here:
+The fixture mimics the live site's page structure. These tests pin what the mapping and extractor
+must handle:
 
-* the cart page fills in about a second after it loads, so view_cart returned before
-  there was anything to read;
-* cart line items are plain divs, not <p>, so cart_items came back empty;
-* "Subtotal" and "Today's total" sit on separate lines (and the apostrophe is curly), so
-  order_summary came back empty;
-* the accessories grid showed a de-duplicated price list, so the three $85 brushes
-  could not be told apart from the other prices;
-* the grid's product cards render after the page's first h2, which is all the mapping waited for;
-* the eye patches page has two add-to-cart buttons, which Playwright refuses to click;
-* remove_from_cart clicked the first Remove button whatever item it was given.
+* the cart page fills in about a second after it loads, so view_cart has to wait for it
+* cart line items are plain divs, not <p>
+* "Subtotal" and "Today's total" sit on separate lines, and the apostrophe is curly
+* the accessories grid shows a de-duplicated price list, so the three $85 brushes need their own
+  cards
+* the grid's product cards render after the page's first h2
+* the eye patches page has two add-to-cart buttons, which Playwright refuses to click
+* remove_from_cart removes the item it was given, not the first Remove button
 """
 
 import pytest

@@ -9,10 +9,9 @@ pretty-printed JSON.
     uv run python tools/seed_to_json.py mappings/seed_shipt.sql --check          # exit 1 if the JSON is stale
     uv run python tools/seed_to_json.py --all                                    # every mappings/seed_*.sql
 
-Overrides live in mappings/overrides/<site_id>.json and are JSON merge patches
-(RFC 7386: objects merge, null deletes a key, anything else replaces). Their
-``_notes`` list says why each change was made; the notes are copied into the output's
-``_provenance`` so every difference from the March seed stays visible.
+Overrides live in mappings/overrides/<site_id>.json as JSON merge patches (RFC 7386: objects merge,
+null deletes a key, anything else replaces). Their ``_notes`` list says why each change was made and
+is copied into the output's ``_provenance``, so every difference from the March seed stays visible.
 """
 
 from __future__ import annotations

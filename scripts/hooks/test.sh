@@ -29,7 +29,7 @@ check() {     # check <repo>: run the hook on what is staged there
   (cd "$1" && sh "$ROOT/scripts/hooks/pre-commit")
 }
 
-# --- the hook ---------------------------------------------------------------
+# The hook
 R="$TMP/hook"
 newrepo "$R"
 cd "$R" || exit 1
@@ -71,7 +71,7 @@ git rm -q old.txt .env
 expect 0 "deleting a committed key and .env passes" check "$R"
 git commit -q -m "cleanup"
 
-# --- the installer ----------------------------------------------------------
+# The installer
 copy_tree() {   # the files install.sh needs, in a fresh folder
   mkdir -p "$1/scripts/hooks" &&
     cp "$ROOT/scripts/hooks/install.sh" "$ROOT/scripts/hooks/pre-commit" "$1/scripts/hooks/"

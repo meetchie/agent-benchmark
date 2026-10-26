@@ -1,63 +1,33 @@
 """browser-use chat model for current Claude models.
 
-browser-use's own ChatAnthropic asks for every agent step ("AgentOutput": thinking,
-memory, next goal, a list of actions) through one tool call. On current Claude models:
+browser-use's own ChatAnthropic asks for each agent step (an "AgentOutput": thinking, memory, next
+goal, a list of actions) through one tool call, and current Claude models break that.
 
-* A forced tool call (``tool_choice: {"type": "tool"}``) is rejected with HTTP 400 on
-  claude-sonnet-5-5 and claude-opus-5-5. browser-use switches to ``auto`` only when
-  thinking is configured, which llm.agent_llm() always does for these models.
-* With ``tool_choice: auto`` and the one AgentOutput tool, claude-sonnet-5-5 calls the
-  action itself (``find_elements``, ``done``, ``click``) as if it were a tool, with only
-  that action's parameters and none of the step's thinking/memory/next goal (2 of 2 model
-  steps in a smoke run and 27 of 27 in an arena run on 2026-10-24). Stock
-  browser-use validates that input as AgentOutput, fails the step, retries it from
-  scratch, and never counts the failed call's tokens.
-* Structured outputs (``output_config.format``) would guarantee the shape, but the full
-  AgentOutput schema (about 17 KB, 15 ``anyOf`` branches) is rejected with HTTP 400
-  "The compiled grammar is too large". Small step schemas (the final "done" step, the
-  run judge) compile fine.
+A forced tool call gets HTTP 400 on claude-sonnet-5-5 and claude-opus-5-5. browser-use switches to
+``auto`` only when thinking is on, which llm.agent_llm() always sets. With ``auto``, sonnet calls the
+action itself (``click``, ``done``) with only its parameters, and stock browser-use fails the
+validation, retries the step and never counts the failed call's tokens. Structured outputs would fix
+the shape, but the full AgentOutput schema (about 17 KB, 15 ``anyOf`` branches) is rejected with "The
+compiled grammar is too large". Small schemas, like the final "done" step and the run judge, compile.
 
-ClaudeAgentChat keeps everything else from ChatAnthropic (message serialization, client
-options, usage accounting, error mapping, refusal-fallback settings) and changes how a
-structured step is requested:
+ClaudeAgentChat keeps the rest of ChatAnthropic and changes how a structured step is requested.
+Small schemas (``fits_structured_outputs``) use structured outputs, and if the API still rejects the
+grammar the schema takes the tool route from then on. Larger schemas use tools with
+``tool_choice: auto``. Each available action becomes a tool whose input is the step's own fields
+(minus ``thinking``, see ACTION_TOOL_OMITTED_FIELDS) followed by that action's parameters. If the
+actions can't be presented that way, one step tool is sent instead.
 
-1. Small schemas (``fits_structured_outputs``) use structured outputs: the reply always
-   parses. If the API still rejects the grammar, that schema is remembered and step 2
-   is used for it from then on.
-2. Larger schemas use tools, with ``tool_choice: auto``, presented so that the model's
-   natural call is a valid step: one tool per available action, named after it, whose
-   input is the step model's own top-level fields (evaluation_previous_goal, memory,
-   next_goal, ... with the step model's required list) followed by that action's
-   parameters. The ``thinking`` field is left out (ACTION_TOOL_OMITTED_FIELDS): asking the
-   model to write its reasoning into a field drew a ``reasoning_extraction`` refusal, the
-   model already thinks natively (adaptive thinking), and browser-use only logs that field.
-   Several actions in one step are several calls, in order. When the actions
-   cannot be presented that way (no action list, a parameter type that is not a model,
-   a name the API would reject), the single step tool is sent instead. The reply:
+A tool reply is handled in order. A valid call to the step tool is returned as is. If every call
+names an available action, the step is assembled locally from the calls, in call order. Nothing is
+guessed, so an unknown name or a result that does not validate goes to the last case. There the
+model's turn is appended unchanged with an ``is_error`` tool result per call, and the model is asked
+again, up to ``max_repairs`` times. Every attempt's tokens are counted.
 
-   a. A call to the step tool itself (by its name) that validates is returned as is.
-   b. A reply whose every tool call names an available action is assembled locally:
-      ``action = [{<name>: <params>}, ...]`` in call order, the step fields taken from
-      the calls (first non-empty value of each), the reply's visible text as
-      ``next_goal`` when none was given. Parameters sent as JSON text (``"5"``,
-      ``"true"``, ``"[]"``, ``"null"``) are decoded only where they failed to validate.
-      A step-tool call holding one action object instead of a list, or its actions at
-      the top level, is reshaped the same way. Nothing is guessed: an unknown name, or
-      a result that does not validate as the step model, goes to (c).
-   c. Otherwise the model's turn is appended unchanged together with an ``is_error``
-      tool result for every call naming what was wrong, and the model is asked again
-      (up to ``max_repairs`` times). Every attempt's tokens are summed into the returned
-      usage, so repairs are paid for and counted.
+Per-action tools beat one step tool because with a single tool the model called a bare action on
+every step. That left out the evaluation, memory and next goal that browser-use feeds back as history.
 
-   Why per-action tools and not only (b) behind the one AgentOutput tool: offered the one
-   tool, the model called a bare action on all 27 step calls of an arena run (vhlistings,
-   2026-10-24), so (b) alone gives one request per step but steps with no evaluation,
-   memory or next goal, the fields browser-use feeds back to the model as its history.
-   With per-action tools a second run filled them on 21 of 27 steps, still one request
-   per step, for about 4.9k more prompt tokens per request (mostly cache reads).
-
-Plain-text calls (no output format) go through ChatAnthropic unchanged. Nothing here sends
-temperature/top_p/top_k, forces a tool, or prefills an assistant turn.
+Plain-text calls go through ChatAnthropic unchanged. Nothing here sends temperature, top_p or top_k,
+forces a tool or prefills an assistant turn.
 """
 
 from __future__ import annotations
@@ -87,8 +57,8 @@ T = TypeVar("T", bound=BaseModel)
 
 log = logging.getLogger(__name__)
 
-# Largest step schema sent through structured outputs. The 2 KB / 7-anyOf "done" schema
-# compiles; the 17 KB / 15-anyOf AgentOutput schema does not. Stay well below the latter.
+# Largest step schema sent through structured outputs. The 2 KB, 7-anyOf "done" schema compiles and
+# the 17 KB, 15-anyOf AgentOutput schema does not. Stay well below the latter.
 STRUCTURED_MAX_BYTES = 4000
 STRUCTURED_MAX_ANYOF = 8
 
@@ -156,16 +126,13 @@ def _validation_summary(exc: Exception, limit: int = 1500) -> str:
     return text[:limit]
 
 
-# -- actions called as tools ---------------------------------------------------
-
 
 @functools.lru_cache(maxsize=64)
 def action_models(output_format: type[BaseModel]) -> dict[str, type[BaseModel]]:
     """Registered action name -> its one-field ActionModel, read off ``output_format.action``.
 
-    browser-use's registry types ``action`` as ``list[X]``, where X is one single-field
-    ActionModel (one action registered) or a RootModel over a Union of them. Empty for a
-    step model without such a list.
+    browser-use types ``action`` as ``list[X]``, where X is one single-field ActionModel or a
+    RootModel over a Union of them. Empty for a step model without such a list.
     """
     action = output_format.model_fields.get("action")
     if action is None or typing.get_origin(action.annotation) is not list:
@@ -218,10 +185,10 @@ def _decode_failed(values: dict[str, Any], keys: set[Any]) -> dict[str, Any]:
 def _action_params(name: str, params: Any, model: type[BaseModel]) -> dict[str, Any]:
     """Parameters for action ``name`` that validate as ``model``; raises when there are none.
 
-    The model often sends an action's parameters as JSON text (``"5"``, ``"true"``, ``"[]"``,
-    ``"null"``) when it calls the action as a tool. Pydantic already reads "5" and "true"
-    for int/bool fields; "null" becomes None where the field allows None, and any other
-    string that failed validation is JSON-decoded once. Valid strings are never touched.
+    The model often sends parameters as JSON text (``"5"``, ``"true"``, ``"[]"``, ``"null"``) when
+    it calls an action as a tool. Pydantic already reads "5" and "true" for int/bool fields, "null"
+    becomes None where the field allows it, and any other string that failed validation is
+    JSON-decoded once. Valid strings are never touched.
     """
     params = _as_object(params, f"{name} parameters")
     fields = _param_fields(model, name)
@@ -248,10 +215,10 @@ def build_step(
 ) -> T:
     """The step model for ``calls`` ((action name, parameters) in order) plus the step's own fields.
 
-    ``text`` (the reply's visible text) becomes ``next_goal`` when the model stated none.
-    Step fields are all optional in browser-use's AgentOutput: one that still does not
-    validate after JSON decoding is dropped rather than losing the step. Raises ValueError
-    or ValidationError when an action is unknown or does not validate.
+    ``text`` (the reply's visible text) becomes ``next_goal`` when the model stated none. Step
+    fields are optional in AgentOutput, so one that still does not validate after JSON decoding is
+    dropped rather than losing the step. Raises ValueError or ValidationError when an action is
+    unknown or does not validate.
     """
     models = action_models(output_format)
     if not calls:
@@ -280,8 +247,8 @@ def build_step(
 def step_from_action_calls(calls: list[tuple[str, Any]], output_format: type[T], text: str = "") -> T:
     """The step model for a reply whose tool calls each name an action (see action_tools).
 
-    The step fields in the calls' inputs (memory, next_goal, ...) go to the step, the first
-    non-empty value of each winning, unless that action has a parameter of the same name.
+    Step fields in the calls' inputs (memory, next_goal, ...) go to the step, the first non-empty
+    value winning, unless that action has a parameter of the same name.
     """
     models = action_models(output_format)
     own_fields = set(output_format.model_fields) - {"action"}
@@ -302,14 +269,11 @@ def step_from_action_calls(calls: list[tuple[str, Any]], output_format: type[T],
 
 _TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
-# Step fields the action tools do not ask for. browser-use's AgentOutput.thinking is a
-# written-out reasoning block: in browser-use 0.13.11 nothing reads it beyond logging
-# (log_response at DEBUG, the demo-mode overlay, saved-history dumps; agent_history,
-# memory compaction and the judge use evaluation/memory/next_goal only). Requiring it in
-# every action tool drew a reasoning_extraction refusal on 1 of 27 arena steps
-# (2026-10-24), and llm.agent_llm() already runs these models with adaptive thinking. The
-# pydantic field is optional, so a step without it validates; a call that still sends it
-# is accepted and the value kept. browser-use's own prompt and use_thinking stay as shipped.
+# Step fields the action tools do not ask for. AgentOutput.thinking is a written-out reasoning block
+# that browser-use 0.13.11 only logs; agent_history, memory compaction and the judge use
+# evaluation/memory/next_goal. Requiring it in every action tool drew a reasoning_extraction
+# refusal, and llm.agent_llm() already runs these models with adaptive thinking. The field is
+# optional, so a step without it validates, and one that still sends it is kept.
 ACTION_TOOL_OMITTED_FIELDS = frozenset({"thinking"})
 
 ACTION_TOOL_NOTE = (
@@ -322,7 +286,7 @@ ACTION_TOOL_NOTE = (
 def _compact_nullable(prop: dict[str, Any]) -> dict[str, Any]:
     """``{"anyOf": [X, {"type": "null"}], "default": null}`` as ``X`` with ``"type": [t, "null"]``.
 
-    The same schema in about half the tokens; it is repeated in every action tool.
+    About half the tokens, and it is repeated in every action tool.
     """
     any_of = prop.get("anyOf")
     if not (isinstance(any_of, list) and len(any_of) == 2 and {"type": "null"} in any_of):
@@ -370,9 +334,9 @@ def _action_tools(output_format: type[BaseModel]) -> tuple[str, ...] | None:
 def action_tools(output_format: type[BaseModel]) -> list[dict[str, Any]] | None:
     """One Anthropic tool per available action: the step fields, then the action's parameters.
 
-    claude-sonnet-5-5 calls actions as tools even when offered only the AgentOutput tool, so
-    each action gets a tool whose input is a whole step for that action. None when the
-    actions cannot be presented this way; callers then send the single step tool.
+    claude-sonnet-5-5 calls actions as tools even when offered only the AgentOutput tool, so each
+    action gets a tool whose input is a whole step. None when the actions cannot be presented this
+    way; callers then send the single step tool.
     """
     built = _action_tools(output_format)
     if built is None:
@@ -436,8 +400,6 @@ class ClaudeAgentChat(ChatAnthropic):
     # Schemas the API refused to compile, shared by every instance in the process.
     _grammar_too_large: ClassVar[set[str]] = set()
 
-    # -- shared pieces -----------------------------------------------------
-
     def _base_request(self, messages: list[BaseMessage]) -> tuple[list[Any], Any, dict[str, Any], dict[str, Any], dict[str, Any]]:
         anthropic_messages, system_prompt = AnthropicMessageSerializer.serialize_messages(messages)
         params = self._get_client_params_for_invoke()
@@ -494,8 +456,6 @@ class ClaudeAgentChat(ChatAnthropic):
             stop_details=self._get_stop_details(response),
         )
 
-    # -- entry point -----------------------------------------------------------
-
     async def ainvoke(
         self, messages: list[BaseMessage], output_format: type[T] | None = None, **kwargs: Any
     ) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
@@ -512,8 +472,6 @@ class ClaudeAgentChat(ChatAnthropic):
                     raise ModelProviderError(message=e.message, status_code=e.status_code, model=self.name) from e
                 self._grammar_too_large.add(key)
         return await self._invoke_tool(messages, output_format)
-
-    # -- 1. structured outputs -----------------------------------------------
 
     async def _invoke_structured(
         self, messages: list[BaseMessage], output_format: type[T], strict: dict[str, Any]
@@ -546,8 +504,6 @@ class ClaudeAgentChat(ChatAnthropic):
                 message=f"Structured output did not validate as {output_format.__name__}: {exc}",
                 model=self.name,
             ) from exc
-
-    # -- 2. tool call with repair --------------------------------------------
 
     def _tool_for(self, output_format: type[BaseModel]) -> dict[str, Any]:
         name = output_format.__name__

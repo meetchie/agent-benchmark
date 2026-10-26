@@ -66,7 +66,6 @@ export function pollLimitSeconds(timeoutS: number | null | undefined): number {
   return Math.max(MIN_POLL_SECONDS, Math.ceil(timeoutS) + JUDGE_ALLOWANCE_SECONDS);
 }
 
-// Benchmark
 export async function startBenchmark(
   url: string,
   goal: string,

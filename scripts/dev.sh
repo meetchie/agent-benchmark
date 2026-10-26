@@ -6,22 +6,13 @@
 #
 # Ctrl-C (or SIGTERM or SIGHUP to this script) stops both servers.
 #
-# Settings. The backend loads .env itself (server/runtime_env.py) and so does Vite,
-# so this script does not source it. It reads only the two values that decide which
-# ports to use: BENCHMARK_API_URL (default http://127.0.0.1:8000, the URL Vite
-# proxies to; the backend is started on that port) and BENCHMARK_WEB_PORT (default
-# 5180). A value in your shell beats the one in .env.
+# The backend and Vite load .env themselves. This script reads only the two values that pick ports:
+# BENCHMARK_API_URL (default http://127.0.0.1:8000, the URL Vite proxies to and the port the backend
+# starts on) and BENCHMARK_WEB_PORT (default 5180). A value in your shell beats .env.
 #
-# Processes. The script starts exactly two children and remembers their PIDs. It
-# never matches processes by name.
-# - The web UI (Vite): on exit, that PID and its descendants (found with `pgrep -P`)
-#   get TERM, and KILL only if still alive after 10 s.
-# - The backend runs in a process group of its own, led by its PID, so a Ctrl-C in
-#   the terminal does not reach it directly. On exit it gets one TERM and up to 15 s
-#   to shut down: uvicorn then cancels the runs in progress, which close their
-#   browsers and save their run files. Whatever is still alive in that group after
-#   that, such as a browser whose parent already died, gets TERM and then KILL by
-#   group id. The same happens when the backend exits on its own.
+# It starts exactly two children and stops them by PID, never by process name. The backend gets a
+# process group of its own so a terminal Ctrl-C does not reach it directly, and has time to cancel
+# its runs and save them before anything left in the group is killed.
 
 set -u -o pipefail
 
@@ -33,8 +24,6 @@ WEB_PID=""
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'dev: %s\n' "$*" >&2; exit 1; }
-
-# --- settings ---------------------------------------------------------------
 
 # Value of NAME in $ROOT/.env: the last assignment, without quotes or a trailing comment.
 dotenv_get() {
@@ -77,8 +66,6 @@ case "$API_HOST" in
   127.0.0.1|localhost) ;;
   *) START_BACKEND=0 ;;
 esac
-
-# --- process helpers --------------------------------------------------------
 
 # Is something listening on host $1, port $2?
 listening_on() { (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null; }
@@ -163,16 +150,12 @@ wait_for() {
   return 1
 }
 
-# --- preflight --------------------------------------------------------------
-
 [ -x "$ROOT/web/node_modules/.bin/vite" ] || die "the web packages are not installed. Run 'make setup' first."
 command -v uv >/dev/null 2>&1 || die "uv is not installed (https://docs.astral.sh/uv/)."
 web_port_busy "$WEB_PORT" && die "port $WEB_PORT is already in use (on 127.0.0.1 or ::1). Set BENCHMARK_WEB_PORT to a free port, or stop what is using it."
 if [ "$START_BACKEND" = 1 ]; then
   api_port_busy "$API_PORT" && die "port $API_PORT is already in use. Set BENCHMARK_API_URL (for example http://127.0.0.1:8001) to use another, or stop what is using it."
 fi
-
-# --- backend ----------------------------------------------------------------
 
 if [ "$START_BACKEND" = 1 ]; then
   say "Starting the backend on 127.0.0.1:$API_PORT ..."
@@ -197,8 +180,6 @@ else
   HEALTH=""
 fi
 
-# --- web UI -----------------------------------------------------------------
-
 say "Starting the web UI on port $WEB_PORT ..."
 ( cd "$ROOT/web" && exec ./node_modules/.bin/vite ) &
 WEB_PID=$!
@@ -208,8 +189,6 @@ case $? in
   2) die "the web UI exited before it was ready (the reason is printed above)." ;;
   *) die "the web UI did not answer on http://127.0.0.1:$WEB_PORT/ within 60 s." ;;
 esac
-
-# --- ready ------------------------------------------------------------------
 
 case "$HEALTH" in
   *'"demo_mode":true'*) MODE="demo (canned runs and tasks: no key, no browser, no cost)" ;;

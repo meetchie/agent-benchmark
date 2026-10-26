@@ -16,9 +16,9 @@ for _path in mapping_paths():
 # Plain words that are also action names; only the snake_case names are tool vocabulary.
 TOOL_NAMES = {n for n in TOOL_NAMES if "_" in n}
 
-# The places the March scenarios used before they all moved to one placeholder address. Cities and
-# ZIPs are kept as they are. Streets are not named here at all: every street address a scenario
-# contains must be the placeholder, which rules out any old one without spelling it.
+# Places earlier scenarios used before they moved to one placeholder address. Cities and ZIPs are
+# kept as they are. Streets are not named here: every street address in a scenario must be the
+# placeholder, which rules out any old one without spelling it.
 OLD_PLACES = ("San Mateo", "94403", "Cambridge", "02139")
 # A public building (the Illinois State Capitol), so shipt.com's address search offers it as its
 # first suggestion and accepts it. An address that does not exist is rejected there.

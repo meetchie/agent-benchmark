@@ -1,5 +1,6 @@
-"""Tests for browser_env. No browser is launched: small shell scripts stand in for Chromium in
-the start check, and stand-in processes play a browser that is still running."""
+"""No browser is launched: small shell scripts stand in for Chromium in the start check, and
+stand-in processes play a browser that is still running.
+"""
 
 import os
 import signal
@@ -249,7 +250,7 @@ def test_playwright_revision_is_read_from_the_package():
     assert revision and revision.isdigit()
 
 
-# -- the start check -------------------------------------------------------------------
+# The start check
 
 
 def test_a_chromium_without_its_libraries_names_the_library_and_the_fix(tmp_path, monkeypatch):
@@ -338,9 +339,7 @@ def test_the_check_command_prints_the_version_or_the_problem(fake_chrome, monkey
     assert "install-deps" in capsys.readouterr().err
 
 
-# ---------------------------------------------------------------------------
 # The Agent's own dir (where browser-use writes its step screenshots)
-# ---------------------------------------------------------------------------
 
 
 def test_the_agents_own_dir_is_removed_with_its_profile(fake_chrome, private_tempdir):
@@ -376,9 +375,7 @@ def test_track_agent_dir_only_takes_browser_uses_own_temp_dirs(fake_chrome, wher
     assert target.exists()
 
 
-# ---------------------------------------------------------------------------
 # No browser outlives its run (stand-in processes, no real browser)
-# ---------------------------------------------------------------------------
 
 # A stand-in "browser": started with --user-data-dir like Chromium, it starts a helper
 # child (like Chromium's renderer) and can be told to ignore SIGTERM.

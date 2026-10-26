@@ -1,7 +1,4 @@
-"""
-Benchmark HTTP Server — FastAPI server exposing benchmark start and status endpoints.
-
-Start: uv run uvicorn server:app --port 8000 --reload
+"""FastAPI server for the benchmark. Start it with: uv run uvicorn server:app --port 8000 --reload
 
 Endpoints:
   POST /benchmark/start           → { run_id, remaining, resets_in, limit }
@@ -13,15 +10,15 @@ Endpoints:
   GET  /health                    → { ok, browser_provider, provider, models, auth_mode,
                                       demo_mode, timeout_s }
 
-Configuration (environment or .env; the model and browser settings are documented in
-llm.py, browser_env.py and benchmark_runner.py):
+Environment or .env (model and browser settings are in llm.py, browser_env.py and
+benchmark_runner.py):
   AUTH_MODE            none (default): no sign-in, every request is the user "local".
-                       clerk: Clerk JWT in "Authorization: Bearer" (needs
-                       CLERK_ISSUER_URL or CLERK_PUBLISHABLE_KEY).
-  DAILY_RUN_QUOTA      runs per user per rolling 24 h; 0 = unlimited.
-                       Default 0 with AUTH_MODE=none, 3 with AUTH_MODE=clerk.
-  MAX_CONCURRENT_RUNS  runs one user may have going at once (default 2); 0 = unlimited.
-  DEMO_MODE            true: canned runs and tasks, no API key and no browser needed.
+                       clerk: Clerk JWT in "Authorization: Bearer" (needs CLERK_ISSUER_URL or
+                       CLERK_PUBLISHABLE_KEY).
+  DAILY_RUN_QUOTA      runs per user per rolling 24 h, 0 = unlimited. Default 0 with
+                       AUTH_MODE=none, 3 with clerk.
+  MAX_CONCURRENT_RUNS  runs one user may have going at once (default 2), 0 = unlimited.
+  DEMO_MODE            true: canned runs and tasks, no API key and no browser.
   ALLOWED_ORIGINS      CORS origins (default: the Vite dev servers on localhost).
   INTERNAL_API_KEY     optional shared secret expected in "X-Internal-Key".
   RUNS_DIR             where finished runs are saved (see persistence.py).
@@ -52,11 +49,9 @@ from clerk_auth import verify_clerk_jwt
 
 logger = logging.getLogger(__name__)
 
-# In-memory run state store
 _runs: dict[str, RunState] = {}
 _run_tasks: dict[str, asyncio.Task] = {}  # run_id -> asyncio task (for cancellation)
 
-# Run eviction settings
 _MAX_STORED_RUNS = 200
 
 # Per-user concurrency (active runs); the limit is MAX_CONCURRENT_RUNS
@@ -65,7 +60,6 @@ _active_runs: dict[str, int] = {}  # user_id -> count
 # Internal API key for edge-to-backend auth
 _INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 
-# Rate limiting for task generation
 _task_gen_requests: dict[str, list[float]] = {}  # ip -> list of timestamps
 _TASK_GEN_MAX_PER_MINUTE = 5
 
@@ -73,7 +67,7 @@ AUTH_NONE = "none"
 AUTH_CLERK = "clerk"
 LOCAL_USER_ID = "local"  # the one user when AUTH_MODE=none
 
-_QUOTA_WINDOW = 24 * 60 * 60  # 24 hours in seconds
+_QUOTA_WINDOW = 24 * 60 * 60
 
 
 class ConfigError(RuntimeError):
@@ -114,8 +108,8 @@ def max_concurrent_runs() -> int:
 def validate_startup() -> None:
     """Check the configuration; raises ConfigError with a message the user can act on.
 
-    Runs when the server starts, so a missing API key stops the server there instead of
-    failing the first run. DEMO_MODE needs no key and no browser, so it skips those checks.
+    Runs at startup so a missing API key stops the server there instead of failing the first run.
+    DEMO_MODE needs no key and no browser, so it skips those checks.
     """
     mode = auth_mode()
     daily_run_quota()
@@ -173,7 +167,6 @@ def _load_quota_data() -> dict[str, list[float]]:
     try:
         with open(_quota_file(), "r") as f:
             data = _json.load(f)
-        # Clean expired entries on load
         now = _time.time()
         return {uid: [t for t in ts if now - t < _QUOTA_WINDOW] for uid, ts in data.items()}
     except (OSError, ValueError, AttributeError, TypeError):
@@ -187,8 +180,8 @@ def _save_quota_data():
     except OSError:
         pass
 
-# Run start times per user, for the daily quota. Loaded lazily (first quota check or
-# first quota-limited start) so that importing this module reads no files.
+# Run start times per user, for the daily quota. Loaded on first use so importing this module reads
+# no files.
 _user_run_timestamps: dict[str, list[float]] = {}
 _quota_loaded = False
 
@@ -201,7 +194,7 @@ def _ensure_quota_loaded() -> None:
 
 
 def _get_quota(user_id: str) -> dict:
-    """Return remaining runs and seconds until next reset for a user.
+    """Remaining runs and seconds until the next reset for a user.
 
     With DAILY_RUN_QUOTA=0 there is no limit: ``limit`` is 0 and ``remaining`` is null
     (the UI shows no counter and never blocks a run).
@@ -213,20 +206,18 @@ def _get_quota(user_id: str) -> dict:
     _ensure_quota_loaded()
     now = _time.time()
     timestamps = _user_run_timestamps.get(user_id, [])
-    # Filter to only timestamps within the window
     recent = [t for t in timestamps if now - t < _QUOTA_WINDOW]
     _user_run_timestamps[user_id] = recent
 
     remaining = max(0, limit - len(recent))
     resets_in = 0
     if remaining == 0 and recent:
-        # Time until the oldest run in the window expires
         resets_in = int(recent[0] + _QUOTA_WINDOW - now)
 
     return {"remaining": remaining, "resets_in": resets_in, "limit": limit}
 
-# Demo mode — returns fake data without calling a model or launching a browser
-# Set DEMO_MODE=true in .env to enable
+# Demo mode returns fake data without calling a model or launching a browser (DEMO_MODE=true in
+# .env).
 def _check_demo_mode() -> bool:
     return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
@@ -243,17 +234,15 @@ def _evict_stale_runs():
 def verify_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key")) -> None:
     """If INTERNAL_API_KEY is set, require it in X-Internal-Key (a shared secret for a gateway in front)."""
     if not _INTERNAL_API_KEY:
-        return  # Not configured (the default) — skip check
+        return  # Not configured (the default): skip the check.
     if x_internal_key != _INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def _check_task_gen_rate(request: Request):
-    """Rate limit task generation by IP."""
     ip = request.client.host if request.client else "unknown"
     now = _time.time()
     timestamps = _task_gen_requests.get(ip, [])
-    # Remove old entries
     timestamps = [t for t in timestamps if now - t < 60]
     if len(timestamps) >= _TASK_GEN_MAX_PER_MINUTE:
         raise HTTPException(status_code=429, detail="Too many requests. Try again in a minute.")
@@ -264,22 +253,18 @@ def _check_task_gen_rate(request: Request):
 def configure_logging() -> None:
     """Log INFO and above to stderr from the moment the server starts.
 
-    uvicorn sets up only its own loggers, and browser-use sets up the rest (root logger at
-    INFO, its own line format, noisy HTTP libraries silenced) the first time a run
-    imports it. Until then the INFO lines this app writes, such as the cost of a task
-    generation or the startup notes, go nowhere. This does that setup at startup, by
-    importing browser-use's logging module (importing the package runs its setup, and
-    the explicit call keeps it that way if a later version stops doing so; it does
-    nothing when a handler exists). The log therefore looks the same before and after
-    the first run, and BROWSER_USE_LOGGING_LEVEL still applies. Without browser-use
-    installed, a plain INFO handler is used.
+    uvicorn sets up only its own loggers and browser-use sets up the rest the first time a run
+    imports it, so until then this app's INFO lines (task generation cost, startup notes) go
+    nowhere. Importing browser-use's logging module here does that setup early, and
+    BROWSER_USE_LOGGING_LEVEL still applies. Without browser-use installed, a plain INFO handler is
+    used.
     """
     try:
         from browser_use.logging_config import setup_logging
     except ImportError:
         logging.basicConfig(level=logging.INFO, format="%(levelname)-8s [%(name)s] %(message)s")
     else:
-        setup_logging()
+        setup_logging()  # the import already runs it, this covers a later version that stops doing so
 
 
 # Why the server could not start, kept for _StartupErrorMiddleware (None when it started).
@@ -295,10 +280,9 @@ async def stop_runs(message: str = SERVER_STOPPED_MESSAGE, grace_s: float | None
     """End every run that is still going: cancel it, give it ``grace_s`` seconds, then stop
     whatever browser is left.
 
-    A cancelled run closes its browser and writes its run file as an ``error`` with
-    ``message`` and the usage it had billed. This must happen while the server's event
-    loop is still running: uvicorn re-raises the SIGTERM it caught once the app has shut
-    down, which ends the process on the spot, so nothing after this runs.
+    A cancelled run closes its browser and writes its run file as an ``error`` with ``message`` and
+    the usage it had billed. This must happen while the event loop is still running: uvicorn
+    re-raises the SIGTERM it caught once the app has shut down, which ends the process on the spot.
     """
     pending = []
     for run_id, task in list(_run_tasks.items()):
@@ -343,9 +327,9 @@ async def lifespan(app: FastAPI):
 class _StartupErrorMiddleware:
     """When a bad setting stops the server, tell uvicorn the reason and nothing else.
 
-    Starlette reports a failed lifespan to uvicorn as a full traceback; for a missing
-    API key that buries the one sentence that says what to do. The exception still
-    propagates (uvicorn exits with status 3); only the logged message is shortened.
+    Starlette reports a failed lifespan as a full traceback, which buries the one sentence that says
+    what to do. The exception still propagates (uvicorn exits with status 3); only the logged
+    message is shortened.
     """
 
     def __init__(self, app):
@@ -437,7 +421,7 @@ async def health():
         "models": info["models"],
         "auth_mode": auth_mode(),
         "demo_mode": _check_demo_mode(),
-        "timeout_s": max(1, round(get_agent_timeout())),  # BENCHMARK_TIMEOUT_S
+        "timeout_s": max(1, round(get_agent_timeout())),
     }
 
 
@@ -489,7 +473,6 @@ async def _demo_run(state: RunState, url: str, goal: str):
     # The tokens are made up and no model was called, so no dollar figure: the UI shows tokens only.
     state.cost_usd = None
 
-    # Simulate the judge's analysis delay
     await _aio.sleep(2.0)
 
     state.phases = [
@@ -530,7 +513,6 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
             "error": "Too many runs in progress. Wait for one to finish.",
         })
 
-    # Daily quota check (DAILY_RUN_QUOTA=0 means unlimited)
     quota_limit = daily_run_quota()
     if quota_limit:
         quota = _get_quota(user_id)
@@ -550,7 +532,6 @@ async def start_benchmark_endpoint(req: StartRequest, user: dict = Depends(get_c
     run_id = str(uuid.uuid4())
     try:
         if quota_limit:
-            # Record run timestamp for daily quota
             _user_run_timestamps.setdefault(user_id, []).append(_time.time())
             _save_quota_data()
 
@@ -667,7 +648,7 @@ async def generate_tasks_endpoint(
     _check_task_gen_rate(request)
     if _check_demo_mode():
         import asyncio as _aio
-        await _aio.sleep(1.5)  # Simulate generation delay
+        await _aio.sleep(1.5)
         domain = req.url.split("//")[-1].split("/")[0].replace("www.", "")
         return {"tasks": [
             {"id": 1, "label": f"Add a specific item to cart on {domain}", "goal": f"Go to {domain}.\nSearch for a popular product using the search bar.\nClick on the first result.\nSelect the default size and color options if applicable.\nClick 'Add to Cart' or 'Add to Bag'.\nVERIFY: Look for a cart icon badge showing '1', or a confirmation message."},
@@ -677,7 +658,6 @@ async def generate_tasks_endpoint(
     try:
         # Run in a task so it can be cancelled if the client disconnects
         gen_task = asyncio.create_task(fetch_and_generate(req.url))
-        # Poll for client disconnect while waiting
         while not gen_task.done():
             if await request.is_disconnected():
                 gen_task.cancel()

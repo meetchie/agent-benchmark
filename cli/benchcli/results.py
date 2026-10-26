@@ -11,10 +11,10 @@ the two arms can be run in separate commands):
         summary.json                  per-arm totals, per-task rows and the comparison
         charts/                       written by visualize.py
 
-A record keeps the March shape (meta, result, stats, steps, failure_screenshots) with
-a few additions: ``meta.max_steps``, ``result.final_report``, ``stats`` cache-token counts,
-``judge`` (who graded it and what that cost), ``error`` (why a run stopped early) and, on a
-BrowserUse step, ``actions`` (every action browser-use ran in it, see browseruse_arm).
+A record keeps the March shape (meta, result, stats, steps, failure_screenshots) plus
+``meta.max_steps``, ``result.final_report``, cache-token counts in ``stats``, ``judge`` (who graded
+it and what that cost), ``error`` (why a run stopped early) and, on a BrowserUse step, ``actions``
+(every action browser-use ran in it, see browseruse_arm).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ FAILURE_CATEGORIES = [
 
 
 def utc_iso(moment: datetime | None = None) -> str:
-    """2026-10-24T20:48:59Z (the March logs wrote '+00:00Z', which is not a timestamp)."""
+    """UTC as YYYY-MM-DDTHH:MM:SSZ. The March logs wrote '+00:00Z', which is not a timestamp."""
     moment = moment or datetime.now(timezone.utc)
     return moment.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -145,9 +145,7 @@ def is_skipped(record: dict[str, Any]) -> bool:
     return record["result"].get("verdict") == "skipped"
 
 
-# ---------------------------------------------------------------------------
 # Results directory and cache
-# ---------------------------------------------------------------------------
 
 
 def results_dir_for(results_root: Path, site: str, day: date | None = None) -> Path:
@@ -185,9 +183,7 @@ def load_cached(results_dir: Path, agent: str, task_id: str, *, model: str, max_
     return record
 
 
-# ---------------------------------------------------------------------------
 # Summary
-# ---------------------------------------------------------------------------
 
 
 def agent_stats(results: list[dict[str, Any]]) -> dict[str, Any]:

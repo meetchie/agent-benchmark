@@ -1,13 +1,6 @@
-# agent-benchmark: set up, run and test everything from the repository root.
-#
-#   make setup    install everything (once), plus a pre-commit check against committed keys
-#   make dev      backend + web UI, needs ANTHROPIC_API_KEY in .env
-#   make demo     the same with canned runs, needs no key
-#   make test     every test suite (all of them run, then the failures are listed);
-#                 make test SUITES="server hooks" runs only those (unknown names are refused)
-#
-# Needs uv (https://docs.astral.sh/uv/), Node 20+ with npm, and make. uv fetches
-# Python 3.11 itself. Run `make help` for the full list.
+# agent-benchmark: set up, run and test everything from the repository root. `make help` lists the
+# targets. Needs uv (https://docs.astral.sh/uv/), Node 20+ with npm, and make; uv fetches Python
+# 3.11 itself.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -21,9 +14,8 @@ SITE ?= prose
 TASK ?=
 comma := ,
 
-# The suites `make test` runs, in this order (each is also a target: make test-<suite>).
-# make test SUITES="server hooks" runs only some of them; a name that is not in this
-# list is refused.
+# The suites the test target runs, in this order (each is also a target, test-<suite>).
+# SUITES="server hooks" runs only some of them; a name that is not in this list is refused.
 KNOWN_SUITES := server cli web viewer hooks scripts
 SUITES ?= $(KNOWN_SUITES)
 export UNKNOWN_SUITES := $(filter-out $(KNOWN_SUITES),$(SUITES))

@@ -12,7 +12,7 @@ from benchcli import rindler_arm, sites
 from cli_helpers import TASK
 from rindler_local import build_tools, text_result
 
-# -- a host that answers from a script, so the loop can be tested without a browser ------
+# A host that answers from a script, so the loop can be tested without a browser
 
 
 class FakeHost:
@@ -74,7 +74,7 @@ def run(prose, tmp_path, *, max_steps=6, script=None, timeout_s=None, task=None)
     )
 
 
-# -- tools and prompt ------------------------------------------------------------------
+# Tools and prompt
 
 
 async def test_the_model_gets_the_mapping_actions_and_done_only(prose, tmp_path, monkeypatch):
@@ -131,7 +131,7 @@ def test_describe_digests_a_cart_for_the_judge_trace():
     assert rindler_arm.describe(error_envelope("invalid_action", "no")) .startswith("screen=accessories error invalid_action")
 
 
-# -- the loop ---------------------------------------------------------------------------
+# The loop
 
 
 async def test_a_finished_run_logs_steps_tokens_and_cost(prose, tmp_path, monkeypatch):

@@ -17,13 +17,11 @@ const ACTION_ICONS: Record<string, string> = {
 };
 
 function getStepClass(step: Step, log: ParsedLog): string {
-  // Check if this step is in a loop
   const inLoop = log.friction.some(
     (f) => f.type === "loop" && f.stepIndices.includes(step.index)
   );
   if (inLoop) return "step-loop";
 
-  // Check if this step is long
   if (step.durationMs > 300_000) return "step-critical";
   if (step.durationMs > 60_000) return "step-slow";
 

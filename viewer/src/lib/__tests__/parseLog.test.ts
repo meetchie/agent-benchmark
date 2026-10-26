@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { analyzeFriction, parseLog, parseLogMeta, type Step } from "../parseLog";
-// Real runs from the local arena (2026-10-24), copied unchanged. The Rindler one
-// has a remove_from_cart call that failed (telemetry was_error true) in a run
-// the judge still passed; the browser-use one is a run with no failed call.
+// Real runs from the local arena, copied unchanged. The Rindler one has a remove_from_cart call
+// that failed (telemetry was_error true) in a run the judge still passed; the browser-use one has
+// no failed call.
 import rindlerFailedRemove from "../__fixtures__/arena_rindler_vhlistings_20261024_221846.log?raw";
 import browserUseClean from "../__fixtures__/arena_browseruse_vhlistings_20261024_221948.log?raw";
 

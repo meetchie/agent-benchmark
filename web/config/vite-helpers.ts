@@ -28,9 +28,7 @@ export function authAlias(env: Env): Record<string, string> {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Dev and preview server: port and API proxy
-// ---------------------------------------------------------------------------
 
 export const DEFAULT_API_URL = "http://127.0.0.1:8000";
 export const DEFAULT_WEB_PORT = 5180;
@@ -53,9 +51,8 @@ export function devPort(env: Env): number {
 }
 
 /**
- * Browser path -> backend path. The UI calls /api/benchmark/*; these are the
- * routes the (now deleted) Cloudflare functions used to forward to the Python
- * server, which serves them under /benchmark/*.
+ * Browser path -> backend path. The UI calls /api/benchmark/*; the Python server serves the same
+ * routes under /benchmark/*.
  *   fixed: any request to the path goes to one backend path (POST run -> /benchmark/start)
  *   prefix: only the prefix is swapped, so /status/<id> keeps its id
  */

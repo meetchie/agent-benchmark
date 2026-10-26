@@ -26,9 +26,7 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-# ---------------------------------------------------------------------------
 # Fakes
-# ---------------------------------------------------------------------------
 
 
 def usage(input_tokens=100, output_tokens=20, cache_read=None, cache_write=None):
@@ -120,9 +118,7 @@ JUDGE_SCHEMA = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 
 
 def test_defaults_are_anthropic_sonnet():
@@ -194,9 +190,7 @@ def test_provider_key_present(monkeypatch):
     assert llm.provider_key_present() is True
 
 
-# ---------------------------------------------------------------------------
 # complete_json
-# ---------------------------------------------------------------------------
 
 
 def test_complete_json_structured_output_request(fake_anthropic):
@@ -303,9 +297,7 @@ async def test_acomplete_json_refusal_raises(fake_anthropic):
     assert err.value.kind == "refusal"
 
 
-# ---------------------------------------------------------------------------
 # Refusal fallback routing
-# ---------------------------------------------------------------------------
 
 
 class SplitAnthropic(FakeAnthropic):
@@ -352,9 +344,7 @@ def test_cost_uses_the_model_that_answered(fake_anthropic):
     assert result.cost_usd == pytest.approx(4.00)
 
 
-# ---------------------------------------------------------------------------
 # chat_tools
-# ---------------------------------------------------------------------------
 
 TOOLS = [
     {
@@ -488,9 +478,7 @@ async def test_achat_tools(fake_anthropic):
     assert_no_sampling(holder["async"].messages.calls[0])
 
 
-# ---------------------------------------------------------------------------
 # OpenAI provider
-# ---------------------------------------------------------------------------
 
 
 def openai_response(content=None, tool_calls=None, finish="stop", model="gpt-4o-2024-08-06", refusal=None):
@@ -577,9 +565,7 @@ def test_importing_the_layer_does_not_import_openai():
     assert out.stdout.strip().splitlines()[-1] == "False"
 
 
-# ---------------------------------------------------------------------------
 # agent_llm (browser-use chat model)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("model", ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"])
@@ -634,9 +620,7 @@ def test_agent_llm_openai(monkeypatch):
     assert type(chat).__name__ == "ChatOpenAI" and chat.model == "gpt-4o"
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def test_parse_json_object_variants():
@@ -660,7 +644,7 @@ def test_strict_schema_accepts_pydantic_models():
 
 
 def test_usage_from_browser_use_summary():
-    # numbers from the 2026-10-24 sonnet smoke run (history.usage)
+    # numbers from a real browser-use run (history.usage)
     summary = SimpleNamespace(
         total_prompt_tokens=57696, total_prompt_cached_tokens=43599,
         total_prompt_cache_creation_tokens=14533, total_completion_tokens=987,

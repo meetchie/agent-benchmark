@@ -365,8 +365,8 @@ describe("App in local mode (no Clerk key)", () => {
     const step = (n: number) => ({ step: n, description: "Processing...", elapsed_ms: 1000 });
     const steps = (n: number) => Array.from({ length: n }, (_, i) => step(i + 1));
 
-    // What the backend sends for a run whose six steps all failed on a rejected
-    // API key (run 8957c762): status "error", with the steps, time and usage.
+    // What the backend sends for a run whose six steps all failed on a rejected API key: status
+    // "error", with the steps, time and usage.
     const BAD_KEY = {
       status: "error",
       message: "The agent could not complete a single step: the API key was rejected (check ANTHROPIC_API_KEY).",

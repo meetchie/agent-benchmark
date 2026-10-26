@@ -16,8 +16,8 @@ type View = "home" | "setup" | "running";
 const LOCAL_AUTH_REJECTED =
   "The backend rejected the request as unauthenticated. Run it with AUTH_MODE=none, or set VITE_CLERK_PUBLISHABLE_KEY to sign in with Clerk.";
 
-// How long a run is polled before the UI gives up is derived from the
-// backend's own agent time limit (GET /health timeout_s); see pollLimitSeconds.
+// How long a run is polled before the UI gives up comes from the backend's own agent time limit
+// (GET /health timeout_s); see pollLimitSeconds.
 const POLL_INTERVAL_MS = 1000;
 
 export default function App() {
@@ -34,7 +34,6 @@ export default function App() {
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(() => sessionStorage.getItem("bench_taskId"));
 
-  // Sync to sessionStorage on change
   useEffect(() => { sessionStorage.setItem("bench_url", url); }, [url]);
   useEffect(() => { sessionStorage.setItem("bench_tasks", JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { if (taskId) sessionStorage.setItem("bench_taskId", taskId); else sessionStorage.removeItem("bench_taskId"); }, [taskId]);
@@ -47,13 +46,13 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [analyzingStats, setAnalyzingStats] = useState<RunStats | null>(null);
 
-  // Usage quota. remaining is null until the backend reports a limit (and
-  // stays null when it enforces none, e.g. local mode).
+  // Usage quota. remaining is null until the backend reports a limit, and stays null when it
+  // enforces none (local mode).
   const [quota, setQuota] = useState<Quota>(UNKNOWN_QUOTA);
 
-  // Fetch quota once the visitor is signed in and has left the landing page,
-  // which has no use for it (and so makes no request to a backend that may not
-  // be running yet). In local mode there is no token: ask without one.
+  // Fetch the quota once the visitor is signed in and has left the landing page, so the landing
+  // page makes no request to a backend that may not be running yet. Local mode has no token: ask
+  // without one.
   const atHome = view === "home";
   useEffect(() => {
     if (!isSignedIn || atHome) return;
@@ -64,11 +63,9 @@ export default function App() {
     })();
   }, [isSignedIn, getToken, atHome]);
 
-  // What the backend says about itself (GET /health): whether it plays canned
-  // runs (demo banner) and its agent time limit (how long to keep polling).
-  // Asked once, together with the quota, when the visitor leaves the landing
-  // page, so the landing page makes no request to a backend that may not be
-  // up yet. null until the backend has answered; a run start asks again if so.
+  // What GET /health says about the backend: whether it plays canned runs (demo banner) and its
+  // agent time limit (how long to keep polling). Asked once with the quota when the visitor leaves
+  // the landing page. null until answered; a run start asks again if so.
   const [health, setHealth] = useState<Health | null>(null);
   const healthRef = useRef<Health | null>(null);
   const healthAskedRef = useRef(false);
@@ -299,14 +296,14 @@ export default function App() {
               cost_usd: data.cost_usd,
               agent_model: data.agent_model,
             });
-            // Don't stop polling — wait for "complete"
+            // Keep polling until "complete".
           }
 
           if (data.status === "complete") {
             stopPolling();
             setRunStatus("complete");
-            // A run that ended as an error after some steps is still judged: the
-            // results card shows why it is an error next to the judge's summary.
+            // A run that ended as an error after some steps is still judged: the results card
+            // shows why next to the judge's summary.
             setErrorMsg(data.result_state === "error" ? data.message || null : null);
             setSummary({
               success: data.success,
@@ -444,7 +441,6 @@ export default function App() {
 
   const [showSignIn, setShowSignIn] = useState(false);
 
-  // Close modal when user signs in
   useEffect(() => {
     if (isSignedIn && showSignIn) {
       setShowSignIn(false);

@@ -2,26 +2,25 @@
 // Returns structured JSON with product info, cart contents, and page context.
 // Runs via Playwright page.evaluate() after each action.
 //
-// Revised 2026-10-24 for the live site:
-//  - cart line items are plain divs (no <p>), so each row is found from its quantity <select>
-//  - "Subtotal (n items)" and "Today's total" sit on separate lines and the apostrophe is curly
-//  - product_cards pairs each accessory with its own price (the price list is de-duplicated,
-//    and the three brushes share one price)
-//  - main_text is the gift card page's own text (amounts and how gifting works are plain text)
+// Site quirks it handles:
+// - cart line items are plain divs (no <p>), so each row is found from its quantity <select>
+// - "Subtotal (n items)" and "Today's total" sit on separate lines and the apostrophe is curly
+// - product_cards pairs each accessory with its own price (the price list is de-duplicated, and
+//   the three brushes share one price)
+// - main_text is the gift card page's own text (amounts and how gifting works are plain text)
 () => {
   const data = {};
   const clean = t => (t || '').replace(/\s+/g, ' ').trim();
 
-  // Page title from h1
   const h1 = document.querySelector('h1');
   if (h1) data.title = h1.innerText.trim();
 
-  // Section headings (h2) — product names on accessories page, categories elsewhere
+  // Section headings (h2): product names on the accessories page, categories elsewhere
   const h2List = [...document.querySelectorAll('h2')];
   const h2s = h2List.map(h => h.innerText.trim()).filter(t => t && t.length < 80);
   if (h2s.length) data.sections = h2s;
 
-  // Prices — leaf elements containing $XX.XX
+  // Prices: leaf elements containing $XX.XX
   const priceEls = [...document.querySelectorAll('*')].filter(el => {
     const t = el.innerText;
     return t && /^\$\d+\.\d{2}/.test(t.trim()) && el.children.length === 0;
@@ -46,7 +45,6 @@
     if (cards.length) data.product_cards = cards;
   }
 
-  // Product description — first paragraph in main content area
   const mainContent = document.querySelector('main > div:nth-child(2)') || document.querySelector('main');
   if (mainContent) {
     const desc = mainContent.querySelector('p');
@@ -55,8 +53,8 @@
     }
   }
 
-  // Cart items — one per quantity selector. The row is the nearest ancestor that holds both
-  // the item's name (first line that is not a number, price or "Remove") and its price.
+  // Cart items, one per quantity selector. The row is the nearest ancestor that holds both the
+  // item's name (first line that is not a number, price or "Remove") and its price.
   const cartItems = [];
   document.querySelectorAll('select').forEach(sel => {
     const label = (sel.getAttribute('aria-label') || '').toLowerCase();
@@ -100,7 +98,6 @@
     if (text) data.main_text = text.substring(0, 1500);
   }
 
-  // Buttons — what actions are visible
   const buttons = [...document.querySelectorAll('button')]
     .map(b => b.innerText.trim())
     .filter(t => t && t.length > 2 && t.length < 40);

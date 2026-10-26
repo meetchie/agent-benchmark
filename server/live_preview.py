@@ -1,23 +1,18 @@
 """The live preview of a run: a fresh picture of the agent's page about once a second.
 
-The status reply used to carry one screenshot per finished step, so the preview stayed
-empty while Chromium started, the site loaded and the model chose its first step, and
-then froze for every model turn. ``LivePreview`` keeps the newest frame of the page the
-agent is on, from the moment the browser has a page until the run stops:
+``LivePreview`` keeps the newest frame of the page the agent is on, from the moment the browser has
+a page until the run stops:
 
     preview = LivePreview(on_frame=..., on_page=...)
     preview.start(agent.browser_session)   # a background task: one capture at a time
     preview.nudge()                         # capture now instead of at the next tick
     await preview.stop()                    # idempotent; always call it in a finally
 
-Each frame is a JPEG of the viewport from CDP ``Page.captureScreenshot``, sent on the
-CDP session browser-use already holds for the agent's tab. It never changes what
-browser-use does: it never moves the agent's focus, never attaches to a new target and
-never triggers browser-use's focus recovery, and nothing the agent does waits for it. A
-capture that fails or hangs (the tab just closed, a navigation, a dialog) is dropped
-after ``CAPTURE_TIMEOUT_S`` and logged at debug level. A frame identical to the one
-before is not passed on, so a page that does not move (a model turn) costs the viewer
-nothing.
+Each frame is a JPEG of the viewport from CDP ``Page.captureScreenshot``, sent on the CDP session
+browser-use already holds for the agent's tab. It never changes what browser-use does (no focus
+moves, no new targets, no focus recovery) and nothing the agent does waits for it. A capture that
+fails or hangs (the tab just closed, a navigation, a dialog) is dropped after ``CAPTURE_TIMEOUT_S``
+and logged at debug level. A frame identical to the previous one is not passed on.
 """
 
 from __future__ import annotations
@@ -29,7 +24,6 @@ from typing import Any, Awaitable, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-# How often the page is captured while the run is going.
 FRAME_INTERVAL_S = 1.0
 # How often the loop looks before it has a first frame: for the browser's first tab,
 # then for the site on it (the blank tab is not captured).
@@ -67,10 +61,9 @@ def _site_tab(browser_session: Any) -> Optional[str]:
 async def capture_page(browser_session: Any, quality: int = JPEG_QUALITY) -> Optional[bytes]:
     """One JPEG of the agent's tab, or None while it shows no site or has no live session.
 
-    The session is asked for only after ``validate_session`` said the tab has one, with
-    no await in between: asking browser-use for the session of a tab that has just gone
-    away makes it reset the agent's focus and start its recovery, which is browser-use's
-    own business. ``focus=False`` keeps the agent's focus where it is.
+    The session is asked for only after ``validate_session`` said the tab has one, with no await in
+    between. Asking browser-use for the session of a tab that has just gone away makes it reset the
+    agent's focus and start its recovery. ``focus=False`` keeps the agent's focus where it is.
     """
     target_id = _site_tab(browser_session)
     if target_id is None:
@@ -109,8 +102,8 @@ class LivePreview:
         self._last: Optional[bytes] = None
         self._saw_page = False
         self._stopped = False
-        self.captures = 0  # capture attempts
-        self.failures = 0  # attempts that raised or timed out
+        self.captures = 0
+        self.failures = 0
 
     def start(self, browser_session: Any) -> None:
         """Start the background loop for ``browser_session`` (once; later calls do nothing)."""

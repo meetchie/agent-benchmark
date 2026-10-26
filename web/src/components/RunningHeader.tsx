@@ -103,7 +103,6 @@ export function RunningHeader({
                 {isRunning ? "RUNNING " : ""}{displayTime}
               </span>
             )}
-            {/* Runs remaining — hidden on mobile, shown in sub-bar */}
             {remainingRuns !== undefined && remainingRuns > 0 && (
               <span className="hidden sm:inline text-xs text-slate-500">
                 {remainingRuns === 1 && (
@@ -127,7 +126,6 @@ export function RunningHeader({
           </button>
           </div>
         </div>
-        {/* Mobile sub-bar for remaining runs */}
         {remainingRuns !== undefined && remainingRuns > 0 && (
           <div className="sm:hidden text-[10px] text-slate-400 mt-1 text-right">
             <strong className="text-[#3c49ad]">{remainingRuns}</strong> {runsRemainingLabel(remainingRuns, runLimit)}

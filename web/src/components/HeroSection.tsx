@@ -10,7 +10,7 @@ export function HeroSection({ onSignInClick, onCTA }: HeroSectionProps) {
 
   return (
     <section className="min-h-[90vh] w-full bg-[#f0f4ff]">
-      {/* Nav bar — same dims as main site TopNav */}
+      {/* Same dimensions as the main site's TopNav */}
       <nav className="relative z-50 mx-4 flex items-center justify-between pt-2 pb-3 sm:mx-8 md:mx-14 md:pt-3 md:pb-4 lg:mx-24">
         <div className="flex items-center gap-2 sm:gap-3 text-2xl font-semibold tracking-tight text-black">
           <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto object-contain sm:h-12" />
@@ -26,16 +26,14 @@ export function HeroSection({ onSignInClick, onCTA }: HeroSectionProps) {
         )}
       </nav>
 
-      {/* Hero block — same dims as main site Hero */}
+      {/* Same dimensions as the main site's Hero */}
       <div
         className="relative mx-4 min-h-[82vh] overflow-hidden sm:mx-8 md:mx-14 lg:mx-24"
         style={{ background: "linear-gradient(135deg, #3c49ad 0%, #4a58b8 40%, #5a67c0 100%)" }}
       >
-        {/* Animation layers */}
         <HeroFluidGradient />
         <FlickeringGrid />
 
-        {/* Content — centered vertically */}
         <div className="relative z-20 flex min-h-[82vh] flex-col justify-center px-6 md:px-12 lg:px-16">
           <div className="max-w-xl">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white leading-[1.08]">

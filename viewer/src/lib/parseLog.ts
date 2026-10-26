@@ -1,4 +1,4 @@
-// ─── Types ───────────────────────────────────────────────────────────────────
+// Types
 
 export interface TelemetryEvent {
   trace_id: string;
@@ -163,8 +163,6 @@ export function parseLogMeta(raw: string, filename: string): LogFileMeta {
   };
 }
 
-// ─── Parser ──────────────────────────────────────────────────────────────────
-
 /**
  * Parse an arena run log. Throws an Error whose message can be shown to the reader
  * as is when the text is not an arena run log or its telemetry list is damaged, so
@@ -173,7 +171,6 @@ export function parseLogMeta(raw: string, filename: string): LogFileMeta {
 export function parseLog(raw: string, filename: string = ""): ParsedLog {
   const { header, telemetryRaw } = splitLog(raw);
 
-  // Parse header fields
   const agent = extractField(header, "Agent") ?? "Unknown";
   const scenario = extractField(header, "Scenario") ?? "Unknown";
   const runId = extractField(header, "Run ID") ?? "";
@@ -183,24 +180,20 @@ export function parseLog(raw: string, filename: string = ""): ParsedLog {
   // Goal: everything between "Goal:" line and "Start URL:" line
   const goal = extractGoal(header);
 
-  // Duration
   const durationStr = extractField(header, "Duration") ?? "0";
   const durationSeconds = parseFloat(durationStr.replace("s", ""));
 
-  // Success — handle multiple formats
+  // Success: several formats exist
   const successRaw =
     extractField(header, "Agent Reported Success") ??
     extractField(header, "Success") ??
     "Unknown";
   const success = successRaw.toLowerCase() === "true";
 
-  // Errors
   const errorsDetected = extractField(header, "Errors Detected") ?? null;
 
-  // Judge evaluation
   const judge = extractJudge(header);
 
-  // Tokens
   const tokenLine = extractField(header, "Token Burn") ?? "0 (0 in / 0 out)";
   const tokenMatch = tokenLine.match(
     /([\d,]+)\s*\(([\d,]+)\s*in\s*\/\s*([\d,]+)\s*out\)/
@@ -209,20 +202,16 @@ export function parseLog(raw: string, filename: string = ""): ParsedLog {
   const tokensInput = tokenMatch ? parseNum(tokenMatch[2]) : 0;
   const tokensOutput = tokenMatch ? parseNum(tokenMatch[3]) : 0;
 
-  // Cost
   const costStr = extractField(header, "Cost") ?? "0";
   const costUsd = parseFloat(costStr.replace("$", ""));
 
   const events = parseTelemetry(telemetryRaw);
 
-  // Build steps from events
   const steps = buildSteps(events);
 
-  // Extract artifact URL
   const artifactEvent = events.find((e) => e.event_type === "artifact");
   const artifactUrl = artifactEvent?.artifact_url ?? null;
 
-  // Analyze friction
   const friction = analyzeFriction(steps, errorsDetected);
 
   return {
@@ -248,7 +237,7 @@ export function parseLog(raw: string, filename: string = ""): ParsedLog {
   };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 const TELEMETRY_LINE = /^Telemetry Events:[ \t]*\r?$/m;
 
@@ -297,7 +286,6 @@ function parseTelemetry(text: string): TelemetryEvent[] {
 }
 
 function extractField(text: string, field: string): string | null {
-  // Match "Field: value" at start of line
   const regex = new RegExp(`^${field}:\\s*(.+)$`, "m");
   const match = text.match(regex);
   return match ? match[1].trim() : null;
@@ -308,7 +296,6 @@ function extractGoal(header: string): string {
   if (goalStart < 0) return "";
   const afterGoal = header.slice(goalStart + 5);
 
-  // Find the next known header field
   const endMarkers = ["Start URL:", "Duration:", "Success:", "Agent Reported Success:"];
   let endIdx = afterGoal.length;
   for (const marker of endMarkers) {
@@ -413,7 +400,6 @@ export function analyzeFriction(
       loopIndices = [];
     }
   }
-  // Flush remaining loop
   if (loopIndices.length >= 2) {
     friction.push({
       type: "loop",
@@ -490,7 +476,7 @@ export function analyzeFriction(
   return friction;
 }
 
-// ─── Formatting Utils ────────────────────────────────────────────────────────
+// Formatting
 
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds.toFixed(1)}s`;

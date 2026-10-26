@@ -1,9 +1,7 @@
-"""
-Benchmark Visualization: draw comparison charts from a run's summary.json.
+"""Draw comparison charts from a run's summary.json.
 
-Usage: cli/viz.sh <results-dir>
-Example: cli/viz.sh cli/results/prose-2026-10-24
-(a relative path is tried against the current directory first, then against cli/)
+Usage: cli/viz.sh <results-dir>, e.g. cli/viz.sh cli/results/prose-<date>. A relative path is tried
+against the current directory first, then against cli/.
 
 If only one arm was run, the charts that compare the arms are skipped and the
 other charts mark the missing arm "not run".
@@ -48,7 +46,6 @@ def arm_labels(summary: dict) -> list:
 
 
 def chart_success_rate(summary: dict, charts_dir: Path):
-    """Side-by-side success rate bar chart."""
     fig, ax = plt.subplots(figsize=(6, 4))
     agents = arm_labels(summary)
     rates = [summary["browseruse"]["success_rate"] * 100, summary["rindler"]["success_rate"] * 100]
@@ -66,7 +63,6 @@ def chart_success_rate(summary: dict, charts_dir: Path):
 
 
 def chart_grouped_bars(summary: dict, charts_dir: Path, metric: str, ylabel: str, title: str, filename: str):
-    """Generic grouped bar chart comparing per-task metrics."""
     per_task = summary["per_task"]
     task_ids = [t["task_id"] for t in per_task]
     bu_vals = [t["browseruse"][metric] for t in per_task]
@@ -89,7 +85,6 @@ def chart_grouped_bars(summary: dict, charts_dir: Path, metric: str, ylabel: str
 
 
 def chart_failure_categories(summary: dict, charts_dir: Path, agent: str):
-    """Pie chart of failure categories for one agent."""
     cats = summary[agent].get("failure_categories", {})
     if not cats:
         return
@@ -138,11 +133,11 @@ def relative_chart_data(summary: dict) -> list:
 
 
 def chart_relative_comparison(summary: dict, charts_dir: Path):
-    """Grouped bars, one pair per metric, each metric scored against the better arm (1.0 = best).
+    """Grouped bars, one pair per metric, each scored against the better arm (1.0 = best).
 
-    Both arms are scored the same way on every metric, so neither bar is zero by construction.
-    The raw averages are printed above the bars; the bar height only says how close an arm
-    comes to the better one."""
+    Both arms are scored the same way on every metric, so neither bar is zero by construction. The
+    raw averages are printed above the bars.
+    """
     rows = relative_chart_data(summary)
     labels = [r["label"] for r in rows]
     bu_scores, ri_scores = [r["browseruse"] for r in rows], [r["rindler"] for r in rows]
@@ -221,7 +216,6 @@ def chart_token_usage(summary: dict, charts_dir: Path):
 
 
 def print_summary_table(summary: dict):
-    """Print a text summary table to the terminal."""
     bu = summary["browseruse"]
     ri = summary["rindler"]
 

@@ -1,39 +1,27 @@
 """LLM provider layer shared by the benchmark API, the arena and the comparison CLI.
 
-Provider
-    ``LLM_PROVIDER=anthropic`` (default) or ``openai``. The openai package is an
-    optional extra and is only imported when the openai provider is used.
+``LLM_PROVIDER`` is ``anthropic`` (default) or ``openai``. The openai package is an optional extra,
+imported only when that provider is used.
 
-Models, per role (``agent`` | ``judge`` | ``taskgen``)
-    ``BENCHMARK_AGENT_MODEL``, ``BENCHMARK_JUDGE_MODEL``, ``BENCHMARK_TASKGEN_MODEL``.
-    Defaults: ``claude-sonnet-5-5`` (anthropic), ``gpt-4o`` (openai, the original setup).
+Models per role (``agent``, ``judge``, ``taskgen``): ``BENCHMARK_AGENT_MODEL``,
+``BENCHMARK_JUDGE_MODEL``, ``BENCHMARK_TASKGEN_MODEL``. Defaults are ``claude-sonnet-5-5``
+(anthropic) and ``gpt-4o`` (openai).
 
-Effort, per role (Anthropic only)
-    ``BENCHMARK_AGENT_EFFORT`` / ``BENCHMARK_JUDGE_EFFORT`` / ``BENCHMARK_TASKGEN_EFFORT``:
-    low | medium | high | xhigh | max, or ``default`` to send none. The agent defaults to
-    ``medium`` on current Claude models; judge and taskgen use the model's own default.
+Effort per role (Anthropic only): ``BENCHMARK_AGENT_EFFORT`` / ``BENCHMARK_JUDGE_EFFORT`` /
+``BENCHMARK_TASKGEN_EFFORT`` take low | medium | high | xhigh | max, or ``default`` to send none. The
+agent defaults to ``medium`` on current Claude models. Judge and taskgen use the model's own default.
 
-Refusal fallback (Anthropic only)
-    ``LLM_FALLBACKS=default`` (default) sends the server-side ``fallbacks: "default"``
-    parameter for the models that accept it, so a safety-classifier decline is retried
-    on Anthropic's recommended fallback model inside the same call. ``off`` disables it.
+``LLM_FALLBACKS=default`` (the default, Anthropic only) sends the server-side ``fallbacks:
+"default"`` parameter for models that accept it, so a safety-classifier decline is retried on
+Anthropic's recommended fallback inside the same call. ``off`` disables it.
 
-What every request obeys, whatever the caller passes:
-    * no ``temperature`` / ``top_p`` / ``top_k`` (current Sonnet and Haiku reject them),
-    * no forced ``tool_choice``; tool calls use ``{"type": "auto"}``,
-    * no assistant prefill; JSON comes from structured outputs (``output_config.format``),
-    * ``stop_reason`` is checked: ``refusal`` and ``max_tokens`` raise ``LLMError``
-      rather than returning partial output.
+Every request, whatever the caller passes:
 
-Public interface
-    provider(), model_for(role), effort_for(role, model), describe(), provider_key_present()
-    complete_json(...) / acomplete_json(...)  -> JSONResult (a dict with .usage .model .cost_usd)
-    chat_tools(...) / achat_tools(...)        -> dict {text, tool_calls, stop_reason, usage, ...}
-    append_tool_results(), append_assistant(), tool_result(), user_message()
-    agent_llm(model=None)                     -> chat model object for browser_use.Agent(llm=...)
-    is_current_claude(model), supports_structured_outputs(model), strict_schema(schema)
-    usage_from_browser_use(history.usage) -> Usage  (then .cost_usd(model))
-    LLMError, Usage, JSONResult
+* has no ``temperature`` / ``top_p`` / ``top_k`` (current Sonnet and Haiku reject them)
+* has no forced ``tool_choice``, tool calls use ``{"type": "auto"}``
+* has no assistant prefill, JSON comes from structured outputs (``output_config.format``)
+* has ``stop_reason`` checked: ``refusal`` and ``max_tokens`` raise ``LLMError`` instead of
+  returning partial output
 """
 
 from __future__ import annotations
@@ -68,7 +56,6 @@ ROLE_EFFORT_ENV = {
     "taskgen": "BENCHMARK_TASKGEN_EFFORT",
 }
 DEFAULT_MODELS = {ANTHROPIC: "claude-sonnet-5-5", OPENAI: "gpt-4o"}
-# Effort used when the role's env var is unset (current Claude models only).
 DEFAULT_EFFORT = {"agent": "medium", "judge": None, "taskgen": None}
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
@@ -76,8 +63,8 @@ EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 # more than ten minutes of generation, and thinking counts toward max_tokens.
 DEFAULT_MAX_TOKENS = 16000
 
-# Server-side refusal fallback, "default" form (Anthropic picks the fallback model by
-# refusal category). Claude Haiku 5.5 has no server-side fallback, so it is not listed.
+# Server-side refusal fallback, "default" form (Anthropic picks the model by refusal category).
+# Claude Haiku 5.5 has none, so it is not listed.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 FALLBACK_MODELS = frozenset({"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"})
 
@@ -89,7 +76,6 @@ _CURRENT_CLAUDE = re.compile(
     r"|opus-4-[678]|sonnet-4-6"
     r")$"
 )
-# Claude models with structured outputs (output_config.format), per the API reference.
 _STRUCTURED_OUTPUT_CLAUDE = re.compile(
     r"^(anthropic\.)?claude-("
     r"(sonnet|opus|haiku|fable|mythos)-5(-\d+)?"
@@ -101,9 +87,9 @@ _STRUCTURED_OUTPUT_CLAUDE = re.compile(
 class LLMError(RuntimeError):
     """A model call that produced no usable result.
 
-    ``kind`` is one of: "refusal", "max_tokens", "bad_json", "api", "config".
-    ``category`` carries the refusal category when the API gave one; ``status_code``
-    the HTTP status for "api" errors; ``usage`` what the failed call still billed.
+    ``kind`` is "refusal", "max_tokens", "bad_json", "api" or "config". ``category`` is the refusal
+    category when the API gave one, ``status_code`` the HTTP status for "api" errors, ``usage`` what
+    the failed call still billed.
     """
 
     def __init__(
@@ -172,10 +158,10 @@ class Usage:
 class JSONResult(dict):
     """The parsed JSON object, plus what the call cost.
 
-    It is a plain dict for every existing use (``result["success"]``, ``json.dumps``),
-    with three extra attributes: ``usage`` (Usage), ``model`` (the model that answered,
-    which can differ from the requested one after a refusal fallback) and
-    ``stop_reason``; ``cost_usd`` is derived from them (None for unpriced models).
+    A plain dict for existing uses (``result["success"]``, ``json.dumps``) with three extra
+    attributes: ``usage``, ``model`` (the model that answered, which can differ from the requested
+    one after a refusal fallback) and ``stop_reason``. ``cost_usd`` is derived from them and is None
+    for unpriced models.
     """
 
     usage: Usage
@@ -193,13 +179,8 @@ class JSONResult(dict):
         return self.usage.cost_usd(self.model)
 
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
 
 def provider() -> str:
-    """LLM_PROVIDER, default "anthropic"."""
     value = (os.getenv("LLM_PROVIDER") or ANTHROPIC).strip().lower()
     if value not in PROVIDERS:
         raise LLMError(
@@ -288,10 +269,6 @@ def describe() -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Clients (factories, so tests can replace them)
-# ---------------------------------------------------------------------------
-
 
 def _anthropic_client() -> anthropic.Anthropic:
     return anthropic.Anthropic()
@@ -319,10 +296,6 @@ def _openai_client():
 def _openai_async_client():
     return _import_openai().AsyncOpenAI()
 
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
 
 
 def strict_schema(schema: Mapping[str, Any] | type) -> dict[str, Any]:
@@ -469,10 +442,6 @@ def _resolve(role: str, model: str | None) -> str:
     return (model or "").strip() or model_for(role)
 
 
-# ---------------------------------------------------------------------------
-# complete_json
-# ---------------------------------------------------------------------------
-
 
 def _json_request(
     system: str | None,
@@ -559,14 +528,13 @@ def complete_json(
 ) -> JSONResult:
     """One model call that must return a JSON object.
 
-    ``schema`` is a JSON schema dict or a pydantic model class; with Anthropic it is
-    enforced through structured outputs, so the reply is guaranteed to match it. Pass
-    None to rely on the prompt alone. ``model`` overrides ``model_for(role)``;
-    ``effort`` overrides ``effort_for(role, model)``.
+    ``schema`` is a JSON schema dict or a pydantic model class. With Anthropic it is enforced
+    through structured outputs; pass None to rely on the prompt alone. ``model`` overrides
+    ``model_for(role)``, ``effort`` overrides ``effort_for(role, model)``.
 
-    Raises LLMError on refusal, truncation, unparseable output or an API error.
-    The OpenAI provider keeps the original behavior: chat completions in JSON mode
-    (``response_format={"type": "json_object"}``), schema not enforced.
+    Raises LLMError on refusal, truncation, unparseable output or an API error. OpenAI uses chat
+    completions in JSON mode (``response_format={"type": "json_object"}``) and does not enforce the
+    schema.
     """
     if provider() == OPENAI:
         model = _resolve(role, model)
@@ -649,26 +617,21 @@ async def _aclose(client: Any) -> None:
             pass
 
 
-# ---------------------------------------------------------------------------
-# chat_tools: one turn of a hand-written tool-calling loop
-# ---------------------------------------------------------------------------
-#
-# Tools are given in Anthropic's shape: {"name", "description", "input_schema"} (an
-# optional "strict": True is passed through to Anthropic). The transcript is a list of
-# messages that starts with user_message(...); grow it ONLY with append_assistant() and
-# append_tool_results(), which keep it in the active provider's wire format and keep
-# each assistant turn exactly as the model returned it (thinking blocks included, which
-# current Claude models require to be sent back unchanged).
-#
-# Returned turn (a plain dict):
-#   text            str, the turn's visible text ("" if none)
-#   tool_calls      [{"id", "name", "input": dict}], in the order the model made them
-#   stop_reason     "tool_use" | "end_turn" | "stop_sequence" | "pause_turn" | ...
-#   usage           Usage.to_dict() for this call
-#   model           the model that answered
-#   cost_usd        float | None
-#   provider        "anthropic" | "openai"
-#   assistant_message   the assistant turn to append (use append_* helpers)
+# chat_tools: one turn of a hand-written tool-calling loop.
+# Tools are given in Anthropic's shape: {"name", "description", "input_schema"} (an optional
+# "strict": True is passed through). The transcript starts with user_message(...). Grow it only with
+# append_assistant() and append_tool_results(), which keep it in the active provider's wire format
+# and keep each assistant turn exactly as the model returned it. Current Claude models need the
+# thinking blocks sent back unchanged.
+# The returned turn is a dict with:
+#   text                str, the turn's visible text ("" if none)
+#   tool_calls          [{"id", "name", "input": dict}], in the order the model made them
+#   stop_reason         "tool_use" | "end_turn" | "stop_sequence" | "pause_turn" | ...
+#   usage               Usage.to_dict() for this call
+#   model               the model that answered
+#   cost_usd            float | None
+#   provider            "anthropic" | "openai"
+#   assistant_message   the assistant turn to append (use the append_* helpers)
 
 
 def user_message(text: str) -> dict[str, Any]:
@@ -686,7 +649,7 @@ def tool_result(tool_use_id: str, content: Any, *, is_error: bool = False) -> di
 
 
 def append_assistant(messages: Sequence[dict[str, Any]], turn: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """New transcript: messages + the turn's assistant message (for turns without tool calls)."""
+    """New transcript: messages plus the turn's assistant message (for turns without tool calls)."""
     return [*messages, turn["assistant_message"]]
 
 
@@ -697,7 +660,7 @@ def append_tool_results(
     *,
     extra_text: str | None = None,
 ) -> list[dict[str, Any]]:
-    """New transcript: messages + the assistant turn + every tool result.
+    """New transcript: messages, the assistant turn and every tool result.
 
     ``results`` holds one tool_result(...) per tool call in the turn (any order); a
     missing one raises ValueError because the API rejects unanswered tool calls.
@@ -935,23 +898,17 @@ async def achat_tools(
     return _turn_from_anthropic(response, model)
 
 
-# ---------------------------------------------------------------------------
-# agent_llm: the chat model browser_use.Agent takes
-# ---------------------------------------------------------------------------
-
 
 def agent_llm(model: str | None = None, *, max_tokens: int = DEFAULT_MAX_TOKENS, effort: str | None = None):
     """Chat model object for ``browser_use.Agent(llm=...)``.
 
-    Anthropic, models with structured outputs (all current Claude models): the
-    ``agent_llm.ClaudeAgentChat`` adapter, which uses structured outputs for small step
-    schemas and validates-and-repairs the tool call for the full step schema, counting
-    every attempt's tokens (see that module for why). Other Claude models: browser-use's
-    own ChatAnthropic.
-    Either way: no sampling params, adaptive thinking on current models (which also makes
-    browser-use use tool_choice auto, never a forced tool), effort from
-    effort_for("agent", model), and the server-side refusal fallback where accepted.
-    OpenAI: browser-use's ChatOpenAI (the original gpt-4o setup).
+    Anthropic models with structured outputs (all current Claude models) get the
+    ``agent_llm.ClaudeAgentChat`` adapter. It uses structured outputs for small step schemas and
+    validates and repairs the tool call for the full one, counting every attempt's tokens (see that
+    module). Other Claude models get browser-use's own ChatAnthropic. Either way there are no
+    sampling params, adaptive thinking on current models (which also makes browser-use use
+    tool_choice auto), effort from effort_for("agent", model), and the server-side refusal fallback
+    where accepted. OpenAI gets browser-use's ChatOpenAI.
     """
     model = _resolve("agent", model)
     if provider() == OPENAI:

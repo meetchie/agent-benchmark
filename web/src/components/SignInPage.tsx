@@ -14,7 +14,6 @@ export function SignInModal({ onClose }: SignInModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
       <div className="w-full max-w-[420px] mx-4">
         <div className="bg-white border-2 border-slate-200 max-h-[90vh] flex flex-col">
-          {/* Close button row */}
           {onClose && (
             <div className="shrink-0 flex justify-end p-4 pb-0 bg-white">
               <button
@@ -29,7 +28,6 @@ export function SignInModal({ onClose }: SignInModalProps) {
           )}
 
           <div className="modal-scroll px-6 pb-6" style={onClose ? undefined : { paddingTop: '1.5rem' }}>
-          {/* Logo + heading inside card */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2.5 mb-3">
               <img src="/rindler-logo.png" alt="Rindler" className="h-9 w-auto" />

@@ -1,9 +1,9 @@
 """A tiny local shop for the rindler_local tests: static-looking HTML from an in-process server.
 
-Pages: / (landing), /search?q=..., ... Every page shows a small newsletter popup a moment
-after it loads (closing it calls /api/dismiss, which the tests count).
-Other pages: /search?q=..., /products/<slug>, /cart, /checkout. Cart state lives on the server
-object, so add/remove are visible across page loads. Nothing leaves 127.0.0.1.
+Pages: / (landing), /search?q=..., /products/<slug>, /cart, /checkout. Every page shows a small
+newsletter popup a moment after it loads (closing it calls /api/dismiss, which the tests count).
+Cart state lives on the server object, so add/remove are visible across page loads. Nothing leaves
+127.0.0.1.
 """
 
 from __future__ import annotations

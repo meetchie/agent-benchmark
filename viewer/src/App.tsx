@@ -51,7 +51,6 @@ function App() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const rawCache = useRef<Map<string, string>>(new Map());
 
-  // Sync hash with page state
   useEffect(() => {
     const onHashChange = () => {
       setPage(window.location.hash === "#logs" ? "logs" : "results");
@@ -65,7 +64,6 @@ function App() {
     setPage(p);
   }, []);
 
-  // Load manifest on mount
   useEffect(() => {
     setMetaLoading(true);
     fetch("/logs/manifest.json")
@@ -316,7 +314,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="app-header">
         <div className="header-left">
           <img src="/logo.png" alt="Rindler" className="header-logo" />
@@ -361,7 +358,6 @@ function App() {
         )}
       </header>
 
-      {/* Main content */}
       {page === "results" ? (
         <ResultsPage
           logSelectorUI={logSelectorUI}

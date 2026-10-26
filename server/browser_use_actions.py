@@ -18,11 +18,10 @@ ERROR_TEXT_LIMIT = 300
 #
 #     ActionResult(extracted_content='Element index 9 not available - page may have changed. Try refreshing browser state.')
 #
-# Nothing was clicked, typed or selected, but the action reads as done unless it is marked.
-# The mark is kept narrow: the result has no error, it starts with this wording, and the
-# index in it is the one the action itself named. (scroll reports a missing element as an
-# error, which is shown as one.) tests/test_browser_use_actions.py checks that the installed
-# browser-use still words it this way.
+# Nothing was clicked, typed or selected, but the action reads as done unless it is marked. The mark
+# is narrow: the result has no error, it starts with this wording, and the index in it is the one
+# the action named. (scroll reports a missing element as an error.)
+# tests/test_browser_use_actions.py checks that the installed browser-use still words it this way.
 ELEMENT_NOT_AVAILABLE = "Element index {index} not available - page may have changed."
 
 
@@ -40,22 +39,15 @@ def element_not_available(params: Any, result: Any) -> Optional[int]:
 
 
 def ran_actions(history_items: list) -> List[Dict[str, Any]]:
-    """The actions browser-use ran in some history items, as
-    {"action", "params", "element", "error", "not_run"} dicts.
+    """The actions browser-use ran in some history items.
 
-    The model can plan several actions in one step, and browser-use runs them in order but
-    stops early: after an action that fails, after a navigation, once the page changes, or at
-    a done that is not the step's only action. Each action it ran left one result in
-    item.result, in the same order, so pairing the planned actions with the results (as
-    browser-use's own AgentHistoryList.action_history() does) keeps the ones that ran and
-    drops the ones it skipped. history.model_actions() lists every planned action, skipped or
-    not, so it cannot be used for this.
-
-    "element" is the accessible name of the element the action targeted, when it has one: the
-    index means nothing outside that page, the name says what was clicked or typed into.
-    "error" is there only for an action that failed, as one line of its error. "not_run" is
-    there only for an action browser-use answered without doing anything because its element
-    was gone ("element 9 was not available", see ELEMENT_NOT_AVAILABLE).
+    Each is an {"action", "params", "element", "error", "not_run"} dict. browser-use stops a step
+    early after a failed action, a navigation, a page change, or a done that is not the step's only
+    action. Results (one per action that ran, in order) are paired with the planned actions, so the
+    skipped ones drop out. history.model_actions() lists every planned action, so it cannot be used.
+    "element" is the accessible name of the targeted element, when there is one. "error" is one
+    line, only for an action that failed. "not_run" is only for an action browser-use answered
+    without doing anything because its element was gone (see ELEMENT_NOT_AVAILABLE).
     """
     out: List[Dict[str, Any]] = []
     for item in history_items:

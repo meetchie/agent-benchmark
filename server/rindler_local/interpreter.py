@@ -1,7 +1,6 @@
 """Running mapping steps on a Playwright page.
 
-Step semantics (the behavior the March 2026 Rindler server had, written for Playwright's
-async Python API):
+Step semantics, as in the March 2026 Rindler server but on Playwright's async Python API:
 
     navigate   page.goto(url), waits for DOMContentLoaded (timeout 15 s or the step's).
     click      the step's selector, then each fallback in order; every attempt gets

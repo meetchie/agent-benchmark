@@ -24,7 +24,7 @@ contains() { if grep -qF -- "$2" "$TMP/out"; then ok; else bad "$1 (no '$2' in: 
 lacks()    { if grep -qF -- "$2" "$TMP/out"; then bad "$1 (found '$2')"; else ok; fi; }
 status()   { if [ "$2" -eq "$3" ]; then ok; else bad "$1 (exit $2, wanted $3)"; fi; }
 
-# --- make setup's closing message -------------------------------------------
+# make setup's closing message
 NEXT="Run 'make dev'."
 BLANK="has no ANTHROPIC_API_KEY value yet"
 ENVF="$TMP/env"
@@ -55,7 +55,7 @@ contains "a key in the shell counts" "$NEXT"; lacks "never prints the shell's va
 clean sh "$ROOT/scripts/setup-done.sh" "$TMP/no-such-file"
 contains "no .env yet" "cp .env.example .env"
 
-# --- make setup ends by starting Chromium, before it says it is done ----------
+# make setup ends by starting Chromium, before it says it is done
 clean make -C "$ROOT" -n setup
 status "make -n setup runs" $? 0
 contains "setup starts Chromium once" "uv run python browser_env.py"
@@ -65,7 +65,7 @@ else
   bad "the Chromium check comes before 'Setup done.' (got: $(cat "$TMP/out"))"
 fi
 
-# --- make test SUITES=... ----------------------------------------------------
+# The SUITES check
 clean make -C "$ROOT" test SUITES="nonesuch hooks"
 status "an unknown suite fails" $? 2
 contains "names the unknown suite" "Unknown test suite: nonesuch"
@@ -88,9 +88,8 @@ clean make -C "$ROOT" -n test
 status "the default runs" $? 0
 for suite in server cli web viewer hooks scripts; do contains "the default includes $suite" "$suite"; done
 
-# --- make compare TASK=... ---------------------------------------------------
-# A TASK with no task id in it must stop before the CLI, which would otherwise run every
-# task for real. SITE names no site, so a TASK that got through would still run nothing.
+# The TASK check. A TASK with no task id in it must stop before the CLI, which would otherwise run
+# every task for real. SITE names no site, so a TASK that got through would still run nothing.
 for task in "," " , " ",," ; do
   clean make -C "$ROOT" compare SITE=no-such-site TASK="$task"
   status "make compare TASK='$task' fails" $? 2
