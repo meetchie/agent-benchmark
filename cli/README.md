@@ -57,7 +57,7 @@ cli/results/<site>-<date>/            (ignored by git)
     charts/                           from viz.sh
 ```
 
-A step is one model turn. The Rindler session start is logged as step 0 and not counted. Input tokens count every prompt token, cache reads included, and costs use the prices in `server/constants.py`. Judge cost is reported separately from agent cost.
+A step is one model turn. The Rindler session start is logged as step 0 and not counted. A BrowserUse step lists the actions browser-use ran in it (`actions`, read by `server/browser_use_actions.py` as in the arena): one the model planned and browser-use skipped is left out, a failed one keeps its `error`, and one on an element that was gone from the page, which browser-use answers with "Element index N not available" and not an error, is marked `not_run`. The judge reads them that way. Input tokens count every prompt token, cache reads included, and costs use the prices in `server/constants.py`. Judge cost is reported separately from agent cost.
 
 ## How fair is it
 

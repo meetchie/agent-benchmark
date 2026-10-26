@@ -451,7 +451,7 @@ async def test_the_judge_reads_only_the_actions_browser_use_ran(no_browser):
     rest after a page change, a navigation or a failed action. Only the ones it ran (one result
     each) may reach the judge, a failed one with its error, and the step is named after the
     last one that ran."""
-    not_found = "Element index 9 not available - page may have changed. Try refreshing browser state. " + "x" * 200
+    failed = "Failed to click element 9: Node is detached from document. " + "x" * 200
     script = [
         # Typing and Enter ran; Enter loaded the results page, so the click was skipped.
         [bu.history_item([bu.action(input={"index": 4, "text": "belt", "clear": True}),
@@ -460,7 +460,7 @@ async def test_the_judge_reads_only_the_actions_browser_use_ran(no_browser):
                          elements=[bu.element("Search"), None, bu.element("Bullet Studded Belt")])],
         # The first click failed, so the second never ran.
         [bu.history_item([bu.action(click={"index": 9}), bu.action(click={"index": 15})],
-                         [bu.ActionResult(error=not_found)],
+                         [bu.ActionResult(error=failed)],
                          elements=[bu.element("Add to cart"), bu.element("View cart")])],
         # A navigation ends the step: the extract planned after it was skipped.
         [bu.history_item([bu.action(navigate={"url": "https://vhlistings.com/cart", "new_tab": False}),
@@ -478,7 +478,7 @@ async def test_the_judge_reads_only_the_actions_browser_use_ran(no_browser):
         {"action": "input", "params": {"index": 4, "text": "belt", "clear": True}, "element": "Search"},
         {"action": "send_keys", "params": {"keys": "Enter"}}]
     assert starts[1]["action_data"] == [
-        {"action": "click", "params": {"index": 9}, "element": "Add to cart", "error": not_found}]
+        {"action": "click", "params": {"index": 9}, "element": "Add to cart", "error": failed}]
     assert starts[2]["action_data"] == [
         {"action": "navigate", "params": {"url": "https://vhlistings.com/cart", "new_tab": False}}]
     # A step that read nothing new does not carry the page text of the step before it.
@@ -488,12 +488,43 @@ async def test_the_judge_reads_only_the_actions_browser_use_ran(no_browser):
                                       agent.telemetry_events)
     lines = prompt.splitlines()
     assert 'Step 1: input(index=4, text="belt", clear=true) on "Search"; send_keys(keys="Enter")' in lines
-    error = "Element index 9 not available - page may have changed. Try refreshing browser s…"
+    error = "Failed to click element 9: Node is detached from document. xxxxxxxxxxxxxxxxxxxx…"
     assert len(error) == arena.ACTION_ERROR_LIMIT
     assert f'Step 2: click(index=9) on "Add to cart" -> error: {error}' in lines
     assert 'Step 3: navigation(url="https://vhlistings.com/cart", new_tab=false)' in lines
     for skipped in ("Bullet Studded Belt", "index=15", "View cart", "extract(", "cart rows"):
         assert skipped not in prompt
+
+
+async def test_an_action_on_an_element_that_was_gone_reads_as_not_run(no_browser):
+    """browser-use answers a click or typing on an element index that is no longer on the page
+    with a result that is not an error, only a message (browser_use/tools/service.py). The
+    judge must not read that click as made."""
+    script = [
+        # The first click found nothing to click; browser-use went on to the second.
+        [bu.history_item([bu.action(click={"index": 9}), bu.action(click={"index": 15})],
+                         ran("Element index 9 not available - page may have changed. Try refreshing browser state.",
+                             "Clicked button 'View cart'"),
+                         elements=[bu.element("Add to cart"), bu.element("View cart")])],
+        [bu.history_item([bu.action(input={"index": 4, "text": "belt", "clear": True})],
+                         ran("Element index 4 not available - page may have changed. Try refreshing browser state."))],
+    ]
+    agent = BrowserUseTelemetricAgent(run_id="r", goal="g", agent_factory=lambda **kw: FakeAgent(script=script, done=False, **kw))
+    await agent.run(start_url="https://vhlistings.com")
+
+    starts = [e for e in agent.telemetry_events if e["event_type"] == "step_start"]
+    assert starts[0]["action_data"] == [
+        {"action": "click", "params": {"index": 9}, "element": "Add to cart", "not_run": "element 9 was not available"},
+        {"action": "click", "params": {"index": 15}, "element": "View cart"}]
+    assert starts[1]["action_data"] == [
+        {"action": "input", "params": {"index": 4, "text": "belt", "clear": True}, "not_run": "element 4 was not available"}]
+
+    prompt = arena.build_judge_prompt(get_scenario("vhlistings_add_to_cart"), {"success": False, "steps": 2},
+                                      agent.telemetry_events)
+    lines = prompt.splitlines()
+    assert ('Step 1: click(index=9) on "Add to cart" -> not run: element 9 was not available; '
+            'click(index=15) on "View cart"') in lines
+    assert 'Step 2: input(index=4, text="belt", clear=true) -> not run: element 4 was not available' in lines
 
 
 async def test_browseruse_arm_cleans_up_when_the_run_is_cancelled(no_browser, monkeypatch):

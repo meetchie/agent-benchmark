@@ -129,11 +129,16 @@ def describe_call(name: Optional[str], args: Any = None, element: Optional[str] 
 
 
 def describe_ran_action(action: Dict[str, Any]) -> str:
-    """One action a browser-use step ran: click(index=9) on "Add to cart", and for one that
-    failed, its error after it: click(index=9) on "Add to cart" -> error: Element index 9 ..."""
+    """One action a browser-use step ran: click(index=9) on "Add to cart". One that failed has
+    its error after it (click(index=9) -> error: Failed to click element 9: ...), and one
+    browser-use answered without acting, its element gone from the page, says so
+    (click(index=9) -> not run: element 9 was not available)."""
     text = describe_call(action.get("action"), action.get("params"), action.get("element"))
+    not_run = " ".join(str(action.get("not_run") or "").split())
     error = " ".join(str(action.get("error") or "").split())
-    if error:
+    if not_run:
+        text += " -> not run: " + not_run
+    elif error:
         text += " -> error: " + (error if len(error) <= ACTION_ERROR_LIMIT else error[:ACTION_ERROR_LIMIT - 1] + "…")
     return text
 

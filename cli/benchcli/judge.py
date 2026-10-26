@@ -47,14 +47,38 @@ def _clip(value: Any, limit: int) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def _describe_actions(actions: list[dict[str, Any]]) -> str:
+    """The actions a BrowserUse step ran, in order: click({"index": 9}) on "Add to cart", with
+    [ERROR: ...] after one that failed and [NOT RUN: ...] after one browser-use answered
+    without acting because its element was gone from the page."""
+    parts = []
+    for a in actions:
+        text = f"{a['action']}({_clip(a.get('params') or {}, 100)})"
+        if a.get("element"):
+            text += f" on {json.dumps(_clip(a['element'], 80), ensure_ascii=False)}"
+        if a.get("not_run"):
+            text += f" [NOT RUN: {a['not_run']}]"
+        elif a.get("error"):
+            text += f" [ERROR: {_clip(a['error'], MAX_TRACE_FIELD_CHARS)}]"
+        parts.append(text)
+    return "; ".join(parts)
+
+
 def build_trace(steps: list[dict[str, Any]]) -> str:
+    """One line per step. A BrowserUse step lists every action it ran (``actions``, see
+    browseruse_arm); a Rindler step, or a record saved before steps kept ``actions``, shows
+    its one action with its arguments."""
     lines = []
     for s in steps:
         error = f" [ERROR: {_clip(s['error'], MAX_TRACE_FIELD_CHARS)}]" if s.get("error") else ""
-        lines.append(
-            f"Step {s['step']}: {s.get('action')}({_clip(s.get('action_args') or {}, 100)}) "
-            f"-> {_clip(s.get('observation') or 'N/A', MAX_TRACE_FIELD_CHARS)}{error}"
-        )
+        actions = [a for a in s.get("actions") or [] if isinstance(a, dict) and a.get("action")]
+        if actions:
+            did = _describe_actions(actions)
+        elif s.get("action"):
+            did = f"{s['action']}({_clip(s.get('action_args') or {}, 100)})"
+        else:
+            did = "no action"
+        lines.append(f"Step {s['step']}: {did} -> {_clip(s.get('observation') or 'N/A', MAX_TRACE_FIELD_CHARS)}{error}")
     return "\n".join(lines) or "(no steps were taken)"
 
 

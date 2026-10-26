@@ -13,7 +13,8 @@ the two arms can be run in separate commands):
 
 A record keeps the March shape (meta, result, stats, steps, failure_screenshots) with
 a few additions: ``meta.max_steps``, ``result.final_report``, ``stats`` cache-token counts,
-``judge`` (who graded it and what that cost) and ``error`` (why a run stopped early).
+``judge`` (who graded it and what that cost), ``error`` (why a run stopped early) and, on a
+BrowserUse step, ``actions`` (every action browser-use ran in it, see browseruse_arm).
 """
 
 from __future__ import annotations

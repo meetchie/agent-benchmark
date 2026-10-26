@@ -7,17 +7,19 @@ else claude-sonnet-5-5. Per-step tokens are read from browser-use's own token co
 the end of every step, so each step_end carries its real token count and cost. Each
 step_start carries the actions the step ran, with their arguments and, for one that failed,
 its error (action_data), which the judge reads, as it reads a Rindler tool call's input.
-Actions the model planned that browser-use then skipped are left out (see ran_actions).
+Actions the model planned that browser-use then skipped are left out, and one browser-use
+answered without acting because its element was gone is marked (see browser_use_actions).
 """
 
 from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import llm
 from browser_env import agent_files_dir, browser_profile, cleanup_profile, track_agent_dir
+from browser_use_actions import ran_actions
 
 from .base_agent import BaseAgent
 
@@ -42,50 +44,6 @@ def usage_delta(now: llm.Usage, before: llm.Usage) -> llm.Usage:
 
 def prompt_tokens(usage: llm.Usage) -> int:
     return usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
-
-
-# How much of a failed action's error the log keeps (the judge reads less, see arena.py).
-ERROR_TEXT_LIMIT = 300
-
-
-def ran_actions(history_items: list) -> List[Dict[str, Any]]:
-    """The actions browser-use ran in some history items, as {"action", "params", "element", "error"} dicts.
-
-    The model can plan several actions in one step, and browser-use runs them in order but
-    stops early: after an action that fails, after a navigation, or once the page changes.
-    Each action it ran left one result in item.result, in the same order, so pairing the
-    planned actions with the results (as browser-use's own AgentHistoryList.action_history()
-    does) keeps the ones that ran and drops the ones it skipped. history.model_actions() lists
-    every planned action, skipped or not, so it cannot be used for this.
-
-    "element" is the accessible name of the element the action targeted, when it has one: the
-    index means nothing outside that page, the name says what was clicked or typed into.
-    "error" is there only for an action that failed, as one line of its error.
-    """
-    out: List[Dict[str, Any]] = []
-    for item in history_items:
-        planned = list(getattr(getattr(item, "model_output", None), "action", None) or [])
-        results = list(getattr(item, "result", None) or [])
-        elements = list(getattr(getattr(item, "state", None), "interacted_element", None) or [])
-        for i, (planned_action, result) in enumerate(zip(planned, results)):
-            try:
-                dumped = planned_action.model_dump(exclude_none=True, mode="json")
-            except Exception:
-                continue
-            if not isinstance(dumped, dict) or not dumped:
-                continue
-            name = next(iter(dumped))
-            params = dumped[name]
-            action: Dict[str, Any] = {"action": name, "params": params if isinstance(params, dict) else {}}
-            element = elements[i] if i < len(elements) else None
-            label = " ".join(str(getattr(element, "ax_name", None) or "").split())
-            if label:
-                action["element"] = label
-            error = " ".join(str(getattr(result, "error", None) or "").split())
-            if error:
-                action["error"] = error[:ERROR_TEXT_LIMIT]
-            out.append(action)
-    return out
 
 
 def _history_items(agent) -> list:
@@ -192,7 +150,7 @@ class BrowserUseTelemetricAgent(BaseAgent):
                     # browser-use only knows a step's actions once the step is over. Both
                     # halves of the step get the name of the last one that ran; step_start,
                     # the event the judge reads, also gets every action that ran, with its
-                    # arguments and any error.
+                    # arguments and any error or not-run mark.
                     event["action_type"] = action_type
                     for earlier in reversed(self.telemetry_events):
                         if earlier.get("event_type") == "step_start" and earlier.get("step_index") == event["step_index"]:

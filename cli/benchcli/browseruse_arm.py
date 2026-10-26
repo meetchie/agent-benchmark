@@ -4,14 +4,15 @@ The agent gets the task's goal text verbatim and the same step budget as the Rin
 The browser is the repo's one local profile (browser_env: headless, macOS keychain flags
 on, a throwaway user-data dir) and the model is llm.agent_llm(model), so it runs on the
 Anthropic key alone. Every step's tokens are the real difference of browser-use's own
-token counter, so the per-step costs add up to the run's cost.
+token counter, so the per-step costs add up to the run's cost. Each step records only the
+actions browser-use ran (server/browser_use_actions.py, which the arena's BrowserUse arm
+uses too), so the judge never reads an action the model planned and browser-use skipped.
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Any, Callable
 
 import llm
 import browser_env
+from browser_use_actions import ERROR_TEXT_LIMIT, ran_actions
 
 from .results import make_step, new_result, utc_iso
 
@@ -39,38 +41,40 @@ def prompt_tokens(usage: llm.Usage) -> int:
     return usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
 
 
-def _sanitize(action: Any) -> dict[str, Any]:
-    """The action as JSON-safe data. browser-use attaches the page element it acted on
-    (``interacted_element``, an object); that is dropped, anything else unserializable is stringified."""
-    if not isinstance(action, dict):
-        return {}
-    kept = {k: v for k, v in action.items() if k != "interacted_element"}
+def _history_items(history: Any) -> list:
     try:
-        json.dumps(kept)
-        return kept
-    except (TypeError, ValueError):
-        return {k: str(v) for k, v in kept.items()}
-
-
-def _latest_action(history: Any) -> tuple[str | None, dict[str, Any]]:
-    try:
-        actions = history.model_actions()
+        return list(history.history)
     except Exception:
-        return None, {}
-    if not actions or not isinstance(actions[-1], dict):
-        return None, {}
-    latest = _sanitize(actions[-1])
-    return next(iter(latest), None), latest
+        return []
 
 
-def _latest_observation(history: Any) -> str | None:
-    try:
-        extracted = history.extracted_content()
-    except Exception:
-        return None
-    if not extracted:
-        return None
-    return str(extracted[-1])[:OBSERVATION_CHARS]
+def _step_fields(items: list) -> dict[str, Any]:
+    """The step-log fields of one step, from the history items browser-use added for it.
+
+    ``actions`` lists only the actions browser-use ran (see browser_use_actions.ran_actions:
+    the model can plan several in one step, and browser-use skips the rest after a failed
+    action, a navigation, a page change or a done that is not the step's only action), with
+    the name of the element each one targeted, a failed one's error, and a not_run mark on
+    one whose element was gone from the page. ``action`` and ``action_args`` are the last of
+    them. ``observation`` is the last text this step's results returned, never an earlier
+    step's, and ``error`` an error with no action behind it (the step's model call failed).
+    """
+    actions = ran_actions(items)
+    last = actions[-1] if actions else None
+    observations: list[str] = []
+    errors: list[str] = []
+    for item in items:
+        planned = list(getattr(getattr(item, "model_output", None), "action", None) or [])
+        results = list(getattr(item, "result", None) or [])
+        observations += [str(r.extracted_content) for r in results if getattr(r, "extracted_content", None)]
+        errors += [" ".join(str(r.error).split()) for r in results[len(planned):] if getattr(r, "error", None)]
+    return {
+        "action": last["action"] if last else None,
+        "action_args": {last["action"]: last["params"]} if last else {},
+        "actions": actions,
+        "observation": observations[-1][:OBSERVATION_CHARS] if observations else None,
+        "error": errors[-1][:ERROR_TEXT_LIMIT] if errors else None,
+    }
 
 
 def _save_last_screenshot(history: Any, results_dir: Path, task_id: str) -> str | None:
@@ -121,7 +125,8 @@ async def run_browseruse_task(
 
     started_at = datetime.now(timezone.utc)
     steps: list[dict[str, Any]] = []
-    state = {"index": 0, "t0": time.monotonic(), "ts": utc_iso(), "counted": llm.Usage()}
+    # "recorded": how many history items browser-use had when the current step started.
+    state = {"index": 0, "t0": time.monotonic(), "ts": utc_iso(), "counted": llm.Usage(), "recorded": 0}
     error: str | None = None
     agent: Any = None
     profile = None
@@ -136,20 +141,24 @@ async def run_browseruse_task(
         state["index"] += 1
         state["t0"] = time.monotonic()
         state["ts"] = utc_iso()
+        state["recorded"] = len(_history_items(agent.history))
 
     async def on_step_end(_agent) -> None:
         elapsed_ms = (time.monotonic() - state["t0"]) * 1000
-        action, args = _latest_action(agent.history)
+        # Only the history item(s) this step added: a step browser-use kept no item for
+        # must not be labelled with the step before it.
+        fields = _step_fields(_history_items(agent.history)[state["recorded"]:])
         now = await usage_now()
         used = usage_delta(now, state["counted"])
         state["counted"] = now
         steps.append(make_step(
-            state["index"], action, action_args=args, started_at=state["ts"], duration_ms=elapsed_ms,
-            tokens_input=prompt_tokens(used), tokens_output=used.output_tokens,
+            state["index"], fields["action"], action_args=fields["action_args"], started_at=state["ts"],
+            duration_ms=elapsed_ms, tokens_input=prompt_tokens(used), tokens_output=used.output_tokens,
             tokens_cache_read=used.cache_read_input_tokens, tokens_cache_write=used.cache_creation_input_tokens,
-            cost_usd=used.cost_usd(model) or 0.0, observation=_latest_observation(agent.history),
+            cost_usd=used.cost_usd(model) or 0.0, observation=fields["observation"], error=fields["error"],
+            actions=fields["actions"],
         ))
-        print(f"    Step {state['index']}: {action or 'N/A'} ({elapsed_ms:.0f}ms, ${steps[-1]['cost_usd']:.4f})")
+        print(f"    Step {state['index']}: {fields['action'] or 'N/A'} ({elapsed_ms:.0f}ms, ${steps[-1]['cost_usd']:.4f})")
 
     try:
         try:
