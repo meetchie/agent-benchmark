@@ -7,7 +7,17 @@ We built this at Rindler to see what a hand-written map of a website is worth to
 
 A judge model grades each run, and every run logs its time, steps, tokens and cost.
 
-The Rindler servers this used to talk to are retired, so this version runs on one machine with just an Anthropic API key. `server/rindler_local/` runs the mappings in-process instead, with Playwright doing the clicking.
+The Rindler servers this used to talk to are retired, so `server/rindler_local/` runs the mappings in-process instead, with Playwright doing the clicking.
+
+## Who built it
+
+I'm Michelle Serrano (`meetchie`). This is my rebuild of a benchmark we made at Rindler, our startup.
+
+- At Rindler, from December 2025 to August 2026, I built the web app. Michael Serrano built the arena and the server, and Arthur De Los Santos built the prose CLI.
+- In October 2026 I pulled it out of our monorepo and rebuilt it to run on one machine with one API key: Claude in place of OpenAI, a local engine that runs the site mappings, a live preview of the agent's browser, and tests for all of it, over 1,100 now.
+- Then I wrote a site mapping for Amazon and ran both agents on it (below).
+
+The git history keeps everyone's original commits and dates, and [docs/provenance.md](docs/provenance.md) covers what changed on the way out.
 
 ## What we found
 
@@ -89,9 +99,3 @@ Plain `make` lists every target. The main ones:
 | [Arena](server/README.md) | `make arena AGENT=... SCENARIO=...` | about $0.02 to $0.03 on Rindler, $0.20 to $0.71 on BrowserUse |
 | [prose CLI](cli/README.md) | `make compare TASK=...` | about 10 to 20 cents for both agents |
 | [Log viewer](viewer/README.md) | `make viewer` | nothing, no key |
-
-## Who built it
-
-I'm Michelle Serrano (`meetchie`), and this is my rebuild of a benchmark we made at Rindler, our startup. At Rindler I built the web app, Michael Serrano built the arena and the server, and Arthur De Los Santos built the prose CLI.
-
-In October 2026 I pulled it out of our monorepo and rebuilt it to run on one machine with one API key: Claude in place of OpenAI, a local engine that runs the site mappings, the Amazon mapping and its runs, a live preview of the agent's browser, and tests for all of it, over 1,200 now. The git history keeps everyone's original commits and dates, and [docs/provenance.md](docs/provenance.md) covers what changed on the way out.
