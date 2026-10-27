@@ -258,6 +258,76 @@ The task FAILS if:
     verification_hint="Look for a reported product name and price from Amazon. Verify the agent confirmed the product has 4+ stars and Prime delivery."
 ))
 
+# Amazon, through server/mappings/amazon.json on the Rindler arm. Live site, signed out, no checkout.
+
+AMAZON_BOT_CHECK_RULE = (
+    "If the site asks you to prove you are human (a captcha or an \"I am human\" check) or to sign in, "
+    "stop and report that you were blocked by a bot check. A page with only a \"Continue shopping\" "
+    "button is not such a check."
+)
+
+register_scenario(Scenario(
+    name="amazon_add_cable",
+    description="Find a USB-C to USB-C charging cable under $15 on Amazon, add it to the cart and confirm it there",
+    start_url="https://www.amazon.com",
+    tags=["e-commerce", "cart", "amazon"],
+    goal=f"""You are shopping on Amazon (amazon.com). Do not sign in and do not check out.
+
+1. Go to amazon.com.
+2. Find a USB-C to USB-C charging cable (USB-C on both ends) that costs less than $15.
+3. Add one to the cart.
+4. Open the cart and confirm the cable is there.
+
+{AMAZON_BOT_CHECK_RULE}
+
+VERIFICATION: After completing the task, open the cart and report the cable's name, its price and the quantity as the cart shows them.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. A product search for a USB-C to USB-C cable was run on Amazon
+2. A USB-C to USB-C cable (USB-C on both ends) priced under $15 was added to the cart
+3. The cart was opened after the cable was added, and it shows that cable
+4. The agent reported the cable's name and its price from the cart, and the price is under $15
+
+The task FAILS if:
+- The cart was never opened, or it does not show a USB-C to USB-C cable
+- The item is not a USB-C to USB-C cable (for example a USB-A to USB-C cable, a charger or an adapter)
+- The reported price is $15 or more, or no price was reported
+- The agent signed in, started checkout or placed an order
+- A bot check or captcha stopped the run""",
+    verification_hint="Look for the cart contents: a USB-C to USB-C cable with a price under $15. The agent must have opened the cart after adding the cable and reported the name and price it shows.",
+))
+
+register_scenario(Scenario(
+    name="amazon_add_book",
+    description="Add the paperback of Atomic Habits by James Clear to the Amazon cart and confirm it there",
+    start_url="https://www.amazon.com",
+    tags=["e-commerce", "cart", "books", "amazon"],
+    goal=f"""You are shopping on Amazon (amazon.com). Do not sign in and do not check out.
+
+1. Go to amazon.com.
+2. Find the book "Atomic Habits" by James Clear.
+3. Choose its paperback edition (not the hardcover, Kindle or audiobook edition).
+4. Add one copy to the cart.
+5. Open the cart and confirm the paperback is there.
+
+{AMAZON_BOT_CHECK_RULE}
+
+VERIFICATION: After completing the task, open the cart and report the book's title, its format, its price and the quantity as the cart shows them.""",
+    success_criteria="""The task is SUCCESSFUL if and only if ALL of these conditions are met:
+1. The book "Atomic Habits" by James Clear was found on Amazon
+2. One copy of its paperback edition was added to the cart
+3. The cart was opened after the book was added, and it shows Atomic Habits
+4. The agent reported the title, the format (paperback) and the price from the cart
+
+The task FAILS if:
+- The cart was never opened, or it does not show Atomic Habits
+- The item is another book, such as a workbook, a summary or a study guide
+- The item is the hardcover, Kindle or audiobook edition, or the paperback format was not confirmed
+- More than one copy is in the cart, or no price was reported
+- The agent signed in, started checkout or placed an order
+- A bot check or captcha stopped the run""",
+    verification_hint="Look for the cart contents: Atomic Habits by James Clear in paperback, quantity 1, with its price. The agent must have opened the cart after adding the book and reported the format it shows.",
+))
+
 register_scenario(Scenario(
     name="target_store_finder",
     description="Find nearest Target store by ZIP code",

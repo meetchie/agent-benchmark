@@ -55,7 +55,7 @@ uv run python analyze_runs.py --march-headline              # the March headline
 | step budget | `--max-steps` browser-use steps (default 30) | `--max-steps` model turns (default 30) |
 | task text | the scenario goal (no Rindler tool names in it) | the scenario goal, plus a system prompt that explains the tools |
 | finishes when | browser-use calls its `done` action | the model calls the injected `done` tool |
-| sites | any | only sites with a mapping: vhlistings.com and shipt.com |
+| sites | any | only sites with a mapping: vhlistings.com, shipt.com and amazon.com |
 
 Both arms start on the scenario's start URL without spending a step, use prompt caching, and log every model call's tokens, so the costs compare like for like. Chromium is always launched with `--use-mock-keychain --password-store=basic` (no macOS keychain prompts) and headless unless `BENCHMARK_HEADLESS=false`.
 
@@ -99,7 +99,9 @@ async with LocalRindlerHost(load_mapping("vhlistings")) as host:
     #         "available_actions", "global_actions"}  (+ "error": {"code", "message"} on failure)
 ```
 
-`call_tool(name, args)` returns the MCP-style `{"content": [{"type": "text", "text": <json>}], "isError": bool}`; `call()` returns the parsed envelope. Screens are matched by `url_pattern` (longest first); actions run `navigate`, `click` (with css / xpath / text / text_exact / role / label / placeholder fallbacks), `type`, `select`, `press_key`, `extract`, `wait` and `script` steps with `{{param}}` interpolation, optional steps and per-step timeouts; `context_extractors` fill `context`; `interrupt_handlers` dismiss a popup once per session; the mapping's `page_extractor` JavaScript fills `data.page_info`. `products` and `cart_items` are read from the page's accessibility tree.
+`call_tool(name, args)` returns the MCP-style `{"content": [{"type": "text", "text": <json>}], "isError": bool}`; `call()` returns the parsed envelope. Screens are matched by `url_pattern` (longest first); actions run `navigate`, `click` (with css / xpath / text / text_exact / role / label / placeholder fallbacks), `type`, `select`, `press_key`, `extract`, `wait` and `script` steps with `{{param}}` interpolation, optional steps and per-step timeouts; `context_extractors` fill `context`; `interrupt_handlers` dismiss a popup once per session, or every time with `"repeat": true`; the mapping's `page_extractor` JavaScript fills `data.page_info`. `products` and `cart_items` are read from the page's accessibility tree, unless the mapping sets `"aria_extraction": false`.
+
+A mapping's `bot_checks` are selectors of human-verification pages: a captcha, an "I am human" check, a page that sends you to sign in. They are looked for after every navigation, before every click and while a step waits. When one shows, the call fails with "blocked by a bot check", the error names the page and the selector, and the session ends, so every later action gets the same error. Nothing on that page is clicked, typed into or waited out.
 
 ### Mappings
 
@@ -111,6 +113,8 @@ uv run python tools/seed_to_json.py --all --check  # exit 1 if the JSON is stale
 ```
 
 which also applies `mappings/overrides/<site>.json`, a JSON merge patch whose `_notes` say why each change was made. The notes are copied into the JSON's `_provenance`, so every difference from the March seed is visible in the file that runs.
+
+`mappings/amazon.json` has no seed. We wrote it by hand on 2026-10-26 for the two Amazon scenarios, `amazon_add_cable` and `amazon_add_book`. Its `_provenance` has `"seed": null` and notes on how it treats Amazon's in-between pages.
 
 ### What the live sites look like now (checked 2026-10-24)
 
@@ -124,6 +128,8 @@ vhlistings.com, each action driven without a model:
 | remove_from_cart | **fails**: the cart page has no visible remove control any more (only a hidden one inside the cart drawer). Not fixed |
 | apply_promo | runs, but the site rejects the code `SPRING` ("Enter a valid discount code or gift card"), so `vhlistings_bundle_promo` cannot pass today on either arm |
 | VIP Membership | still added to the cart by the site and re-added whenever /cart is opened; `checkout` still removes it before the order summary |
+
+amazon.com, each action driven without a model on 2026-10-26, signed out: `search_products`, `open_product` (by position in the results or by title), `choose_format` (a book's Paperback, Hardcover or Kindle edition), `add_to_cart` and `view_cart` work, and `page_info` lists the results, the product, the formats and the cart lines with their prices. A fresh session often opens on a page that says "Click the button below to continue shopping". Searches open the search URL, so they get past it, and the interrupt handler presses that one button when a navigation lands on it. In a few fresh sessions a search landed on Amazon's checkpoint page instead, which has one "Continue shopping" button under the usual Amazon header, and the two times its button was pressed it led to the sign-in page. The mapping counts the checkpoint, the sign-in page and any captcha as bot checks.
 
 shipt.com, driven without a model (checked 2026-10-25): start_session, update_address, search_products (the store slug defaults to `target`), add_to_cart and view_cart work. checkout, remove_from_cart, update_quantity and select_store were not tried.
 
@@ -158,4 +164,4 @@ New runs on Claude models, both arms local, equal step budgets and neutral task 
 
 ## Tests
 
-`uv run pytest -q` runs everything offline. The arena's part: `tests/test_rindler_local.py` (the interpreter on a real headless Chromium against a local fixture shop, `tests/fixture_shop.py`; skipped, with the reason, when no Chromium is installed or the one installed cannot start), `test_seed_to_json.py`, `test_rindler_agent.py`, `test_arena.py` (judge with a mocked model, logs, analyze_runs, the BrowserUse arm with a fake browser-use Agent) and `test_scenarios.py`.
+`uv run pytest -q` runs everything offline. The arena's part: `tests/test_rindler_local.py` (the interpreter on a real headless Chromium against a local fixture shop, `tests/fixture_shop.py`; skipped, with the reason, when no Chromium is installed or the one installed cannot start), `test_amazon_mapping.py` (the Amazon mapping on a local stand-in for the amazon.com pages it reads, `tests/amazon_shop.py`, including its bot checks), `test_seed_to_json.py`, `test_rindler_agent.py`, `test_arena.py` (judge with a mocked model, logs, analyze_runs, the BrowserUse arm with a fake browser-use Agent) and `test_scenarios.py`.

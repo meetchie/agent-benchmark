@@ -9,13 +9,17 @@ A mapping is the JSON document that describes one site for the Rindler arm:
       "actions":  {name: {"description"?, "params"?, "steps": [...],
                           "target_screen"?, "stays_on_screen"?, "sets_context"?}},
       "context_extractors"?: {name: {"steps": [...]}},
-      "interrupt_handlers"?: [{"detect": selector, "detect_timeout_ms"?, "dismiss": [...]}],
+      "interrupt_handlers"?: [{"detect": selector, "detect_timeout_ms"?, "repeat"?, "dismiss": [...]}],
+      "bot_checks"?: [selector, ...],          # human-verification pages: the call fails, nothing is touched
+      "aria_extraction"?: false,               # no generic products/cart_items lists (see rindler_local.extract)
       "page_extractor"?: "() => {...}",       # JS run with page.evaluate after each action
       "defaults"?: {name: value}               # fallback values for {{name}} placeholders
     }
 
-The format is the one the March 2026 seeds used (server/mappings/*.sql), plus two optional keys for
-the local interpreter: ``defaults`` and an action's ``sets_context`` (see ``Mapping.sets_context``).
+The format is the one the March 2026 seeds used (server/mappings/*.sql), plus optional keys for the
+local interpreter: ``defaults``, an action's ``sets_context`` (see ``Mapping.sets_context``),
+``bot_checks`` (see ``Mapping.bot_checks``) and ``aria_extraction``. ``page_extractor`` may also be
+a list of lines, joined with newlines, so a hand-written mapping can keep its JavaScript readable.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping as MappingType
-from urllib.parse import urlsplit
+from urllib.parse import quote_plus, urlsplit
 
 MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
 
@@ -49,7 +53,13 @@ def slugify(value: str) -> str:
     return slug.strip("-")
 
 
-_FILTERS = {"slug": slugify, "lower": lambda v: str(v).lower(), "upper": lambda v: str(v).upper()}
+# {{query:url}} puts a value into a URL query string ("usb-c & more" -> "usb-c+%26+more").
+_FILTERS = {
+    "slug": slugify,
+    "lower": lambda v: str(v).lower(),
+    "upper": lambda v: str(v).upper(),
+    "url": lambda v: quote_plus(str(v)),
+}
 
 
 def stringify(value: Any) -> str:
@@ -139,7 +149,26 @@ class Mapping:
 
     @property
     def page_extractor(self) -> str | None:
-        return self.raw.get("page_extractor") or None
+        source = self.raw.get("page_extractor")
+        if isinstance(source, list):
+            source = "\n".join(source)
+        return source or None
+
+    @property
+    def aria_extraction(self) -> bool:
+        """False for a mapping whose page_extractor lists products and cart lines itself: the host
+        then skips the generic lists it reads from the accessibility tree, which on a large site
+        pick up headings that are not products."""
+        return self.raw.get("aria_extraction", True) is not False
+
+    @property
+    def bot_checks(self) -> list[str]:
+        """Selectors that mark a human-verification page (a captcha, an "I am human" check).
+
+        When one of them is visible after start_session or during an action, the call fails with
+        "blocked by a bot check". The host never clicks, types into or waits on such a page.
+        """
+        return [s for s in self.raw.get("bot_checks") or [] if isinstance(s, str) and s.strip()]
 
     @property
     def defaults(self) -> dict[str, Any]:
@@ -260,11 +289,22 @@ def validate_mapping(raw: Any) -> list[str]:
         if not isinstance(handler, dict) or not handler.get("detect"):
             problems.append(f"interrupt handler {i}: needs a detect selector")
             continue
+        if "repeat" in handler and not isinstance(handler["repeat"], bool):
+            problems.append(f"interrupt handler {i}: repeat must be true or false")
         _check_steps(handler.get("dismiss", []), f"interrupt handler {i}", problems)
 
     extractor = raw.get("page_extractor")
-    if extractor is not None and not isinstance(extractor, str):
-        problems.append("page_extractor must be a string of JavaScript")
+    if extractor is not None and not (
+        isinstance(extractor, str) or (isinstance(extractor, list) and all(isinstance(x, str) for x in extractor))
+    ):
+        problems.append("page_extractor must be a string of JavaScript or a list of its lines")
+    if "aria_extraction" in raw and not isinstance(raw["aria_extraction"], bool):
+        problems.append("aria_extraction must be true or false")
+    bot_checks = raw.get("bot_checks")
+    if bot_checks is not None and not (
+        isinstance(bot_checks, list) and all(isinstance(x, str) and x.strip() for x in bot_checks)
+    ):
+        problems.append("bot_checks must be a list of selectors")
     defaults = raw.get("defaults")
     if defaults is not None and not isinstance(defaults, dict):
         problems.append("defaults must be an object")

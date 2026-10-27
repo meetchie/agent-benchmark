@@ -25,7 +25,14 @@ matches several elements fails over to the next fallback.
 Interrupt handlers (popups such as a newsletter dialog) are checked before every click
 (at most 1 s per handler) and after every successful navigate (the handler's
 ``detect_timeout_ms``, default 300 ms). A handler that fired once is not checked again
-in the same session.
+in the same session, unless it says ``"repeat": true`` (a page that can come back).
+
+Bot checks (the mapping's ``bot_checks`` selectors) are looked for, without waiting, after
+every navigate, before every click and interrupt handler and after a handler fired, every
+quarter second during a ``selector_visible`` wait, after a failed step and at the end of the
+action. When one is visible the action fails with "blocked by a bot check", even from an
+optional step or an interrupt handler's dismiss steps. Nothing on that page is clicked, typed
+into or waited out.
 """
 
 from __future__ import annotations
@@ -33,7 +40,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass, field
-from typing import Any, Mapping as MappingType
+from typing import Any, Mapping as MappingType, Sequence
 from urllib.parse import urlsplit
 
 from .mapping import interpolate
@@ -49,10 +56,23 @@ SETTLE_TIMEOUT_MS = 2000
 INTERRUPT_DEFAULT_TIMEOUT_MS = 300
 INTERRUPT_PRECLICK_CAP_MS = 1000
 MAX_EXTRACT_CHARS = 2000
+BOT_CHECK_MESSAGE = "blocked by a bot check"
+# How many matches of one bot-check selector are tested for visibility.
+BOT_CHECK_MAX_MATCHES = 5
+# A selector_visible wait looks for bot checks this often (ms) while it waits.
+BOT_CHECK_POLL_MS = 250
 
 
 class StepFailed(Exception):
     """One step could not be carried out."""
+
+
+class BotCheckBlocked(StepFailed):
+    """A human-verification page is showing. The action fails and the page is left alone."""
+
+    def __init__(self, selector: str = ""):
+        super().__init__(BOT_CHECK_MESSAGE)
+        self.selector = selector
 
 
 @dataclass
@@ -81,6 +101,8 @@ class RunResult:
     error: str | None = None
     failed_index: int | None = None
     extracted: dict[str, str] = field(default_factory=dict)
+    blocked: bool = False  # a bot check was showing; error is BOT_CHECK_MESSAGE
+    blocked_by: str | None = None  # the bot-check selector that matched
 
 
 @dataclass
@@ -92,7 +114,7 @@ class InterruptState:
 
     @property
     def active(self) -> bool:
-        return any(h.get("detect") not in self.dismissed for h in self.handlers)
+        return any(h.get("repeat") or h.get("detect") not in self.dismissed for h in self.handlers)
 
 
 def resolve_step(step: MappingType[str, Any], values: MappingType[str, Any]) -> dict[str, Any]:
@@ -156,6 +178,51 @@ async def _attempts(page: Any, step: dict[str, Any], run) -> str:
     raise StepFailed("all selectors exhausted: " + " | ".join(errors))
 
 
+async def bot_check_on_page(page: Any, selectors: Sequence[str]) -> str | None:
+    """The first bot-check selector with a visible match on the page, or None. Never waits."""
+    for selector in selectors:
+        try:
+            matches = page.locator(selector)
+            count = await matches.count()
+            for i in range(min(count, BOT_CHECK_MAX_MATCHES)):
+                if await matches.nth(i).is_visible():
+                    return selector
+        except Exception:  # a selector this page cannot evaluate is not a match
+            continue
+    return None
+
+
+async def _refuse_bot_check(page: Any, selectors: Sequence[str]) -> None:
+    if selectors:
+        found = await bot_check_on_page(page, selectors)
+        if found:
+            raise BotCheckBlocked(found)
+
+
+async def _wait_visible(page: Any, selector: str, timeout_ms: int, bot_checks: Sequence[str]) -> None:
+    """Wait for the first match of ``selector`` to be visible. With bot checks, wait in short
+    slices and stop as soon as one shows, instead of waiting on a human-verification page."""
+    target = page.locator(selector).first
+    if not bot_checks:
+        try:
+            await target.wait_for(state="visible", timeout=timeout_ms)
+        except Exception as exc:
+            raise StepFailed(f"{selector!r} did not become visible: {_short(exc)}") from exc
+        return
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_ms / 1000
+    while True:
+        await _refuse_bot_check(page, bot_checks)
+        left_ms = int((deadline - loop.time()) * 1000)
+        try:
+            await target.wait_for(state="visible", timeout=max(1, min(BOT_CHECK_POLL_MS, left_ms)))
+            return
+        except Exception as exc:
+            if type(exc).__name__ != "TimeoutError" or loop.time() >= deadline:
+                await _refuse_bot_check(page, bot_checks)
+                raise StepFailed(f"{selector!r} did not become visible: {_short(exc)}") from exc
+
+
 async def _settle(page: Any) -> None:
     try:
         await page.wait_for_load_state("networkidle", timeout=SETTLE_TIMEOUT_MS)
@@ -163,8 +230,16 @@ async def _settle(page: Any) -> None:
         pass
 
 
-async def run_interrupts(page: Any, state: InterruptState | None, cap_ms: int | None = None) -> list[str]:
-    """Dismiss any visible interrupt (popup); returns the detect selectors that fired."""
+async def run_interrupts(
+    page: Any,
+    state: InterruptState | None,
+    cap_ms: int | None = None,
+    bot_checks: Sequence[str] = (),
+) -> list[str]:
+    """Dismiss any visible interrupt (popup); returns the detect selectors that fired.
+
+    Dismiss steps are best effort, except that a bot check met on the way (BotCheckBlocked) is
+    raised at once."""
     if state is None:
         return []
     fired = []
@@ -179,18 +254,28 @@ async def run_interrupts(page: Any, state: InterruptState | None, cap_ms: int | 
             await page.locator(detect).first.wait_for(state="visible", timeout=timeout)
         except Exception:
             continue  # not there
+        if not handler.get("repeat"):
+            state.dismissed.add(detect)
+        fired.append(detect)
         for step in handler.get("dismiss") or []:
             try:
-                await execute_step(page, resolve_step(step, {}), interrupts=None)
+                await execute_step(page, resolve_step(step, {}), interrupts=None, bot_checks=bot_checks)
+            except BotCheckBlocked:
+                raise
             except Exception:
                 pass  # dismiss steps are best effort
-        state.dismissed.add(detect)
-        fired.append(detect)
     return fired
 
 
-async def execute_step(page: Any, step: dict[str, Any], *, interrupts: InterruptState | None) -> StepResult:
-    """Run one already-interpolated step. Raises StepFailed on failure."""
+async def execute_step(
+    page: Any,
+    step: dict[str, Any],
+    *,
+    interrupts: InterruptState | None,
+    bot_checks: Sequence[str] = (),
+) -> StepResult:
+    """Run one already-interpolated step. Raises StepFailed on failure, BotCheckBlocked when a
+    bot check is showing after a navigate or before a click."""
     action = step.get("action")
     timeout = step.get("timeout") or None
     result = StepResult(index=-1, action=str(action), ok=True)
@@ -202,11 +287,15 @@ async def execute_step(page: Any, step: dict[str, Any], *, interrupts: Interrupt
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout or NAVIGATE_TIMEOUT_MS)
         except Exception as exc:
             raise StepFailed(f"navigation to {url} failed: {_short(exc)}") from exc
-        await run_interrupts(page, interrupts)
+        await _refuse_bot_check(page, bot_checks)
+        if await run_interrupts(page, interrupts, bot_checks=bot_checks):
+            await _refuse_bot_check(page, bot_checks)
 
     elif action == "click":
+        await _refuse_bot_check(page, bot_checks)
         if interrupts is not None and interrupts.active:
-            await run_interrupts(page, interrupts, cap_ms=INTERRUPT_PRECLICK_CAP_MS)
+            if await run_interrupts(page, interrupts, cap_ms=INTERRUPT_PRECLICK_CAP_MS, bot_checks=bot_checks):
+                await _refuse_bot_check(page, bot_checks)
         per_try = timeout or CLICK_TIMEOUT_MS
         result.strategy = await _attempts(page, step, lambda loc: loc.click(timeout=per_try))
         await _settle(page)
@@ -247,12 +336,7 @@ async def execute_step(page: Any, step: dict[str, Any], *, interrupts: Interrupt
     elif action == "wait":
         strategy = step.get("strategy") or ""
         if strategy == "selector_visible":
-            try:
-                await page.locator(step["selector"]).first.wait_for(
-                    state="visible", timeout=timeout or SELECTOR_VISIBLE_TIMEOUT_MS
-                )
-            except Exception as exc:
-                raise StepFailed(f"{step['selector']!r} did not become visible: {_short(exc)}") from exc
+            await _wait_visible(page, step["selector"], timeout or SELECTOR_VISIBLE_TIMEOUT_MS, bot_checks)
         elif strategy == "network_idle":
             await _settle(page)
         else:
@@ -276,23 +360,43 @@ async def execute_step(page: Any, step: dict[str, Any], *, interrupts: Interrupt
     return result
 
 
+def _blocked(run: RunResult, index: int | None, selector: str | None) -> RunResult:
+    run.ok = False
+    run.blocked = True
+    run.blocked_by = selector
+    run.failed_index = index
+    run.error = BOT_CHECK_MESSAGE
+    return run
+
+
 async def run_steps(
     page: Any,
     steps: list[dict[str, Any]],
     values: MappingType[str, Any],
     *,
     interrupts: InterruptState | None = None,
+    bot_checks: Sequence[str] = (),
 ) -> RunResult:
-    """Run a mapping action's steps in order; stop at the first failing non-optional step."""
+    """Run a mapping action's steps in order; stop at the first failing non-optional step.
+
+    With ``bot_checks``, a visible bot check fails the run (``blocked``), whichever step met it.
+    """
     run = RunResult(ok=True)
     for index, raw_step in enumerate(steps):
         step = resolve_step(raw_step, values)
         optional = bool(step.get("optional"))
         try:
-            result = await execute_step(page, step, interrupts=interrupts)
+            result = await execute_step(page, step, interrupts=interrupts, bot_checks=bot_checks)
+        except BotCheckBlocked as exc:
+            run.steps.append(StepResult(index=index, action=str(step.get("action")), ok=False, optional=optional,
+                                        error=str(exc)))
+            return _blocked(run, index, exc.selector)
         except StepFailed as exc:
             result = StepResult(index=index, action=str(step.get("action")), ok=False, optional=optional, error=str(exc))
             run.steps.append(result)
+            found = await bot_check_on_page(page, bot_checks) if bot_checks else None
+            if found:
+                return _blocked(run, index, found)
             if optional:
                 continue
             run.ok = False
@@ -304,6 +408,9 @@ async def run_steps(
         run.steps.append(result)
         if result.content is not None and step.get("field"):
             run.extracted[step["field"]] = result.content
+    found = await bot_check_on_page(page, bot_checks) if bot_checks else None
+    if found:
+        return _blocked(run, None, found)
     return run
 
 

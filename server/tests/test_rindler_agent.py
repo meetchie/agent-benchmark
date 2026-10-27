@@ -212,3 +212,37 @@ def test_cache_breakpoint_only_touches_the_request_copy():
     out = with_cache_breakpoint(messages)
     assert out[-1]["content"] == [{"type": "text", "text": "hello", "cache_control": {"type": "ephemeral"}}]
     assert messages == [{"role": "user", "content": "hello"}]
+
+
+async def test_a_bot_check_goes_into_the_run_errors_with_its_page(monkeypatch, mapping):
+    blocked = {"error": {"code": "bot_check", "message": "blocked by a bot check",
+                         "page_url": "https://www.amazon.com/ax/claim?arb=1", "matched": 'form[name="signIn"]'},
+               "screen": "unknown", "context": {}, "available_actions": [], "global_actions": ["start_session"]}
+    scripted(monkeypatch, [
+        turn(calls=[("t1", "search_products", {"query": "cable"})]),
+        turn(calls=[("t2", "search_products", {"query": "cable"})]),
+        turn(calls=[("t3", "done", {"success": False, "message": "Blocked by a bot check."})]),
+    ])
+    hosts = []
+    agent = make_agent(mapping, hosts, responses={"search_products": blocked})
+    result = await agent.run(start_url="http://127.0.0.1:9/")
+    assert result["success"] is False
+    # Once, however often the model meets it.
+    assert result["errors_detected"] == [
+        'bot check at https://www.amazon.com/ax/claim?arb=1 (matched form[name="signIn"])'
+    ]
+
+
+async def test_a_bot_check_at_the_start_goes_into_the_run_errors(monkeypatch, mapping):
+    blocked = {"error": {"code": "bot_check", "message": "blocked by a bot check",
+                         "page_url": "https://www.amazon.com/errors/validateCaptcha", "matched": "#captchacharacters"},
+               "screen": "unknown", "context": {}, "available_actions": [], "global_actions": ["start_session"]}
+    scripted(monkeypatch, [])
+    hosts = []
+    agent = make_agent(mapping, hosts, responses={"start_session": blocked})
+    result = await agent.run(start_url="http://127.0.0.1:9/")
+    assert result["success"] is False and result["steps"] == 0
+    assert result["errors_detected"] == [
+        "start_session failed: [bot_check] blocked by a bot check",
+        "bot check at https://www.amazon.com/errors/validateCaptcha (matched #captchacharacters)",
+    ]

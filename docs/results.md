@@ -82,3 +82,20 @@ In practice, on single claude-sonnet-5-5 runs, a Rindler arm run costs a few cen
 </p>
 
 <sub>One of the charts `cli/viz.sh` draws, here for the `add-candle` run above. Each bar is scored against the better arm, and the number above it is the arm's raw average.</sub>
+
+## Amazon (October 2026)
+
+On 2026-10-26 both arms ran two tasks on amazon.com, signed out, with claude-sonnet-5-5 as agent and judge. `amazon_add_cable` asks for a USB-C to USB-C charging cable under $15. `amazon_add_book` asks for the paperback of Atomic Habits by James Clear. Each adds one item, opens the cart and reports what the cart shows. Nobody signs in or checks out. The Rindler arm used `server/mappings/amazon.json`. Each arm ran each task 3 times, one run at a time, between 18:59 and 19:06 local time. Three earlier runs, made while the mapping was still being fixed, aren't in the table: a Rindler cable run that failed, a Rindler book run that passed and a browser-use cable run that passed.
+
+| scenario | arm | passes | mean steps | mean time | mean agent cost |
+|---|---|---|---|---|---|
+| `amazon_add_cable` | RINDLER | 3 / 3 | 5.0 | 23 s | $0.013 |
+| `amazon_add_cable` | BROWSERUSE | 3 / 3 | 5.3 | 34 s | $0.140 |
+| `amazon_add_book` | RINDLER | 0 / 3 | 3.3 | 16 s | $0.011 |
+| `amazon_add_book` | BROWSERUSE | 1 / 3 | 5.7 | 32 s | $0.117 |
+
+Steps count the final `done`. The judge added $0.007 to $0.012 a run.
+
+Every failure was a bot check, and every verdict matches what its log shows. All three Rindler book runs met Amazon's checkpoint page, once after the search, once on opening the book and once on adding it to the cart, and the mapping stopped there with "blocked by a bot check". Two of the three browser-use book runs met a "Check the box to continue" page with an "I am human" box when they opened the cart, and stopped as the task tells them to. No cable run met a bot check. One browser-use cable run clicked through the "Click the button below to continue shopping" page, which is an ordinary page.
+
+Read these with three caveats. We wrote the mapping ourselves, for these two tasks, so the Rindler arm knew the site and browser-use didn't. Three runs per arm on a live site is a handful, and the bot checks come and go: two sessions we drove later that evening without a model were both stopped at the checkpoint on their first search, so a rerun can give very different numbers. The Rindler arm opens the search URL directly while browser-use typed into the search box, and we don't know whether that changes how often the checkpoint shows.

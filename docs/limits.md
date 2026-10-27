@@ -12,6 +12,8 @@ Every result here is a snapshot of third-party websites. A run that fails becaus
 
 The browser is a headless Chromium on your own IP address. Sites behind a bot wall (Cloudflare, captchas, anything that fingerprints headless Chrome) may show a block page, and then the agent fails for a reason that has nothing to do with it. `BENCHMARK_HEADLESS=false` opens a visible window, which may get past some of them. The original hosted setup used headed cloud browsers (Browserbase) to avoid this. That provider is still in the code but was not run again.
 
+Large retailers' terms, Amazon's included, don't allow automated browsing, so run the Amazon scenarios at your own risk. Others are stricter: on 2026-10-26 Walmart's search page met our headless Chromium with a Press & Hold check, eBay answered 403, and so did Etsy's search page.
+
 ## Everything else
 
 The task generator is a model. For books.toscrape.com it answered "not a commerce site" on 2 of 5 tries, and a retry works. Its tasks can also ask for a size or an option the site doesn't offer, like the sauce-demo row in [the local runs](results.md#live-benchmark-runs), and then the run fails because of the task, not the agent.
@@ -22,4 +24,4 @@ One run is an anecdote. Sampling noise on a live site is large, so use many runs
 
 Real runs cost money. Every arena run is real, so `make arena` prints its usage and exits 2 unless it gets both `AGENT` and `SCENARIO`. The default 180 s limit can be tight for a long task. Raise `BENCHMARK_TIMEOUT_S` and the web UI reads the new limit from `/health` and waits for it.
 
-Mappings exist for three sites: vhlistings.com and shipt.com for the arena, prose.com for the CLI. The RINDLER arm can't run anywhere else. Adding a site means writing a mapping, see [cli/README.md](../cli/README.md#adding-a-site) and [server/SETUP.md](../server/SETUP.md#adding-or-fixing-a-site-mapping).
+Mappings exist for four sites: vhlistings.com, shipt.com and amazon.com for the arena, prose.com for the CLI. The RINDLER arm can't run anywhere else. Adding a site means writing a mapping, see [cli/README.md](../cli/README.md#adding-a-site) and [server/SETUP.md](../server/SETUP.md#adding-or-fixing-a-site-mapping).

@@ -65,8 +65,9 @@ def test_the_street_check_finds_street_addresses_and_only_those():
 
 
 def test_mapped_scenarios_have_a_mapping():
-    mapped = [s for s in SCENARIOS.values() if s.name.startswith(("shipt_", "vhlistings_"))]
-    assert len(mapped) == 6
+    mapped = [s for s in SCENARIOS.values() if s.name.startswith(("shipt_", "vhlistings_", "amazon_"))]
+    assert len(mapped) == 9
+    assert {"amazon_add_cable", "amazon_add_book"} <= {s.name for s in mapped}
     for scenario in mapped:
         mapping = find_mapping_for_url(scenario.start_url)
         assert mapping is not None and scenario.name.startswith(mapping.site_id + "_")

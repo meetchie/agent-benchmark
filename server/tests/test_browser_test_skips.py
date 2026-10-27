@@ -17,15 +17,21 @@ TESTS_DIR = Path(__file__).resolve().parent
 SERVER_DIR = TESTS_DIR.parent
 
 
+# Each module that drives a real Chromium does it on a local shop: the fixture shop, or the
+# stand-in for amazon.com built on it.
+SHOPS = ("FixtureShop()", "AmazonShop()")
+
+
 def real_browser_modules() -> list[str]:
-    """The test modules that drive a real Chromium: each one does it on the fixture shop."""
+    """The test modules that drive a real Chromium."""
     this = Path(__file__).name
-    return sorted(p.name for p in TESTS_DIR.glob("test_*.py") if p.name != this and "FixtureShop()" in p.read_text())
+    return sorted(p.name for p in TESTS_DIR.glob("test_*.py")
+                  if p.name != this and any(shop in p.read_text() for shop in SHOPS))
 
 
 def test_the_rule_finds_the_modules_that_start_a_browser():
     found = real_browser_modules()
-    assert {"test_interrupts.py", "test_rindler_local.py"} <= set(found)
+    assert {"test_interrupts.py", "test_rindler_local.py", "test_amazon_mapping.py"} <= set(found)
     assert Path(__file__).name not in found
 
 

@@ -24,7 +24,7 @@ uv run pytest -q
 - Both arms run a local headless Chromium with the same `--max-steps` (default 30).
 - New run logs go to `arena_runs/` (gitignored). `arena_logs/` is the archived March 2026
   evidence; read the caveats in [README.md](README.md) before quoting it.
-- The RINDLER arm works only on mapped sites: vhlistings.com and shipt.com
+- The RINDLER arm works only on mapped sites: vhlistings.com, shipt.com and amazon.com
   (`mappings/*.json`).
 
 More: [SETUP.md](SETUP.md) (every setting, costs, mappings, troubleshooting) and

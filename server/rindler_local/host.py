@@ -11,8 +11,12 @@ same JSON envelope the hosted Rindler server returned:
       "global_actions": [...]           # always valid
     }
 
-Failures come back as ``{"error": {"code", "message"}, "screen", "context",
-"available_actions", "global_actions"}`` with ``isError: true``.
+Failures come back as ``{"error": {"code", "message", ...}, "screen", "context",
+"available_actions", "global_actions"}`` with ``isError: true``. A human-verification page (one of
+the mapping's ``bot_checks``) fails the call with code ``bot_check`` and the message "blocked by a
+bot check" (the error also names the page and the selector that matched); the host does not touch
+that page and closes the session, and every later action call gets the same error until a new
+start_session, so a blocked run cannot try its way past the check.
 
 The interface is MCP-shaped, so agent loops written against an MCP client need few changes:
 
@@ -34,9 +38,11 @@ from typing import Any
 
 from .extract import extract_cart_items, extract_products
 from .interpreter import (
+    BOT_CHECK_MESSAGE,
     InterruptState,
     ScreenMatcher,
     StepFailed,
+    bot_check_on_page,
     check_navigation_url,
     run_steps,
 )
@@ -149,6 +155,7 @@ class LocalRindlerHost:
         self.context: dict[str, Any] = {}
         self.interrupts = InterruptState(mapping.interrupt_handlers)
         self.calls: int = 0
+        self.blocked: dict[str, str] | None = None  # the bot check that ended this session
 
         self._lock = asyncio.Lock()
         self._pw = None
@@ -277,6 +284,8 @@ class LocalRindlerHost:
                     "global_actions": ["start_session"]}
         if name not in self.mapping.actions:
             return self._error("unknown_action", f"{name!r} is not an action of the {self.mapping.domain} mapping")
+        if self.blocked:
+            return self._blocked_error()
         if self._page is None:
             return self._error("no_session", "No browser session. Call start_session first.")
         if not self._action_allowed(name):
@@ -301,6 +310,7 @@ class LocalRindlerHost:
             )
 
         await self._close_session()
+        self.blocked = None
         await self._ensure_browser()
         options: dict[str, Any] = {"viewport": self.viewport}
         if self.user_agent:
@@ -315,16 +325,41 @@ class LocalRindlerHost:
             message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
             await self._close_session()
             return self._error("navigation_error", f"failed to open {url}: {message[:300]}")
+        # A bot check is looked for as soon as the page is there, and again once it has rendered.
+        found = await self._bot_check_showing()
+        if found:
+            return await self._end_blocked(found)
         try:  # give client-rendered sites a moment to put their main content up
             await self._page.locator("main").first.wait_for(state="visible", timeout=2000)
         except Exception:
             pass
+        found = await self._bot_check_showing()
+        if found:
+            return await self._end_blocked(found)
 
         self.screen = self.screens.detect(self._page.url, fallback="unknown")
         await self._run_context_extractors()
         data = await self._page_data()
         data = {"session_id": self.session_id, **data}
         return self._envelope(data)
+
+    async def _end_blocked(self, selector: str | None) -> dict[str, Any]:
+        """Close the session on a bot check; this call and later action calls fail with it."""
+        url = self._page.url if self._page is not None else ""
+        log.info("bot check %r on %s: session closed", selector, url)
+        await self._close_session()
+        self.blocked = {"page_url": url, "matched": selector or ""}
+        return self._blocked_error()
+
+    def _blocked_error(self) -> dict[str, Any]:
+        payload = self._error("bot_check", BOT_CHECK_MESSAGE)
+        payload["error"].update(self.blocked or {})
+        return payload
+
+    async def _bot_check_showing(self) -> str | None:
+        if not self.mapping.bot_checks or self._page is None:
+            return None
+        return await bot_check_on_page(self._page, self.mapping.bot_checks)
 
     def _values(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         values: dict[str, Any] = dict(self.mapping.defaults)
@@ -346,7 +381,10 @@ class LocalRindlerHost:
                 return self._envelope(static[name] if isinstance(static[name], dict) else {"content": static[name]})
 
         values = self._values(name, args)
-        run = await run_steps(self._page, steps, values, interrupts=self.interrupts)
+        run = await run_steps(self._page, steps, values, interrupts=self.interrupts,
+                              bot_checks=self.mapping.bot_checks)
+        if run.blocked:
+            return await self._end_blocked(run.blocked_by)
         if not run.ok:
             return self._error("execution_failed", run.error or f"{name} failed")
 
@@ -386,10 +424,12 @@ class LocalRindlerHost:
     async def _page_data(self) -> dict[str, Any]:
         page = self._page
         data: dict[str, Any] = {"page_url": page.url}
-        try:
-            snapshot = await page.locator("body").aria_snapshot(timeout=5000)
-        except Exception:
-            snapshot = ""
+        snapshot = ""
+        if self.mapping.aria_extraction:
+            try:
+                snapshot = await page.locator("body").aria_snapshot(timeout=5000)
+            except Exception:
+                snapshot = ""
         if self.screen == "cart":
             items = extract_cart_items(snapshot)
             if items:

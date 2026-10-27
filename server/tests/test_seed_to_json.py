@@ -39,6 +39,17 @@ def test_json_differs_from_the_seed_only_by_its_override(seed):
         assert any(key in note for note in notes), f"override key {key!r} has no note"
 
 
+def test_every_mapping_is_a_converted_seed_or_says_it_has_none():
+    # A hand-written mapping (amazon.json) has "seed": null; seed_to_json.py never writes or checks it.
+    for path in sorted(MAPPINGS_DIR.glob("*.json")):
+        seed = json.loads(path.read_text())["_provenance"]["seed"]
+        if seed is None:
+            assert not (MAPPINGS_DIR / f"seed_{path.stem}.sql").exists(), f"{path.name} has a seed but says none"
+        else:
+            assert seed == f"seed_{path.stem}.sql" and (MAPPINGS_DIR / seed).is_file(), path.name
+    assert json.loads((MAPPINGS_DIR / "amazon.json").read_text())["_provenance"]["seed"] is None
+
+
 def test_versions_match_the_march_seeds():
     versions = {p.stem: extract_config(p.read_text())[1] for p in SEEDS}
     assert versions == {"seed_shipt": 1, "seed_vhlistings": 25}

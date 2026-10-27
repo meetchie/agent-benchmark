@@ -1,0 +1,264 @@
+{
+  "_provenance": {
+    "seed": null,
+    "written": "2026-10-26",
+    "notes": [
+      "Written by hand for the arena's two Amazon scenarios (amazon_add_cable, amazon_add_book). It has no March seed and seed_to_json.py does not touch it.",
+      "Each action was checked on the live amazon.com by driving it through the local host without a model, signed out, on 2026-10-26.",
+      "Searches open the search URL (/s?k=...) instead of typing into the search box, because a fresh session often starts on a 'Click the button below to continue shopping' page that has no search box.",
+      "The 'Click the button below to continue shopping' page (a form to /errors_page/validateCaptcha with one button and nothing else) is an ordinary page; the interrupt handler presses its button whenever a navigation lands on it, but never when the form also holds an image, a text box, a checkbox or a frame.",
+      "bot_checks: any human-verification page (the classic captcha, an 'I am human' check, a captcha widget) fails the current call with 'blocked by a bot check' and ends the session. Nothing on such a page is clicked, typed into or waited out.",
+      "Amazon's /checkpoint/ page ('To continue, please click the \"Continue shopping\" button below', id tmms-challenge) is in bot_checks, and so is the sign-in page. On 2026-10-26 the checkpoint showed up in place of search results in a few fresh sessions, and both times its button was pressed it sent the signed-out browser to the sign-in page, which this mapping never uses. So the mapping does not press it: the call fails with 'blocked by a bot check'.",
+      "In 2 of the 6 browser-use runs on 2026-10-26, opening the cart showed a 'Check the box to continue' page with an 'I am human' checkbox. The Rindler arm never met it, so its markup is not known; the heading text is in bot_checks as well as the 'I am human' label.",
+      "No sign-in, no checkout: the actions stop at viewing the cart. add_to_cart only clicks the new-item 'Add to cart' button, never 'Buy Now' or a used offer, and declines an add-on protection plan if one is offered."
+    ]
+  },
+  "site_id": "amazon",
+  "domain": "amazon.com",
+  "screens": {
+    "home": {
+      "url_pattern": "amazon\\.com/?(?:ref=[^?#/]*)?(?:[?#].*)?$",
+      "available_actions": ["search_products", "view_cart"]
+    },
+    "search_results": {
+      "url_pattern": "amazon\\.com/s(?:/|\\?|$)",
+      "available_actions": ["search_products", "open_product", "view_cart"]
+    },
+    "product": {
+      "url_pattern": "amazon\\.com/(?:[^?#]*/)?(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}",
+      "available_actions": ["add_to_cart", "choose_format", "search_products", "view_cart"]
+    },
+    "added_to_cart": {
+      "url_pattern": "amazon\\.com/(?:cart/smart-wagon|gp/huc/view\\.html|cart/add-to-cart)",
+      "available_actions": ["view_cart", "search_products"]
+    },
+    "cart": {
+      "url_pattern": "amazon\\.com/(?:gp/cart/view\\.html|cart/?(?:[?#]|$))",
+      "available_actions": ["search_products", "view_cart"]
+    }
+  },
+  "actions": {
+    "search_products": {
+      "description": "Search Amazon. The first results are in data.page_info.results: position, title, price, rating and, for books, the price of each format.",
+      "params": {
+        "query": {"type": "string", "description": "Search terms"}
+      },
+      "target_screen": "search_results",
+      "steps": [
+        {"action": "navigate", "url": "https://www.amazon.com/s?k={{query:url}}"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "[data-component-type=\"s-search-result\"]", "timeout": 10000, "optional": true}
+      ]
+    },
+    "open_product": {
+      "description": "Open a product from the last search results. Pass its position in data.page_info.results (1, 2, ...) or its title, or a distinctive part of it.",
+      "params": {
+        "item": {"type": "string", "description": "Position in data.page_info.results (1 is the first), or the product title or a distinctive part of it"}
+      },
+      "target_screen": "product",
+      "steps": [
+        {
+          "action": "click",
+          "selector": ":nth-match([data-component-type=\"s-search-result\"] a:has(h2), {{item}})",
+          "timeout": 3000,
+          "fallbacks": [
+            {"type": "css", "selector": "[data-component-type=\"s-search-result\"] a:has(h2):has-text(\"{{item}}\") >> nth=0"},
+            {"type": "css", "selector": "[data-component-type=\"s-search-result\"] h2 a:has-text(\"{{item}}\") >> nth=0"},
+            {"type": "css", "selector": "[data-component-type=\"s-search-result\"][data-asin=\"{{item}}\"] a:has(h2) >> nth=0"}
+          ]
+        },
+        {"action": "wait", "strategy": "selector_visible", "selector": "#productTitle", "timeout": 15000}
+      ]
+    },
+    "choose_format": {
+      "description": "On a book's product page, switch to another format, such as Paperback, Hardcover or Kindle. The formats and their prices are in data.page_info.formats.",
+      "params": {
+        "format": {"type": "string", "description": "Format name as listed in data.page_info.formats, for example Paperback"}
+      },
+      "target_screen": "product",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "[id=\"tmm-grid-swatch-{{format:upper}}\"] a >> nth=0",
+          "timeout": 3000,
+          "fallbacks": [
+            {"type": "css", "selector": "#tmmSwatches .swatchElement:has(.slot-title:text-is(\"{{format}}\")) a >> nth=0"},
+            {"type": "css", "selector": "#tmmSwatches .slot-title:has-text(\"{{format}}\") >> nth=0"}
+          ]
+        },
+        {"action": "wait", "strategy": "selector_visible", "selector": "[id=\"tmm-grid-swatch-{{format:upper}}\"].selected, #tmmSwatches .swatchElement.selected .slot-title:has-text(\"{{format}}\")", "timeout": 15000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#productTitle", "timeout": 10000}
+      ]
+    },
+    "add_to_cart": {
+      "description": "Add one of the open product, in the format and options shown on its page, to the cart. Declines an add-on protection plan if Amazon offers one.",
+      "params": {},
+      "steps": [
+        {
+          "action": "click",
+          "selector": "#add-to-cart-button",
+          "timeout": 2500,
+          "fallbacks": [
+            {"type": "css", "selector": "input[name=\"submit.add-to-cart\"]"}
+          ]
+        },
+        {"action": "wait", "strategy": "selector_visible", "selector": "#NATC_SMART_WAGON_CONF_MSG_SUCCESS:visible, #sw-atc-confirmation:visible, #attachDisplayAddBaseAlert:visible, #huc-v2-order-row-confirm-text:visible, #attachSiNoCoverage:visible", "timeout": 15000},
+        {
+          "action": "click",
+          "selector": "#attachSiNoCoverage input",
+          "timeout": 500,
+          "optional": true,
+          "fallbacks": [
+            {"type": "css", "selector": "#attachSiNoCoverage"}
+          ]
+        },
+        {"action": "wait", "strategy": "selector_visible", "selector": "#NATC_SMART_WAGON_CONF_MSG_SUCCESS:visible, #sw-atc-confirmation:visible, #attachDisplayAddBaseAlert:visible, #huc-v2-order-row-confirm-text:visible", "timeout": 10000}
+      ]
+    },
+    "view_cart": {
+      "description": "Open the cart. Its line items (title, price, quantity) and the subtotal are in data.page_info.",
+      "params": {},
+      "target_screen": "cart",
+      "steps": [
+        {"action": "navigate", "url": "https://www.amazon.com/gp/cart/view.html"},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#sc-active-cart:visible, #sc-active-items-header:visible, [data-name=\"Active Items\"]:visible", "timeout": 15000}
+      ]
+    }
+  },
+  "interrupt_handlers": [
+    {
+      "detect": "form[action*=\"validateCaptcha\"]:not(:has(img)):not(:has(input[type=\"text\"])):not(:has(input[type=\"checkbox\"])):not(:has(iframe)) button:has-text(\"Continue shopping\")",
+      "repeat": true,
+      "dismiss": [
+        {"action": "click", "selector": "form[action*=\"validateCaptcha\"]:not(:has(img)):not(:has(input[type=\"text\"])):not(:has(input[type=\"checkbox\"])):not(:has(iframe)) button:has-text(\"Continue shopping\")", "timeout": 3000},
+        {"action": "wait", "strategy": "selector_visible", "selector": "#navbar", "timeout": 10000}
+      ]
+    }
+  ],
+  "bot_checks": [
+    "#captchacharacters",
+    "form[action*=\"validateCaptcha\"] img",
+    "form[action*=\"validateCaptcha\"] input[type=\"text\"]",
+    "#captcha-container",
+    "awswaf-captcha",
+    "iframe[src*=\"captcha\"]",
+    "#tmms-challenge",
+    "form[action*=\"/checkpoint/\"]",
+    ":is(button, label, [role=\"checkbox\"], [role=\"button\"]):text-matches(\"(I am|I'm) (a )?human\", \"i\")",
+    ":is(h1, h2, h3, h4, label):text-matches(\"check the box to continue\", \"i\")",
+    "form[name=\"signIn\"]",
+    "#ap_email",
+    "#ap_email_login",
+    "body:not(:has(#navbar)) :text-matches(\"(I am|I'm) (a )?human|not a robot|confirm you are (a )?human|verify you are (a )?human|characters you see|solve (this|the) puzzle\", \"i\")"
+  ],
+  "aria_extraction": false,
+  "context_extractors": {
+    "cart_count": {
+      "steps": [
+        {"action": "extract", "selector": "#nav-cart-count"}
+      ]
+    }
+  },
+  "page_extractor": [
+    "() => {",
+    "  const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();",
+    "  const text = (root, sel) => { const e = root.querySelector(sel); return e ? clean(e.innerText || e.textContent) || null : null; };",
+    "  const first = (root, sels) => { for (const s of sels) { const t = text(root, s); if (t) return t; } return null; };",
+    "  const money = (v) => (v && !isNaN(Number(v)) ? '$' + Number(v).toFixed(2) : null);",
+    "  const path = location.pathname;",
+    "  try {",
+    "    if (document.querySelector('form[action*=\"validateCaptcha\"]') && !document.querySelector('#navbar')) {",
+    "      return { page: 'continue_shopping', text: clean(document.body.innerText).slice(0, 200) };",
+    "    }",
+    "    if (/^\\/s(\\/|$)/.test(path)) {",
+    "      const FORMAT = /^(Paperback|Hardcover|Kindle|Kindle Edition|Audiobook|Audible Audiobook|Mass Market Paperback|Board book|Spiral-bound|Audio CD|Library Binding)$/i;",
+    "      const links = Array.from(document.querySelectorAll('[data-component-type=\"s-search-result\"] a:has(h2)'));",
+    "      const seen = new Set();",
+    "      const results = [];",
+    "      links.forEach((a, i) => {",
+    "        const r = a.closest('[data-component-type=\"s-search-result\"]');",
+    "        if (!r || seen.has(r) || results.length >= 10) return;",
+    "        seen.add(r);",
+    "        const h2 = a.querySelector('h2');",
+    "        const label = h2.getAttribute('aria-label') || '';",
+    "        const item = { position: i + 1, title: clean(label || h2.innerText).replace(/^Sponsored Ad - /, '') };",
+    "        const price = text(r, '.a-price:not(.a-text-price) .a-offscreen');",
+    "        if (price) item.price = price;",
+    "        const rating = text(r, '.a-icon-star-mini .a-icon-alt, .a-icon-star-small .a-icon-alt, [aria-label$=\"out of 5 stars\"]');",
+    "        if (rating) item.rating = rating.replace(/, rating details$/, '');",
+    "        if (/^Sponsored/.test(label) || r.querySelector('.puis-sponsored-label-text')) item.sponsored = true;",
+    "        const formats = [];",
+    "        let current = null;",
+    "        r.querySelectorAll('a, .a-price:not(.a-text-price) .a-offscreen').forEach((e) => {",
+    "          if (e.tagName === 'A') {",
+    "            const name = clean(e.innerText).replace(/,$/, '');",
+    "            if (FORMAT.test(name)) { current = { format: name }; formats.push(current); }",
+    "          } else if (current && !current.price) {",
+    "            current.price = clean(e.textContent);",
+    "          }",
+    "        });",
+    "        if (formats.some((f) => f.price)) { item.formats = formats; delete item.price; }",
+    "        item.asin = r.getAttribute('data-asin');",
+    "        results.push(item);",
+    "      });",
+    "      return { page: 'search_results', query: new URLSearchParams(location.search).get('k'), results };",
+    "    }",
+    "    if (/\\/(dp|gp\\/product|gp\\/aw\\/d)\\/[A-Z0-9]{10}/.test(path)) {",
+    "      const out = { page: 'product', title: text(document, '#productTitle') };",
+    "      out.price = first(document, [",
+    "        '#corePrice_feature_div .a-price:not(.a-text-price) .a-offscreen',",
+    "        '#corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price) .a-offscreen',",
+    "        '#corePriceDisplay_desktop_feature_div .priceToPay .aok-offscreen',",
+    "        '#newAccordionRow_0 .a-price:not(.a-text-price) .a-offscreen',",
+    "        '#tmmSwatches .swatchElement.selected .slot-price',",
+    "        '#price', '#kindle-price', '#priceblock_ourprice'",
+    "      ]);",
+    "      const byline = text(document, '#bylineInfo');",
+    "      if (byline) out.byline = byline;",
+    "      const swatches = Array.from(document.querySelectorAll('#tmmSwatches .swatchElement'));",
+    "      if (swatches.length) {",
+    "        out.formats = swatches.map((s) => ({ format: text(s, '.slot-title'), price: text(s, '.slot-price'), selected: s.classList.contains('selected') }))",
+    "          .filter((f) => f.format);",
+    "        const selected = out.formats.find((f) => f.selected);",
+    "        if (selected) out.format = selected.format;",
+    "      }",
+    "      const options = Array.from(document.querySelectorAll('[id^=\"inline-twister-expander-header\"]')).map((e) => clean(e.innerText)).filter((t) => t && t.length < 80);",
+    "      if (options.length) out.options = options;",
+    "      const availability = text(document, '#availability');",
+    "      if (availability) out.availability = availability.slice(0, 80);",
+    "      out.can_add_to_cart = !!document.querySelector('#add-to-cart-button');",
+    "      const m = path.match(/\\/(?:dp|gp\\/product|gp\\/aw\\/d)\\/([A-Z0-9]{10})/);",
+    "      if (m) out.asin = m[1];",
+    "      return out;",
+    "    }",
+    "    if (/^\\/(cart\\/smart-wagon|gp\\/huc\\/view\\.html|cart\\/add-to-cart)/.test(path)) {",
+    "      return { page: 'added_to_cart', message: first(document, ['#NATC_SMART_WAGON_CONF_MSG_SUCCESS', '#attachDisplayAddBaseAlert', '#huc-v2-order-row-confirm-text']), cart_count: text(document, '#nav-cart-count') };",
+    "    }",
+    "    if (/^\\/(gp\\/cart\\/view\\.html|cart\\/?$)/.test(path)) {",
+    "      const rows = Array.from(document.querySelectorAll('.sc-list-item[data-asin][data-itemtype=\"active\"]'));",
+    "      const cart_items = rows.slice(0, 20).map((r) => {",
+    "        const line = {",
+    "          title: clean(r.getAttribute('data-producttitle')) || first(r, ['.sc-product-title .a-truncate-full', '.sc-product-title']),",
+    "          price: money(r.getAttribute('data-price')) || first(r, ['.sc-product-price', '.apex-price-to-pay-value .a-offscreen']),",
+    "          quantity: Number(r.getAttribute('data-quantity')) || null,",
+    "          asin: r.getAttribute('data-asin')",
+    "        };",
+    "        const format = text(r, '.sc-product-binding');",
+    "        if (format) line.format = format;",
+    "        return line;",
+    "      });",
+    "      return {",
+    "        page: 'cart',",
+    "        cart_items,",
+    "        subtotal: first(document, ['#sc-subtotal-amount-activecart', '#sc-subtotal-amount-buybox']),",
+    "        subtotal_label: first(document, ['#sc-subtotal-label-activecart', '#sc-subtotal-label-buybox']),",
+    "        empty: cart_items.length === 0",
+    "      };",
+    "    }",
+    "    if (path === '/' || /^\\/ref=/.test(path)) return { page: 'home' };",
+    "    return { page: 'other', title: document.title };",
+    "  } catch (e) {",
+    "    return { page: 'unknown', error: String(e).slice(0, 200) };",
+    "  }",
+    "}"
+  ]
+}

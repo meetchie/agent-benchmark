@@ -86,6 +86,8 @@ ACTION_CATEGORIES = {
     "update_quantity": "cart_update",
     "view_cart": "cart_view",
     "view_product": "product",
+    "open_product": "product",
+    "choose_format": "product",
     "checkout": "checkout",
     "select_delivery_window": "checkout",
     "apply_promo": "checkout",
@@ -96,6 +98,16 @@ ACTION_CATEGORIES = {
     "prev_page": "navigation",
     "done": "finish",
 }
+
+
+def bot_check_note(error: Dict[str, Any]) -> str:
+    """A bot-check error as one line for the run log, e.g. bot check at <url> (matched <selector>)."""
+    note = "bot check"
+    if error.get("page_url"):
+        note += f" at {str(error['page_url'])[:200]}"
+    if error.get("matched"):
+        note += f" (matched {error['matched']})"
+    return note
 
 
 def truncate(text: str, max_chars: int) -> str:
@@ -270,6 +282,8 @@ class RindlerTelemetricAgent(BaseAgent):
         if parsed.get("error"):
             err = parsed["error"]
             print(f"    ⚠️  [{err.get('code', 'error')}] {str(err.get('message', ''))[:300]}")
+            if err.get("code") == "bot_check":
+                print(f"    🛑 {bot_check_note(err)}")
 
     async def run(self, start_url=None, **kwargs):
         self.print_run_header(start_url)
@@ -310,7 +324,8 @@ class RindlerTelemetricAgent(BaseAgent):
         if start_env.get("error"):
             err = start_env["error"]
             msg = f"start_session failed: [{err.get('code')}] {err.get('message')}"
-            return self._build_result({"success": False, "message": msg}, 0, [msg])
+            errors = [msg] + ([bot_check_note(err)] if err.get("code") == "bot_check" else [])
+            return self._build_result({"success": False, "message": msg}, 0, errors)
 
         messages = self._build_initial_messages(start_env)
         self._log_context("INITIAL MESSAGE → AGENT", json.dumps(messages, indent=2, default=str))
@@ -383,6 +398,11 @@ class RindlerTelemetricAgent(BaseAgent):
             parsed = parse_result(await host.call_tool(name, args))
             elapsed = time.monotonic() - t0
             was_error = bool(parsed.get("error"))
+            # A bot check goes into the run log's errors, with the page it was on.
+            if was_error and parsed["error"].get("code") == "bot_check":
+                note = bot_check_note(parsed["error"])
+                if note not in errors:
+                    errors.append(note)
             event = self._end_step(usage, turn.get("cost_usd"), {"tool_result": parsed}, action=name,
                                    was_error=was_error, served_by=turn.get("model"))
             self._print_state(parsed)

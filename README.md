@@ -22,6 +22,18 @@ That's a huge gap, and it wasn't a fair fight. We had mapped that store by hand,
 
 What I'd take from it is that a hand-mapped site makes this task easy for an agent. Not that Rindler is a better agent than browser-use.
 
+### And on Amazon
+
+In October 2026 I wrote a mapping for amazon.com and ran both agents on two simple tasks, three times each, with claude-sonnet-5-5: add a USB-C cable under $15 to the cart, and add the paperback of *Atomic Habits*.
+
+| | Rindler | BrowserUse |
+|---|---|---|
+| cable: passes | 3 / 3 | 3 / 3 |
+| cable: mean cost per run | $0.013 | $0.14 |
+| book: passes | 0 / 3 | 1 / 3 |
+
+Every failure was Amazon's bot check, not the agent. On the cable, where nothing got in the way, both finished and Rindler did it for about a tenth of the cost. Three runs each is a small sample and the mapping was written for these two tasks, so read [the details](docs/results.md#amazon-october-2026) before making much of it.
+
 <p align="center">
   <img src="docs/images/viewer-results.jpg" alt="The log viewer's results page: Rindler 59 of 60 runs, BrowserUse 1 of 60, with a box of caveats under the numbers">
 </p>
@@ -40,9 +52,9 @@ On a bare Linux box `make setup` may stop because Chromium is missing [system li
 
 Open the web UI, paste a store's address, pick one of the three tasks the model suggests and press **Run Benchmark**. You watch each step as it happens, then get the judge's verdict. Ctrl-C stops both servers.
 
-The practice shop [automationexercise.com](https://automationexercise.com) is a good first try. Not every site cooperates. books.toscrape.com has no Add to basket button on a book's own page, and some sites block headless browsers outright, so [a failure isn't always the agent's fault](docs/limits.md).
+Amazon works most of the time, though now and then it puts up a human check and the run fails there. The practice shop [automationexercise.com](https://automationexercise.com) always lets a bot in. Plenty of sites don't: Walmart and Target block headless browsers, and books.toscrape.com has no Add to basket button on a book's own page, so [a failure isn't always the agent's fault](docs/limits.md).
 
-![The web UI after a real run on automationexercise.com: the cart the agent last saw, with the run's time, steps, cost and tokens beside it](docs/images/web-finished-run.jpg)
+![The web UI 15 seconds into a run on amazon.com: a live view of Amazon with the search box filled in, and the first step in the list](docs/images/web-amazon-running.jpg)
 
 No key yet? `make demo` is the same UI with canned runs, no browser and no cost. `make test` runs every [test suite](docs/testing.md) offline, also without a key.
 
@@ -65,7 +77,7 @@ flowchart TD
     agents -. "the steps it took" .-> judge["Judge model<br/>reads text, never the page"]
 ```
 
-The web UI only runs browser-use, on whatever site you paste. A head-to-head needs a site someone has mapped, and only three have one. The arena has about 30 scenarios, but Rindler can only run the ones on vhlistings.com and shipt.com. The CLI has ten tasks on prose.com. The arena and the CLI now give both agents the same model, the same step budget and neutral task text, which is more than March could say.
+The web UI only runs browser-use, on whatever site you paste. A head-to-head needs a site someone has mapped, and four have one. The arena has 32 scenarios, but Rindler can only run the ones on vhlistings.com, shipt.com and amazon.com. The CLI has ten tasks on prose.com. The arena and the CLI now give both agents the same model, the same step budget and neutral task text, which is more than March could say.
 
 The judge never sees the site. It reads the task, the steps and what the agent reported, so a pass means the judge believed the agent.
 
