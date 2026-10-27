@@ -10,7 +10,7 @@ Every result here is a snapshot of third-party websites. A run that fails becaus
 
 ## Headless browsers get blocked
 
-The browser is a headless Chromium on your own IP address. Sites behind a bot wall (Cloudflare, captchas, anything that fingerprints headless Chrome) may show a block page, and then the agent fails for a reason that has nothing to do with it. `BENCHMARK_HEADLESS=false` opens a visible window, which may get past some of them. The original hosted setup used headed cloud browsers (Browserbase) to avoid this. That provider is still in the code but was not run again.
+The browser is a headless Chromium on your own IP address, the same in both arms: it sends Chromium's own user agent, which says `HeadlessChrome`, and hides `navigator.webdriver`, as browser-use does by default. Sites behind a bot wall (Cloudflare, captchas, anything that fingerprints headless Chrome) may show a block page, and then the agent fails for a reason that has nothing to do with it. `BENCHMARK_HEADLESS=false` opens a visible window, which may get past some of them. The original hosted setup used headed cloud browsers (Browserbase) to avoid this. That provider is still in the code but was not run again.
 
 Large retailers' terms, Amazon's included, don't allow automated browsing, so run the Amazon scenarios at your own risk. Others are stricter: on 2026-10-26 Walmart's search page met our headless Chromium with a Press & Hold check, eBay answered 403, and so did Etsy's search page.
 

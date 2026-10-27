@@ -38,11 +38,11 @@ In October 2026 I wrote a mapping for amazon.com and ran both agents on two simp
 
 | | Rindler | BrowserUse |
 |---|---|---|
-| cable: passes | 3 / 3 | 3 / 3 |
-| cable: mean cost per run | $0.013 | $0.14 |
-| book: passes | 0 / 3 | 1 / 3 |
+| cable: passes | 2 / 3 | 3 / 3 |
+| cable: mean cost per run | $0.012 | $0.14 |
+| book: passes | 2 / 3 | 1 / 3 |
 
-Every failure was Amazon's bot check, not the agent. On the cable, where nothing got in the way, both finished and Rindler did it for about a tenth of the cost. Three runs each is a small sample and the mapping was written for these two tasks, so read [the details](docs/results.md#amazon-october-2026) before making much of it.
+Every failure was Amazon's bot check, not the agent. Where nothing got in the way both agents finished, and Rindler did it for about a tenth of the cost. The Rindler numbers are from a re-run with a plain headless Chromium. Its first runs had sent a desktop Chrome user agent, and they passed the cable 3 of 3 and the book 0 of 3. Three runs each is a small sample and the mapping was written for these two tasks, so read [the details](docs/results.md#amazon-october-2026) before making much of it.
 
 <p align="center">
   <img src="docs/images/viewer-results.jpg" alt="The log viewer's results page: Rindler 59 of 60 runs, BrowserUse 1 of 60, with a box of caveats under the numbers">

@@ -36,6 +36,8 @@ Read the March result with every one of these.
 
 On 2026-10-24 the web app, the arena and the CLI were run again in this standalone form, all on claude-sonnet-5-5. The web app and the arena's `vhlistings_add_to_cart` ran again on 2026-10-25, after their judges were given more to read.
 
+Every October Rindler result on this page was re-run on 2026-10-26 with a plain headless Chromium, after an earlier version of the local host had sent a desktop user agent and hidden the automation flag. browser-use hides that flag too, by default, so now both arms hide it and both send Chromium's own user agent.
+
 ### Live benchmark runs
 
 These are web app runs from 2026-10-24, with claude-sonnet-5-5 as agent, judge and task generator. The judge then read the step text only, not yet the agent's evaluations, action results or final report. Each row is a task the model generated that day, so the same site can give a different task on another try. The cost is the agent's, as the results screen shows it. The judge adds about a cent and generating tasks two to four cents.
@@ -54,26 +56,26 @@ Those three were judged from the step descriptions alone. With the evaluations, 
 
 ### Arena and CLI runs
 
-On 2026-10-24 the arms ran again in this standalone form: claude-sonnet-5-5 for agent and judge, both arms local, equal budgets, neutral task text. Each row is the last run of that arm and scenario that day, and most ran once. The Rindler `vhlistings_product_attribute_search` arm ran twice, before and after a pagination fix in its mapping.
+On 2026-10-24 the arms ran again in this standalone form: claude-sonnet-5-5 for agent and judge, both arms local, equal budgets, neutral task text. Each BrowserUse row is the last run of that arm and scenario that day, and most ran once. Each Rindler row is the one re-run of 2026-10-26, judged by the current judge.
 
 These runs show the setup works and nothing else. They are not comparable to the March numbers, and a run or two per arm can't say which arm is better.
 
 | scenario | arm | verdict | steps | time | agent cost |
 |---|---|---|---|---|---|
-| `vhlistings_product_attribute_search` | RINDLER | PASS | 8 | 54.6 s | $0.028 |
+| `vhlistings_product_attribute_search` | RINDLER | PASS | 8 | 51.8 s | $0.038 |
 | `vhlistings_product_attribute_search` | BROWSERUSE | FAIL | 23 | 138.9 s | $0.459 |
-| `vhlistings_add_to_cart` | RINDLER | PASS | 6 | 33.6 s | $0.021 |
+| `vhlistings_add_to_cart` | RINDLER | PASS | 6 | 37.9 s | $0.021 |
 | `vhlistings_add_to_cart` | BROWSERUSE | PASS | 7 | 45.6 s | $0.215 |
-| prose.com `add-hair-towel` (CLI) | Rindler | pass | 5 | 18.1 s | $0.018 |
+| prose.com `add-hair-towel` (CLI) | Rindler | pass | 5 | 12.2 s | $0.017 |
 | prose.com `add-hair-towel` (CLI) | BrowserUse | pass | 7 | 36.4 s | $0.170 |
 | prose.com `add-candle` (CLI) | Rindler | pass | 5 | 16.2 s | $0.017 |
 | prose.com `add-candle` (CLI) | BrowserUse | pass | 6 | 26.7 s | $0.072 |
 
-The judge now reads every step's arguments as well as its action name. The judge behind these rows read the action name only, which says what a Rindler step did (`search_products`) but not what a BrowserUse step did (`navigation`, `click`). So the BrowserUse `vhlistings_add_to_cart` PASS came from a run whose report said it searched, and a run the next day that opened the search URL without saying so in its report was failed for never searching. With the current judge, `vhlistings_add_to_cart` passed on both arms in 6 steps: Rindler in 34.4 s for $0.021, and BrowserUse in 40.3 s for $0.201, with the judge citing the `search?q=belt` URL.
+The judge now reads every step's arguments as well as its action name. The judge behind the BrowserUse rows read the action name only, which says what a Rindler step did (`search_products`) but not what a BrowserUse step did (`navigation`, `click`). So the BrowserUse `vhlistings_add_to_cart` PASS came from a run whose report said it searched, and a run the next day that opened the search URL without saying so in its report was failed for never searching. With the current judge, `vhlistings_add_to_cart` passed on both arms in 6 steps: Rindler in the re-run in the table, and BrowserUse on 2026-10-25 in 40.3 s for $0.201, with the judge citing the `search?q=belt` URL.
 
 The BrowserUse `vhlistings_product_attribute_search` arm ran four times while the browser-use adapter was being fixed, and all four failed. The first, at 9 steps, 109 s and $0.589, came before the fix, when the model answered with the action itself and the adapter asked again to have it wrapped, so its 9 steps took 21 API calls. The three on the final code made one API call per step with no repairs and took 27 steps for $0.586, 27 for $0.709 and 23 for $0.459, the last being the table's row. The task can't be completed on today's store, so how long the agent keeps looking varies from run to run, and 23 or 27 steps against 9 says nothing about speed. The `add-hair-towel` BrowserUse row is also from before the fix, since its log shows the old repair calls, and was not run again.
 
-The first scenario is a warning about the judge. The store no longer sells the chain belt March's run picked, so the Rindler arm added a $52 belt with "chain" in its name. Two Rindler runs made that choice, and the judge passed one and failed the other. The BrowserUse arm searched three result pages and a second query and found no chain belt under $35. It added the same belt as the closest fallback and said in its report that it was neither a chain belt (its page says genuine leather) nor under $35, and the judge failed it. A PASS here is the judge accepting a report built on a product's name. [server/README.md](../server/README.md) has the full story.
+The first scenario is a warning about the judge. The store no longer sells the chain belt March's run picked, so the Rindler arm added a $52 belt with "chain" in its name. Both Rindler runs of 2026-10-24 made that choice, and the judge passed one and failed the other. The re-run made it again: it called the belt a chain belt from its name, said in its report that it had not checked the product page for materials and that the price was over $35, and the current judge passed it. The BrowserUse arm searched three result pages and a second query and found no chain belt under $35. It added the same belt as the closest fallback and said in its report that it was neither a chain belt (its page says genuine leather) nor under $35, and the judge failed it. A PASS here is the judge accepting a report built on a product's name. [server/README.md](../server/README.md) has the full story.
 
 In practice, on single claude-sonnet-5-5 runs, a Rindler arm run costs a few cents and anything driven by browser-use costs several times that, as the table shows. The live benchmark runs above cost $0.15 to $0.41 each.
 
@@ -81,21 +83,23 @@ In practice, on single claude-sonnet-5-5 runs, a Rindler arm run costs a few cen
   <img src="images/cli-comparison.jpg" width="720" alt="A grouped bar chart titled 'Agent Comparison, prose (1 task)' comparing BrowserUse and Rindler on success rate (100% each), steps per task (6.0 and 5.0), duration per task (26.7 s and 16.2 s) and cost per task ($0.0715 and $0.0171), each bar scored against the better arm">
 </p>
 
-<sub>One of the charts `cli/viz.sh` draws, here for the `add-candle` run above. Each bar is scored against the better arm, and the number above it is the arm's raw average.</sub>
+<sub>One of the charts `cli/viz.sh` draws, here for the `add-candle` runs of 2026-10-24. The Rindler re-run came out almost the same: 5 steps, 16.2 s, $0.0174. Each bar is scored against the better arm, and the number above it is the arm's raw average.</sub>
 
 ## Amazon (October 2026)
 
-On 2026-10-26 both arms ran two tasks on amazon.com, signed out, with claude-sonnet-5-5 as agent and judge. `amazon_add_cable` asks for a USB-C to USB-C charging cable under $15. `amazon_add_book` asks for the paperback of Atomic Habits by James Clear. Each adds one item, opens the cart and reports what the cart shows. Nobody signs in or checks out. The Rindler arm used `server/mappings/amazon.json`. Each arm ran each task 3 times, one run at a time, between 18:59 and 19:06 local time. Three earlier runs, made while the mapping was still being fixed, aren't in the table: a Rindler cable run that failed, a Rindler book run that passed and a browser-use cable run that passed.
+On 2026-10-26 both arms ran two tasks on amazon.com, signed out, with claude-sonnet-5-5 as agent and judge. `amazon_add_cable` asks for a USB-C to USB-C charging cable under $15. `amazon_add_book` asks for the paperback of Atomic Habits by James Clear. Each adds one item, opens the cart and reports what the cart shows. Nobody signs in or checks out. The Rindler arm used `server/mappings/amazon.json`. Each arm ran each task 3 times, one run at a time: browser-use between 18:59 and 19:06 local time, and the Rindler arm, in the re-run described [above](#local-runs-october-2026), between 23:08 and 23:11. Three earlier runs, made while the mapping was still being fixed, aren't in the table: a Rindler cable run that failed, a Rindler book run that passed and a browser-use cable run that passed.
 
 | scenario | arm | passes | mean steps | mean time | mean agent cost |
 |---|---|---|---|---|---|
-| `amazon_add_cable` | RINDLER | 3 / 3 | 5.0 | 23 s | $0.013 |
+| `amazon_add_cable` | RINDLER | 2 / 3 | 4.7 | 22 s | $0.012 |
 | `amazon_add_cable` | BROWSERUSE | 3 / 3 | 5.3 | 34 s | $0.140 |
-| `amazon_add_book` | RINDLER | 0 / 3 | 3.3 | 16 s | $0.011 |
+| `amazon_add_book` | RINDLER | 2 / 3 | 5.7 | 26 s | $0.016 |
 | `amazon_add_book` | BROWSERUSE | 1 / 3 | 5.7 | 32 s | $0.117 |
 
 Steps count the final `done`. The judge added $0.007 to $0.012 a run.
 
-Every failure was a bot check, and every verdict matches what its log shows. All three Rindler book runs met Amazon's checkpoint page, once after the search, once on opening the book and once on adding it to the cart, and the mapping stopped there with "blocked by a bot check". Two of the three browser-use book runs met a "Check the box to continue" page with an "I am human" box when they opened the cart, and stopped as the task tells them to. No cable run met a bot check. One browser-use cable run clicked through the "Click the button below to continue shopping" page, which is an ordinary page.
+Every failure was a bot check, and every verdict matches what its log shows. Two Rindler runs, one cable and one book, met Amazon's checkpoint page when they added the item to the cart, and the mapping stopped there with "blocked by a bot check". Two of the three browser-use book runs met a "Check the box to continue" page with an "I am human" box when they opened the cart, and stopped as the task tells them to. No browser-use cable run met a bot check. One browser-use cable run clicked through the "Click the button below to continue shopping" page, which is an ordinary page.
 
-Read these with three caveats. We wrote the mapping ourselves, for these two tasks, so the Rindler arm knew the site and browser-use didn't. Three runs per arm on a live site is a handful, and the bot checks come and go: two sessions we drove later that evening without a model were both stopped at the checkpoint on their first search, so a rerun can give very different numbers. The Rindler arm opens the search URL directly while browser-use typed into the search box, and we don't know whether that changes how often the checkpoint shows.
+The re-run moved the Rindler numbers both ways. With the earlier host's desktop user agent the Rindler arm passed the cable 3 of 3 and the book 0 of 3: no cable run met a bot check and all three book runs did. With the plain browser it was blocked once on each task, so it now trails browser-use on the cable, 2 of 3 against 3 of 3, and leads on the book, 2 of 3 against 1 of 3.
+
+Read these with three caveats. I wrote the mapping myself, for these two tasks, so the Rindler arm knew the site and browser-use didn't. Three runs per arm on a live site is a handful, and the bot checks come and go: two sessions we drove later that evening without a model were both stopped at the checkpoint on their first search, and the Rindler re-runs came four hours after the browser-use runs, so the arms did not meet Amazon at the same time and a rerun can give very different numbers. The Rindler arm opens the search URL directly while browser-use typed into the search box, and we don't know whether that changes how often the checkpoint shows.

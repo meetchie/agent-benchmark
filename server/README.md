@@ -57,7 +57,7 @@ uv run python analyze_runs.py --march-headline              # the March headline
 | finishes when | browser-use calls its `done` action | the model calls the injected `done` tool |
 | sites | any | only sites with a mapping: vhlistings.com, shipt.com and amazon.com |
 
-Both arms start on the scenario's start URL without spending a step, use prompt caching, and log every model call's tokens, so the costs compare like for like. Chromium is always launched with `--use-mock-keychain --password-store=basic` (no macOS keychain prompts) and headless unless `BENCHMARK_HEADLESS=false`.
+Both arms start on the scenario's start URL without spending a step, use prompt caching, and log every model call's tokens, so the costs compare like for like. Chromium is always launched with `--use-mock-keychain --password-store=basic` (no macOS keychain prompts) and headless unless `BENCHMARK_HEADLESS=false`. A site sees the same browser from both arms: Chromium's own user agent, which says `HeadlessChrome`, and `navigator.webdriver` false. browser-use launches every Chromium with `--disable-blink-features=AutomationControlled`, which is what hides `navigator.webdriver`, and the Rindler host adds the same flag. Until the evening of 2026-10-26 the Rindler host also sent a desktop Chrome 131 user agent, which browser-use does not. The Rindler runs and checks this file reports from before then used it; [docs/results.md](../docs/results.md) has the re-runs.
 
 ### Flags
 
