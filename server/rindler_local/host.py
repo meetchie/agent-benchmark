@@ -51,11 +51,11 @@ from .tools import build_tools, param_defaults
 
 log = logging.getLogger(__name__)
 
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
 DEFAULT_VIEWPORT = {"width": 1280, "height": 800}
+# browser-use launches every Chromium with this flag (CHROME_DEFAULT_ARGS in
+# browser_use/browser/profile.py), so navigator.webdriver is false in the BrowserUse arm. The Rindler
+# arm takes it too and keeps Chromium's own user agent, so a site gets the same user agent and the
+# same navigator.webdriver from both arms. tests/test_rindler_local.py checks both against browser-use.
 EXTRA_CHROMIUM_ARGS = ["--disable-blink-features=AutomationControlled"]
 START_NAVIGATE_TIMEOUT_MS = 15000
 CONTEXT_EXTRACT_TIMEOUT_MS = 1500
@@ -134,7 +134,6 @@ class LocalRindlerHost:
         *,
         headless: bool | None = None,
         viewport: dict[str, int] | None = None,
-        user_agent: str | None = DEFAULT_USER_AGENT,
         executable_path: str | None = None,
         extra_args: list[str] | None = None,
         call_timeout_s: float = DEFAULT_CALL_TIMEOUT_S,
@@ -143,7 +142,6 @@ class LocalRindlerHost:
         self.mapping = mapping
         self.headless = _headless_default() if headless is None else headless
         self.viewport = dict(viewport or DEFAULT_VIEWPORT)
-        self.user_agent = user_agent
         self.executable_path = executable_path
         self.extra_args = list(EXTRA_CHROMIUM_ARGS) + list(extra_args or [])
         self.call_timeout_s = call_timeout_s
@@ -312,10 +310,7 @@ class LocalRindlerHost:
         await self._close_session()
         self.blocked = None
         await self._ensure_browser()
-        options: dict[str, Any] = {"viewport": self.viewport}
-        if self.user_agent:
-            options["user_agent"] = self.user_agent
-        self._context = await self._browser.new_context(**options)
+        self._context = await self._browser.new_context(viewport=self.viewport)
         self._page = await self._context.new_page()
         self.session_id = str(uuid.uuid4())
 

@@ -409,6 +409,34 @@ async def test_browser_runs_headless_with_keychain_flags(shop):
 
 
 @browser
+async def test_a_site_sees_the_same_browser_as_in_the_browser_use_arm(shop):
+    # Chromium's own headless user agent, and navigator.webdriver hidden exactly when browser-use
+    # hides it (its default launch args carry --disable-blink-features=AutomationControlled).
+    from browser_env import browser_profile, cleanup_profile
+
+    profile = browser_profile()
+    try:
+        browser_use_args = profile.get_args()
+    finally:
+        cleanup_profile(profile)
+    flag = "--disable-blink-features=AutomationControlled"
+    assert not [a for a in browser_use_args if a.startswith("--user-agent")]
+
+    host = _host(shop)
+    try:
+        await host.call("start_session", {"url": shop.base + "/"})
+        browsers = [c for c in _descendants(os.getpid()) if "--remote-debugging-pipe" in c and "--type=" not in c]
+        assert browsers
+        for command in browsers:
+            assert (flag in command) == (flag in browser_use_args)
+            assert "--user-agent" not in command
+        assert "HeadlessChrome/" in await host.page.evaluate("navigator.userAgent")
+        assert await host.page.evaluate("navigator.webdriver") is (flag not in browser_use_args)
+    finally:
+        await host.close()
+
+
+@browser
 async def test_a_long_tmpdir_does_not_stop_the_browser(shop, tmp_path, monkeypatch):
     # On Linux Chromium aborts as it starts when TMPDIR is over 61 bytes (its socket path
     # would not fit); macOS's Chromium does not use TMPDIR for it.
