@@ -92,6 +92,6 @@ Plain `make` lists every target. The main ones:
 
 ## Who built it
 
-Three of us built this at Rindler between December 2025 and August 2026. I'm Michelle Serrano (`meetchie`) and did most of the web app. Michael Serrano did most of the server and the arena, and Arthur De Los Santos built the CLI.
+I'm Michelle Serrano (`meetchie`), and this is my rebuild of a benchmark we made at Rindler, our startup. At Rindler I built the web app, Michael Serrano built the arena and the server, and Arthur De Los Santos built the prose CLI.
 
-In October 2026 I pulled it out of our monorepo and got it running on its own. The git history keeps the original authors and dates, and [docs/provenance.md](docs/provenance.md) covers what changed on the way out.
+In October 2026 I pulled it out of our monorepo and rebuilt it to run on one machine with one API key: Claude in place of OpenAI, a local engine that runs the site mappings, the Amazon mapping and its runs, a live preview of the agent's browser, and tests for all of it, over 1,200 now. The git history keeps everyone's original commits and dates, and [docs/provenance.md](docs/provenance.md) covers what changed on the way out.
